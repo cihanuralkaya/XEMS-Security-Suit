@@ -654,6 +654,8 @@ func (s *Server) handleBulkAction(w http.ResponseWriter, r *http.Request, adminI
 		Tag      string `json:"tag"`
 		Action   string `json:"action"`
 		PolicyID string `json:"policy_id"`
+		DryRun   bool   `json:"dry_run"` // true: yalnız etkilenecek cihazları döndür, UYGULAMA
+		Confirm  bool   `json:"confirm"` // büyük parti (> maxBulkDevices) için açık onay
 	}
 	if !decode(w, r, &req) {
 		return
@@ -676,30 +678,47 @@ func (s *Server) handleBulkAction(w http.ResponseWriter, r *http.Request, adminI
 	if respondErr(w, err) {
 		return
 	}
-	matched, applied := 0, 0
-	var firstErr error
+	// Önce eşleşen cihazları topla (önizleme + parti sınırı için).
+	type match struct {
+		ID       string `json:"id"`
+		Hostname string `json:"hostname"`
+	}
+	var matches []match
 	for _, d := range devices {
-		hasTag := false
 		for _, t := range d.Tags {
 			if t == tag {
-				hasTag = true
+				matches = append(matches, match{ID: d.ID, Hostname: d.Hostname})
 				break
 			}
 		}
-		if !hasTag {
-			continue
-		}
-		matched++
+	}
+	// KURU ÇALIŞTIRMA: hiçbir şey uygulanmaz; SOC önce etkiyi görür.
+	if req.DryRun {
+		writeJSON(w, http.StatusOK, map[string]any{"dry_run": true, "matched": len(matches), "devices": matches})
+		return
+	}
+	// Parti sınırı: kazara filo-geneli yıkıcı eylemi önlemek için büyük partiler
+	// açık onay ister.
+	if len(matches) > maxBulkDevices && !req.Confirm {
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"error": "parti çok büyük (kazara filo-geneli eylem koruması)", "matched": len(matches),
+			"max": maxBulkDevices, "hint": "confirm:true ile onaylayın veya etiketi daraltın",
+		})
+		return
+	}
+	applied := 0
+	var firstErr error
+	for _, m := range matches {
 		var e error
 		switch req.Action {
 		case "assign-policy":
-			e = s.adminSvc.AssignPolicy(r.Context(), adminID, d.ID, req.PolicyID)
+			e = s.adminSvc.AssignPolicy(r.Context(), adminID, m.ID, req.PolicyID)
 		case "quarantine":
-			e = s.adminSvc.QuarantineDevice(r.Context(), adminID, d.ID)
+			e = s.adminSvc.QuarantineDevice(r.Context(), adminID, m.ID)
 		case "release":
-			e = s.adminSvc.ReleaseDevice(r.Context(), adminID, d.ID)
+			e = s.adminSvc.ReleaseDevice(r.Context(), adminID, m.ID)
 		case "collect-diagnostics":
-			e = s.adminSvc.CollectDiagnostics(r.Context(), adminID, d.ID)
+			e = s.adminSvc.CollectDiagnostics(r.Context(), adminID, m.ID)
 		}
 		if e == nil {
 			applied++
@@ -708,12 +727,16 @@ func (s *Server) handleBulkAction(w http.ResponseWriter, r *http.Request, adminI
 		}
 	}
 	// RBAC reddi (ör. VIEWER) ilk denemede hata verir ve hiçbir cihaza uygulanmaz.
-	if matched > 0 && applied == 0 && firstErr != nil {
+	if len(matches) > 0 && applied == 0 && firstErr != nil {
 		respondErr(w, firstErr)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"matched": matched, "applied": applied})
+	writeJSON(w, http.StatusOK, map[string]any{"matched": len(matches), "applied": applied})
 }
+
+// maxBulkDevices, açık onay olmadan toplu eylemin uygulanacağı üst sınırdır
+// (kazara filo-geneli yıkıcı eylem koruması).
+const maxBulkDevices = 500
 
 // handleSetDeviceTags, cihazın etiketlerini ayarlar (OPERATOR+, servis içinde
 // RBAC). Gövde: {"tags":["prod","finans"]}.

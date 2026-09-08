@@ -602,6 +602,7 @@
               <option value="assign-policy">📋 Politika Ata</option>
             </select></div>
             <div class="field" id="bulk-pol-wrap" style="display:none"><select id="bulk-pol"><option value="">— politika seç —</option></select></div>
+            <button class="btn ghost sm" data-act="bulkPreview">👁 Önizle (dry-run)</button>
             <button class="btn sm" data-act="bulkApply">Uygula</button>
             <div id="o-bulk" class="out"></div>
           </div>
@@ -2274,19 +2275,42 @@
       if(!$("a-pol").value){ showOut("o-dev","Listeden bir politika seçin.","err"); return Promise.resolve(); }
       return api("/api/policies/assign","POST",{device_id:state.sel,policy_id:$("a-pol").value}).then(function(){
         showOut("o-dev","Politika atandı (ajana anında iletilir).","ok"); toast("Politika atandı","Anlık push gönderildi","ok"); }); },
-    bulkApply: function(){
+    bulkBody: function(){
       var tag=$("bulk-tag").value.trim(), action=$("bulk-action").value;
-      if(!tag){ showOut("o-bulk","Etiket girin.","err"); return Promise.resolve(); }
+      if(!tag){ showOut("o-bulk","Etiket girin.","err"); return null; }
       var body={tag:tag, action:action};
       if(action==="assign-policy"){
-        if(!$("bulk-pol").value){ showOut("o-bulk","Politika seçin.","err"); return Promise.resolve(); }
+        if(!$("bulk-pol").value){ showOut("o-bulk","Politika seçin.","err"); return null; }
         body.policy_id=$("bulk-pol").value;
       }
+      return body;
+    },
+    bulkPreview: function(){
+      var body=actions.bulkBody(); if(!body) return Promise.resolve();
+      body.dry_run=true;
+      return api("/api/devices/bulk","POST",body).then(function(d){
+        var devs=(d.devices||[]).map(function(x){ return esc(x.hostname||x.id); }).join(", ");
+        showOut("o-bulk","👁 Önizleme: "+(d.matched||0)+" cihaz etkilenecek"+(devs?(" — "+devs):"")+". (Uygulanmadı.)","ok");
+      }).catch(function(e){ showOut("o-bulk","Önizleme başarısız: "+esc(e.message),"err"); }); },
+    bulkApply: function(){
+      var body=actions.bulkBody(); if(!body) return Promise.resolve();
       var labels={"collect-diagnostics":"tanılama toplama","quarantine":"karantina","release":"serbest bırakma","assign-policy":"politika atama"};
-      if(!confirm("“"+tag+"” etiketli TÜM cihazlara "+(labels[action]||action)+" uygulanacak. Onaylıyor musunuz?")) return Promise.resolve();
+      if(!confirm("“"+body.tag+"” etiketli TÜM cihazlara "+(labels[body.action]||body.action)+" uygulanacak. Önce 👁 Önizle önerilir. Onaylıyor musunuz?")) return Promise.resolve();
       return api("/api/devices/bulk","POST",body).then(function(d){
         showOut("o-bulk",(d.matched||0)+" cihaz eşleşti, "+(d.applied||0)+" uygulandı.","ok");
-        toast("Toplu işlem uygulandı",tag+" → "+(d.applied||0)+"/"+(d.matched||0)+" cihaz","ok"); refresh(); }); },
+        toast("Toplu işlem uygulandı",body.tag+" → "+(d.applied||0)+"/"+(d.matched||0)+" cihaz","ok"); refresh();
+      }).catch(function(e){
+        // 409: parti çok büyük → açık onayla tekrar dene.
+        if(/parti çok büyük|too large|409/.test(e.message)){
+          if(confirm("Parti çok büyük (kazara filo-geneli eylem koruması). Yine de UYGULA?")){
+            body.confirm=true;
+            return api("/api/devices/bulk","POST",body).then(function(d){
+              showOut("o-bulk",(d.matched||0)+" cihaz eşleşti, "+(d.applied||0)+" uygulandı (onaylı).","ok"); refresh(); });
+          }
+          return;
+        }
+        showOut("o-bulk","Toplu işlem başarısız: "+esc(e.message),"err");
+      }); },
     setTags: function(){
       if(!state.sel){ return Promise.resolve(); }
       var tags=$("tag-input").value.split(",").map(function(s){return s.trim();}).filter(function(s){return s;});

@@ -1251,3 +1251,49 @@ func TestHuntHTTP(t *testing.T) {
 		t.Fatalf("query-hunt 'normal' → e2 eşleşmeliydi: %+v", q.Hits)
 	}
 }
+
+// Toplu eylem (#6): dry_run önizleme HİÇBİR komut kuyruğa almamalı; gerçek çağrı
+// yalnız etiketli cihazlara uygulanmalı.
+func TestBulkActionDryRunAndApply(t *testing.T) {
+	ts, store := setup(t)
+	defer ts.Close()
+	addAdmin(t, store, "ad1", "op@x", "secret", admin.RoleOperator)
+	store.devRows = []adminread.DeviceRow{
+		{ID: "d1", Tags: []string{"prod"}},
+		{ID: "d2", Tags: []string{"prod"}},
+		{ID: "d3", Tags: []string{"dev"}},
+	}
+	_, lb := post(t, ts.URL+"/api/login", "", map[string]string{"email": "op@x", "password": "secret"})
+	tok := lb["token"]
+	if tok == "" {
+		t.Fatal("token alınamadı")
+	}
+
+	// dry-run: hiçbir komut kuyruğa GİRMEMELİ.
+	if code, _ := post(t, ts.URL+"/api/devices/bulk", tok,
+		map[string]any{"tag": "prod", "action": "quarantine", "dry_run": true}); code != http.StatusOK {
+		t.Fatalf("dry-run 200 dönmeli: %d", code)
+	}
+	for _, c := range store.commands {
+		if strings.Contains(c, "QUARANTINE") {
+			t.Fatalf("dry-run komut kuyruğa GİRMEMELİ: %v", store.commands)
+		}
+	}
+	// gerçek: yalnız prod (d1,d2) karantinaya alınmalı; d3 (dev) etkilenmemeli.
+	if code, _ := post(t, ts.URL+"/api/devices/bulk", tok,
+		map[string]any{"tag": "prod", "action": "quarantine"}); code != http.StatusOK {
+		t.Fatalf("apply 200 dönmeli: %d", code)
+	}
+	q := 0
+	for _, c := range store.commands {
+		if strings.Contains(c, "QUARANTINE") {
+			q++
+		}
+		if strings.HasPrefix(c, "d3:") && strings.Contains(c, "QUARANTINE") {
+			t.Fatal("dev etiketli cihaz etkilenmemeliydi")
+		}
+	}
+	if q != 2 {
+		t.Fatalf("2 prod cihazı karantinaya alınmalıydı: %v", store.commands)
+	}
+}
