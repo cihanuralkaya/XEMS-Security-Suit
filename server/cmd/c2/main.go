@@ -10,6 +10,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -24,6 +25,7 @@ import (
 	"xems.corp/suite/server/internal/admin"
 	"xems.corp/suite/server/internal/adminapi"
 	"xems.corp/suite/server/internal/adminread"
+	"xems.corp/suite/server/internal/beacon"
 	"xems.corp/suite/server/internal/cluster"
 	"xems.corp/suite/server/internal/config"
 	"xems.corp/suite/server/internal/correlate"
@@ -34,6 +36,7 @@ import (
 	"xems.corp/suite/server/internal/ioc"
 	"xems.corp/suite/server/internal/memstore"
 	"xems.corp/suite/server/internal/metrics"
+	"xems.corp/suite/server/internal/model"
 	"xems.corp/suite/server/internal/notify"
 	"xems.corp/suite/server/internal/policypush"
 	"xems.corp/suite/server/internal/report"
@@ -488,6 +491,71 @@ func run() error {
 			}
 		}
 	}()
+
+	// C2 beacon tespiti (#8): periyodik olarak netconn geçmişini analiz eder;
+	// düzenli-aralıklı (düşük-jitter) (cihaz, uzak-IP) çiftlerini olası C2 beacon
+	// olarak işaretler — bilinen IoC olmadan bilinmeyen C2'yi yakalar. Aynı çift
+	// süreç ömrü boyunca bir kez uyarılır. XEMS_BEACON_DISABLE ile kapatılır.
+	if os.Getenv("XEMS_BEACON_DISABLE") == "" {
+		bInterval := 10 * time.Minute
+		if d, err := time.ParseDuration(os.Getenv("XEMS_BEACON_INTERVAL")); err == nil && d > 0 {
+			bInterval = d
+		}
+		bWindow := 2 * time.Hour
+		if d, err := time.ParseDuration(os.Getenv("XEMS_BEACON_WINDOW")); err == nil && d > 0 {
+			bWindow = d
+		}
+		alerted := map[string]bool{}
+		go func() {
+			t := time.NewTicker(bInterval)
+			defer t.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+				}
+				evs, err := readSvc.QueryEvents(ctx, adminread.EventFilter{
+					Category: "NETWORK_CONN", Since: time.Now().Add(-bWindow), Limit: 20000,
+				})
+				if err != nil {
+					continue
+				}
+				conns := make([]beacon.Conn, 0, len(evs))
+				for _, e := range evs {
+					var d struct {
+						RemoteIP string `json:"remote_ip"`
+					}
+					if len(e.Details) > 0 {
+						_ = json.Unmarshal(e.Details, &d)
+					}
+					if d.RemoteIP != "" {
+						conns = append(conns, beacon.Conn{DeviceID: e.DeviceID, RemoteIP: d.RemoteIP, At: e.CreatedAt})
+					}
+				}
+				for _, f := range beacon.Analyze(conns, 6, 0.25) {
+					key := f.DeviceID + "|" + f.RemoteIP
+					if alerted[key] {
+						continue
+					}
+					alerted[key] = true
+					ev := model.Event{
+						Category: "SECURITY", Severity: "HIGH",
+						Message: fmt.Sprintf("olası C2 beacon: %s (%d bağlantı, ~%s aralık, jitter %%%.0f)",
+							f.RemoteIP, f.Count, f.MeanInterval.Round(time.Second), f.CoV*100),
+						OccurredAt: time.Now(),
+						Details: fmt.Sprintf(`{"beacon":true,"remote_ip":%q,"count":%d,"mean_interval_sec":%d,"cov":%.3f,"technique":"T1071"}`,
+							f.RemoteIP, f.Count, int(f.MeanInterval.Seconds()), f.CoV),
+					}
+					if _, err := backend.SaveEvents(ctx, f.DeviceID, []model.Event{ev}); err == nil {
+						liveBus.PublishEvent(f.DeviceID, ev.Severity, ev.Message)
+						log.Printf("[beacon] cihaz %s: %s", f.DeviceID, ev.Message)
+					}
+				}
+			}
+		}()
+		log.Printf("C2 beacon tespiti etkin (her %s, %s pencere)", bInterval, bWindow)
+	}
 
 	// Bayat-OFFLINE görevi: belirli süredir heartbeat göndermeyen ACTIVE
 	// cihazları OFFLINE işaretle (durum sütunu ve özet sayaçları güvenilir

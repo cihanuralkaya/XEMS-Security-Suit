@@ -1,5 +1,5 @@
 // Package correlate, ilişkili tespitleri tek bir OLAYA (incident) gruplar ve
-// alarm-fırtınasını bastırır. XDR'ı bir "alarm aracı"ndan ayıran korelasyon
+// alarm-fırtınasını bastırır. XEMS'i bir "alarm aracı"ndan ayıran korelasyon
 // pilarıdır: aynı cihaz + kural (teknik) için bir zaman penceresinde İLK tespit
 // bir incident açar ve alarma izin verir; penceredeki sonraki tekrarlar aynı
 // incident'e katlanır ve yinelenen alarm/webhook/SIEM satırı BASTIRILIR.
