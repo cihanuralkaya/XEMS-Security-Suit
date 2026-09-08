@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"xems.corp/suite/agent/internal/liveness"
+	"xems.corp/suite/agent/internal/standdown"
 	"xems.corp/suite/agent/internal/watchdog"
 )
 
@@ -57,7 +58,10 @@ func main() {
 		BaseBackoff: time.Second,
 		MaxBackoff:  30 * time.Second,
 		TrialWindow: 15 * time.Second,
-		Log:         func(m string) { log.Println(m) },
+		// İmzalı çevrimdışı offboard: ajan geçerli jetonu doğrulayıp stand-down
+		// işaretini bıraktıysa gözetimi bırak (yeniden başlatma).
+		StandDown: func() bool { return standdown.Exists(dataDir) },
+		Log:       func(m string) { log.Println(m) },
 	})
 
 	log.Printf("ajan gözetleniyor: %s", agentBin)

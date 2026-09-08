@@ -30,6 +30,8 @@ type Supervisor struct {
 	maxBackoff  time.Duration
 	trialWindow time.Duration // yeni sürüm bu süreden önce çökerse rollback
 
+	standDown func() bool // true → gözetimi bırak (imzalı offline offboard)
+
 	now   func() time.Time
 	sleep func(time.Duration)
 	log   func(string)
@@ -40,9 +42,14 @@ type Options struct {
 	BaseBackoff time.Duration
 	MaxBackoff  time.Duration
 	TrialWindow time.Duration
-	Now         func() time.Time
-	Sleep       func(time.Duration)
-	Log         func(string)
+	// StandDown, her (yeniden) başlatmadan ÖNCE danışılır. true dönerse gözetim
+	// döngüsü ajanı yeniden başlatmadan durur (imzalı çevrimdışı offboard: ajan
+	// geçerli bir stand-down jetonu doğruladığında bir işaret dosyası bırakır;
+	// bu kanca onu okur). Böylece tamper-koruması BİLİNÇLİ olarak sonlandırılır.
+	StandDown func() bool
+	Now       func() time.Time
+	Sleep     func(time.Duration)
+	Log       func(string)
 }
 
 // NewSupervisor oluşturur. Sıfır alanlar makul varsayılanlarla doldurulur.
@@ -68,7 +75,8 @@ func NewSupervisor(runner Runner, swapper Swapper, o Options) *Supervisor {
 	return &Supervisor{
 		runner: runner, swapper: swapper,
 		baseBackoff: o.BaseBackoff, maxBackoff: o.MaxBackoff, trialWindow: o.TrialWindow,
-		now: o.Now, sleep: o.Sleep, log: o.Log,
+		standDown: o.StandDown,
+		now:       o.Now, sleep: o.Sleep, log: o.Log,
 	}
 }
 
@@ -80,6 +88,14 @@ func (s *Supervisor) Run(ctx context.Context) error {
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
+		}
+
+		// İmzalı çevrimdışı offboard: ajan stand-down işaretini bıraktıysa
+		// gözetimi bırak (ajanı yeniden başlatma). Tamper-koruması burada
+		// BİLİNÇLİ olarak sona erer — yalnız yetkili imzalı jetonla tetiklenir.
+		if s.standDown != nil && s.standDown() {
+			s.log("stand-down işareti bulundu, gözetim durduruluyor (offline offboard)")
+			return nil
 		}
 
 		// Çalıştırmadan önce bekleyen staged güncelleme varsa uygula.

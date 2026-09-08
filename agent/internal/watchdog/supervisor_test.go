@@ -141,3 +141,61 @@ func TestSwapCleanNoRollback(t *testing.T) {
 		t.Fatalf("temiz çalışan sürüm rollback ETMEMELİ, %d", sw.rollbackCalls)
 	}
 }
+
+func TestStandDownStopsSupervision(t *testing.T) {
+	// Runner asla çağrılmamalı: stand-down işareti daha ilk turda döngüyü durdurur.
+	runner := &fakeRunner{
+		results:   []error{errors.New("çöktü")},
+		durations: []time.Duration{time.Second},
+	}
+	sw := &fakeSwapper{}
+	sleeps := 0
+	clock := &fakeClock{t: time.Unix(0, 0)}
+	runner.clock = clock
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	runner.cancel = cancel
+
+	sup := NewSupervisor(runner, sw, Options{
+		StandDown: func() bool { return true },
+		Now:       clock.now,
+		Sleep:     func(time.Duration) { sleeps++ },
+	})
+	if err := sup.Run(ctx); err != nil {
+		t.Fatalf("stand-down temiz (nil) dönmeli, %v", err)
+	}
+	if runner.calls != 0 {
+		t.Fatalf("stand-down ajanı hiç başlatmamalı, %d çağrı", runner.calls)
+	}
+	if sleeps != 0 {
+		t.Fatalf("stand-down uyku olmadan çıkmalı, %d", sleeps)
+	}
+}
+
+func TestStandDownAfterCleanExit(t *testing.T) {
+	// Ajan bir kez temiz çıkar; ikinci turda işaret görünür → yeniden başlatılmaz.
+	runner := &fakeRunner{
+		results:   []error{nil},
+		durations: []time.Duration{100 * time.Millisecond}, // baseBackoff'tan kısa → temiz-çıkış uykusu tetiklenir
+	}
+	sw := &fakeSwapper{}
+	sleeps := 0
+	clock := &fakeClock{t: time.Unix(0, 0)}
+	runner.clock = clock
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	runner.cancel = cancel
+
+	down := false
+	sup := NewSupervisor(runner, sw, Options{
+		StandDown: func() bool { return down },
+		Now:       clock.now,
+		Sleep:     func(time.Duration) { sleeps++; down = true }, // temiz-çıkış sonrası işaret belirir
+	})
+	if err := sup.Run(ctx); err != nil {
+		t.Fatalf("nil beklenirdi, %v", err)
+	}
+	if runner.calls != 1 {
+		t.Fatalf("ajan tam bir kez çalışmalı, %d", runner.calls)
+	}
+}

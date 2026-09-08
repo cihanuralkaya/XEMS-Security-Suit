@@ -50,11 +50,13 @@ import (
 	"xems.corp/suite/agent/internal/quarantine"
 	"xems.corp/suite/agent/internal/resource"
 	"xems.corp/suite/agent/internal/script"
+	"xems.corp/suite/agent/internal/standdown"
 	"xems.corp/suite/agent/internal/transport"
 	"xems.corp/suite/agent/internal/update"
 	"xems.corp/suite/agent/internal/usbmon"
 	xemsv1 "xems.corp/suite/gen/xems/v1"
 	"xems.corp/suite/logx"
+	"xems.corp/suite/offboard"
 	"xems.corp/suite/otawire"
 	"xems.corp/suite/scriptwire"
 )
@@ -70,6 +72,9 @@ type envConfig struct {
 	scriptPubKey string   // base64 Ed25519 public key (imzalı script doğrulama)
 	authMACs     []string // ağ keşfi allowlist'i (yetkili MAC'ler)
 	watchdogBin  string   // watchdog ikilisi (verilirse karşılıklı gözetim açık)
+	offboardPub  []string // base64 Ed25519 public key(ler) (imzalı offline offboard)
+	offboardTok  string   // offboard jetonu (metin) — dosyadan da okunabilir
+	offboardFile string   // offboard jetonunu içeren dosya yolu (alternatif)
 	interval     time.Duration
 }
 
@@ -85,8 +90,60 @@ func loadEnv() envConfig {
 		scriptPubKey: os.Getenv("XEMS_SCRIPT_PUBKEY"),
 		authMACs:     splitCSV(os.Getenv("XEMS_AUTHORIZED_MACS")),
 		watchdogBin:  os.Getenv("XEMS_WATCHDOG_BIN"),
+		offboardPub:  splitCSV(os.Getenv("XEMS_OFFBOARD_PUBKEY")),
+		offboardTok:  os.Getenv("XEMS_OFFBOARD_TOKEN"),
+		offboardFile: os.Getenv("XEMS_OFFBOARD_TOKEN_FILE"),
 		interval:     getdur("XEMS_HEARTBEAT_INTERVAL", 30*time.Second),
 	}
+}
+
+// checkOffboard, imzalı çevrimdışı offboard jetonunu (varsa) doğrular. Jeton
+// geçerliyse (imza + cihaz + expiry) stand-down işareti bırakır ve true döner —
+// çağıran ajanı durdurmalıdır. Jeton yoksa ya da geçersizse false döner (ajan
+// normal çalışmaya devam eder). ÇEVRİMDIŞI çalışır: sunucuya erişim gerekmez.
+func checkOffboard(cfg envConfig, deviceID string) bool {
+	if len(cfg.offboardPub) == 0 {
+		return false // özellik kapalı (güvenilen anahtar yok)
+	}
+	raw := strings.TrimSpace(cfg.offboardTok)
+	if raw == "" && cfg.offboardFile != "" {
+		b, err := os.ReadFile(cfg.offboardFile)
+		if err != nil {
+			log.Printf("offboard jeton dosyası okunamadı: %v", err)
+			return false
+		}
+		raw = strings.TrimSpace(string(b))
+	}
+	if raw == "" {
+		return false // jeton verilmemiş
+	}
+
+	var pubs []ed25519.PublicKey
+	for _, b64 := range cfg.offboardPub {
+		if p, err := base64.StdEncoding.DecodeString(b64); err == nil {
+			pubs = append(pubs, ed25519.PublicKey(p))
+		}
+	}
+	v, err := offboard.NewVerifier(pubs...)
+	if err != nil {
+		log.Printf("offboard: geçerli public key yok: %v", err)
+		return false
+	}
+	tok, sig, err := offboard.Decode(raw)
+	if err != nil {
+		log.Printf("offboard jetonu ayrıştırılamadı: %v", err)
+		return false
+	}
+	if err := v.Verify(tok, sig, deviceID, time.Now().Unix()); err != nil {
+		log.Printf("offboard jetonu REDDEDİLDİ: %v", err)
+		return false
+	}
+	if err := standdown.Write(cfg.dataDir, deviceID, "signed offline offboard token"); err != nil {
+		log.Printf("stand-down işareti yazılamadı: %v", err)
+		return false
+	}
+	log.Printf("offboard jetonu DOĞRULANDI (device=%s) — ajan stand-down; tamper-koruması bilinçli olarak durduruldu", deviceID)
+	return true
 }
 
 // selfBinaryHash, ajanın kendi çalışan ikilisinin SHA-256'sını (hex) döner —
@@ -136,6 +193,14 @@ func run() error {
 
 	cfg := loadEnv()
 
+	// İmzalı çevrimdışı offboard: stand-down işareti zaten varsa ajan çalışmaz
+	// (watchdog da yeniden başlatmaz). Yetkili imzalı jeton bir kez uygulandıktan
+	// sonra bu durum kalıcıdır — işaret dosyası elle silinene dek.
+	if standdown.Exists(cfg.dataDir) {
+		log.Printf("stand-down işareti mevcut — ajan durdu (imzalı offline offboard).")
+		return nil
+	}
+
 	// Sunucu SPKI pinning (savunma derinliği): XEMS_SERVER_SPKI_PIN ayarlıysa (virgülle
 	// ayrılmış base64 SHA-256 pinleri) sunucu sertifikası CA'ya EK OLARAK pin'e karşı
 	// doğrulanır. Ayarlı değilse pinning devre dışıdır (yalnız CA doğrulaması).
@@ -149,6 +214,12 @@ func run() error {
 		return err
 	}
 	log.Printf("kimlik hazır: device_id=%s", ident.deviceID)
+
+	// İmzalı çevrimdışı offboard denetimi: geçerli bir jeton verilmişse ajan
+	// stand-down yapar (işaret bırakılır, sunucuya erişim gerekmez).
+	if checkOffboard(cfg, ident.deviceID) {
+		return nil
+	}
 
 	// İstemci sertifikasını dinamik tutucuya al: yenileme sonrası yeni
 	// bağlantılar güncel sertifikayı kullanır (yeniden bağlanma zorlamadan).
