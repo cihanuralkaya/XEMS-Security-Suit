@@ -110,3 +110,23 @@ func TestTouchHeartbeatStoresOSVersion(t *testing.T) {
 		t.Fatalf("os_version/agent_version saklanmalıydı: %+v", rows)
 	}
 }
+
+// RecordAgentBinary (öz-tasdik, #4): ilk kayıt kurcalama değil; sürüm değişmeden
+// hash değişirse kurcalama; sürüm de değişirse (meşru güncelleme) kurcalama değil.
+func TestRecordAgentBinaryTamperDetection(t *testing.T) {
+	s := New()
+	ctx := context.Background()
+	id, _ := s.UpsertEnrollingDevice(ctx, enroll.DeviceEnrollment{PreferredDeviceID: "d-att"})
+
+	if tampered, _ := s.RecordAgentBinary(ctx, id, "1.0.0", "hashA"); tampered {
+		t.Fatal("ilk kayıt kurcalama olmamalı")
+	}
+	// Aynı sürüm, farklı hash → KURCALAMA.
+	if tampered, _ := s.RecordAgentBinary(ctx, id, "1.0.0", "hashB"); !tampered {
+		t.Fatal("sürüm aynı + hash farklı → kurcalama beklenmeliydi")
+	}
+	// Meşru güncelleme: sürüm değişti + hash değişti → kurcalama DEĞİL.
+	if tampered, _ := s.RecordAgentBinary(ctx, id, "1.1.0", "hashC"); tampered {
+		t.Fatal("sürüm değişimiyle hash değişimi meşru (kurcalama değil)")
+	}
+}

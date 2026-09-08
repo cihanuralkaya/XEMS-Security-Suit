@@ -389,6 +389,9 @@ func (m *memStore) DeviceHasActiveCert(_ context.Context, _ string) (bool, error
 func (m *memStore) TouchHeartbeat(_ context.Context, deviceID, _, _ string, _ time.Time) (string, error) {
 	return "", nil
 }
+func (m *memStore) RecordAgentBinary(_ context.Context, _, _, _ string) (bool, error) {
+	return false, nil
+}
 
 func (m *memStore) enqueueCmd(c *xemsv1.Command) {
 	m.mu.Lock()

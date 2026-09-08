@@ -35,6 +35,10 @@ type DeviceRegistry interface {
 	TouchHeartbeat(ctx context.Context, deviceID, agentVersion, osVersion string, at time.Time) (currentPolicyVersion string, err error)
 	// PendingCommands, cihaz için bekleyen komutları döner (karantina vb.).
 	PendingCommands(ctx context.Context, deviceID string) ([]*xemsv1.Command, error)
+	// RecordAgentBinary, ajanın bildirdiği ikili SHA-256'sını kaydeder ve KURCALAMA
+	// sinyali döner: saklı hash boş değilse, SÜRÜM değişmediği hâlde hash değişmişse
+	// (takas/yamalanmış ikili) tampered=true. hash boşsa (öz-tasdik yok) no-op.
+	RecordAgentBinary(ctx context.Context, deviceID, version, hash string) (tampered bool, err error)
 }
 
 // EventSink, gelen olayları kalıcılaştırır ve kabul edilen son sırayı döner.
@@ -240,6 +244,27 @@ func (h *AgentHandler) Heartbeat(ctx context.Context, req *xemsv1.HeartbeatReque
 		return nil, status.Error(codes.Internal, "heartbeat kaydedilemedi")
 	}
 	h.admin.PublishDevice(deviceID) // konsola canlı: cihaz görüldü
+
+	// Öz-tasdik (#4): ajanın ikili hash'i sürüm değişmeden değiştiyse (takas/yama)
+	// KRİTİK kurcalama olayı üret. Best-effort; heartbeat'i kesmez.
+	if bh := req.GetBinaryHash(); bh != "" {
+		if tampered, terr := h.devices.RecordAgentBinary(ctx, deviceID, agentVersion, bh); terr == nil && tampered {
+			ev := model.Event{
+				Category: "SECURITY", Severity: "CRITICAL",
+				Message:    "ajan ikilisi sürüm değişmeden değişti — olası kurcalama/takas (öz-tasdik)",
+				OccurredAt: now,
+				Details:    `{"self_attestation":true,"binary_hash":"` + bh + `","agent_version":"` + agentVersion + `"}`,
+			}
+			_, _ = h.events.SaveEvents(ctx, deviceID, []model.Event{ev})
+			h.admin.PublishEvent(deviceID, ev.Severity, ev.Message)
+			metrics.IncAlertRaised()
+			h.alerter.Notify(notify.Alert{
+				DeviceID: deviceID, Category: ev.Category, Severity: ev.Severity,
+				Message: ev.Message, OccurredAt: now,
+				TechniqueID: "T1554", TechniqueName: "Compromise Host Software Binary", Tactic: "Persistence",
+			})
+		}
+	}
 	cmds, err := h.devices.PendingCommands(ctx, deviceID)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "komutlar alınamadı")

@@ -37,6 +37,8 @@ type device struct {
 	osPlatform    string
 	osVersion     string
 	agentVersion  string
+	binaryHash    string // ajan ikilisi SHA-256 (öz-tasdik, #4)
+	binaryVersion string // yukarıdaki hash'in ait olduğu sürüm
 	status        string
 	policyVersion string
 	policyID      string
@@ -291,6 +293,20 @@ func (s *Store) TouchHeartbeat(_ context.Context, deviceID, agentVersion, osVers
 		d.status = "ACTIVE"
 	}
 	return d.policyVersion, nil
+}
+
+// RecordAgentBinary, ajan ikili hash'ini kaydeder ve kurcalama sinyali döner
+// (saklı hash boş değil + sürüm aynı + hash farklı → tampered).
+func (s *Store) RecordAgentBinary(_ context.Context, deviceID, version, hash string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	d, ok := s.devices[deviceID]
+	if !ok {
+		return false, nil
+	}
+	tampered := d.binaryHash != "" && d.binaryHash != hash && d.binaryVersion == version
+	d.binaryHash, d.binaryVersion = hash, version
+	return tampered, nil
 }
 
 // MarkStaleOffline, last_seen'i olderThan'dan eski olan ACTIVE cihazları

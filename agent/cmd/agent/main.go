@@ -16,6 +16,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -87,6 +88,25 @@ func loadEnv() envConfig {
 	}
 }
 
+// selfBinaryHash, ajanın kendi çalışan ikilisinin SHA-256'sını (hex) döner —
+// öz-tasdik (#4). Hesaplanamazsa boş döner (sunucu boş hash'i yok sayar).
+func selfBinaryHash() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	f, err := os.Open(exe)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return ""
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
 func splitCSV(s string) []string {
 	if s == "" {
 		return nil
@@ -146,6 +166,7 @@ func run() error {
 
 	clock := agentclock.New(time.Now)
 	buf := collector.NewBuffer(10000)
+	selfHash := selfBinaryHash() // öz-tasdik (#4): kendi ikilisinin SHA-256'sı (bir kez)
 	// Motor birden çok goroutine'den (heartbeat + politika akışı) erişildiğinden
 	// atomik tutulur; politika akışı sıcak değiştirir, enforcement okur.
 	var engine atomic.Pointer[policy.Engine]
@@ -299,6 +320,7 @@ func run() error {
 				OsVersion:    osVersion,
 			},
 			CurrentPolicyVersion: engine.Load().Version(),
+			BinaryHash:           selfHash, // öz-tasdik (#4): kendi ikilisinin SHA-256'sı
 		})
 		if err != nil {
 			log.Printf("heartbeat başarısız: %v", err)

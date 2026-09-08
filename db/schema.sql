@@ -61,6 +61,8 @@ CREATE TABLE devices (
     agent_version          VARCHAR(50),
     os_platform            VARCHAR(20),               -- "windows" | "linux"
     os_version             VARCHAR(120),              -- okunabilir OS sürümü (filo envanteri)
+    agent_binary_hash      CHAR(64),                  -- ajan ikilisinin SHA-256'sı (öz-tasdik, #4)
+    agent_binary_version   VARCHAR(50),               -- yukarıdaki hash'in ait olduğu sürüm (kurcalama teşhisi)
     status                 device_status NOT NULL DEFAULT 'PENDING_ENROLLMENT',
     current_policy_version VARCHAR(64),
     tags                   TEXT[] NOT NULL DEFAULT '{}',   -- filo gruplama/etiketleme

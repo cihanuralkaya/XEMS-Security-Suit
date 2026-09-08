@@ -206,6 +206,29 @@ func (s *Store) TouchHeartbeat(ctx context.Context, deviceID, agentVersion, osVe
 	return v, nil
 }
 
+// RecordAgentBinary, ajan ikili hash'ini kaydeder ve kurcalama sinyali döner:
+// saklı hash boş değil + saklı sürüm (hash'e ait) == bildirilen sürüm + hash
+// farklı ise (takas/yamalanmış ikili) tampered=true.
+func (s *Store) RecordAgentBinary(ctx context.Context, deviceID, version, hash string) (bool, error) {
+	var prevH, prevV string
+	err := s.pool.QueryRow(ctx,
+		`SELECT COALESCE(agent_binary_hash,''), COALESCE(agent_binary_version,'') FROM devices WHERE id = $1`,
+		deviceID).Scan(&prevH, &prevV)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("db: ikili hash okuma: %w", err)
+	}
+	tampered := prevH != "" && prevH != hash && prevV == version
+	if _, err := s.pool.Exec(ctx,
+		`UPDATE devices SET agent_binary_hash = $2, agent_binary_version = $3 WHERE id = $1`,
+		deviceID, hash, version); err != nil {
+		return false, fmt.Errorf("db: ikili hash güncelle: %w", err)
+	}
+	return tampered, nil
+}
+
 // PendingCommands, cihaz için bekleyen komutları döner ve teslim edildi olarak
 // işaretler (en-fazla-bir-kez teslim). Tek UPDATE...RETURNING ile atomiktir.
 func (s *Store) PendingCommands(ctx context.Context, deviceID string) ([]*xemsv1.Command, error) {
