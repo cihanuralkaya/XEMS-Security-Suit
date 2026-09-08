@@ -36,6 +36,7 @@ import (
 	"xems.corp/suite/server/internal/metrics"
 	"xems.corp/suite/server/internal/notify"
 	"xems.corp/suite/server/internal/policypush"
+	"xems.corp/suite/server/internal/report"
 	"xems.corp/suite/server/internal/response"
 	"xems.corp/suite/server/internal/retention"
 	"xems.corp/suite/server/internal/revocation"
@@ -455,6 +456,35 @@ func run() error {
 			case <-ctx.Done():
 				return
 			case <-t.C:
+			}
+		}
+	}()
+
+	// Zamanlanmış güvenlik-duruş raporu (#7): periyodik olarak (XEMS_REPORT_INTERVAL,
+	// vars. 24s) filo/tehdit özetini üretip loglar (JSON loglama açıksa SIEM'e gider).
+	// Tam rapor GET /api/report'tan (HTML/CSV) alınır.
+	repInterval := 24 * time.Hour
+	if d, err := time.ParseDuration(os.Getenv("XEMS_REPORT_INTERVAL")); err == nil && d > 0 {
+		repInterval = d
+	}
+	go func() {
+		t := time.NewTicker(repInterval)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+			}
+			if sum, err := readSvc.Summary(ctx); err == nil {
+				c := metrics.Counters()
+				d := report.Data{
+					DevicesTotal: sum.DevicesTotal, DevicesOnline: sum.DevicesOnline,
+					DevicesQuarantined: sum.DevicesQuarantined, NonCompliant: sum.NonCompliantDevices,
+					Detections: c["detections"], AlertsRaised: c["alerts_raised"],
+					AlertsSuppressed: c["alerts_suppressed"], IocHits: c["ioc_hits"],
+				}
+				log.Printf("[report] zamanlanmış duruş: %s", d.Summary())
 			}
 		}
 	}()

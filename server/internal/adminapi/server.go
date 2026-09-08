@@ -29,6 +29,7 @@ import (
 	"xems.corp/suite/server/internal/metrics"
 	"xems.corp/suite/server/internal/mitre"
 	"xems.corp/suite/server/internal/model"
+	"xems.corp/suite/server/internal/report"
 	"xems.corp/suite/server/internal/security"
 	"xems.corp/suite/server/internal/vuln"
 )
@@ -196,6 +197,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/detections/test", s.authed(s.handleTestDetection))
 	mux.HandleFunc("POST /api/hunt", s.authed(s.handleHunt))
 	mux.HandleFunc("GET /api/incidents", s.authed(s.handleIncidents))
+	mux.HandleFunc("GET /api/report", s.authed(s.handleReport))
 	mux.HandleFunc("GET /api/software", s.authed(s.handleSoftwareSearch))
 	mux.HandleFunc("GET /api/vulnerabilities", s.authed(s.handleVulnerabilities))
 	mux.HandleFunc("POST /api/events/{id}/ack", s.authed(s.handleAckEvent))
@@ -930,6 +932,51 @@ func (s *Server) handleHunt(w http.ResponseWriter, r *http.Request, _ string) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"mode": req.Mode, "scanned": len(events), "hits": hits})
+}
+
+// buildReportData, güvenlik-duruş raporu verisini adminread + metrics'ten toplar.
+func (s *Server) buildReportData(r *http.Request) (report.Data, error) {
+	sum, err := s.reader.Summary(r.Context())
+	if err != nil {
+		return report.Data{}, err
+	}
+	incs, _ := s.reader.Incidents(r.Context(), 20)
+	c := metrics.Counters()
+	d := report.Data{
+		GeneratedAt: s.now(), Title: "Güvenlik Duruş Raporu",
+		DevicesTotal: sum.DevicesTotal, DevicesOnline: sum.DevicesOnline, DevicesOffline: sum.DevicesOffline,
+		DevicesQuarantined: sum.DevicesQuarantined, NonCompliant: sum.NonCompliantDevices,
+		EventsBySeverity: sum.EventsBySeverity, DevicesByOS: sum.DevicesByOS,
+		Detections: c["detections"], AlertsRaised: c["alerts_raised"],
+		AlertsSuppressed: c["alerts_suppressed"], IocHits: c["ioc_hits"],
+	}
+	for _, in := range incs {
+		d.TopIncidents = append(d.TopIncidents, report.Incident{
+			DeviceID: in.DeviceID, RuleID: in.RuleID, Severity: in.Severity, Count: in.Count, LastSeen: in.LastSeen,
+		})
+	}
+	return d, nil
+}
+
+// handleReport, dışa aktarılabilir güvenlik-duruş raporu üretir (format=html
+// varsayılan | csv). Salt-okunur; nokta-zaman görünümü (kurumsal/denetim/KVKK).
+func (s *Server) handleReport(w http.ResponseWriter, r *http.Request, _ string) {
+	d, err := s.buildReportData(r)
+	if respondErr(w, err) {
+		return
+	}
+	if r.URL.Query().Get("format") == "csv" {
+		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+		w.Header().Set("Content-Disposition", `attachment; filename="xems-report.csv"`)
+		_, _ = w.Write([]byte(report.RenderCSV(d)))
+		return
+	}
+	html, err := report.RenderHTML(d)
+	if respondErr(w, err) {
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write([]byte(html))
 }
 
 // handleIncidents, korelasyonla gruplanmış olayları (incident) listeler (salt-okunur).

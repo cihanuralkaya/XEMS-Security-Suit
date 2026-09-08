@@ -379,7 +379,9 @@
 
     <div class="card" data-view="overview">
       <div class="head"><h2>⚔️ Tehdit Etkinliği <span class="count" id="act-uptime">—</span></h2>
-        <span class="sp"></span><span class="mono" style="color:var(--faint);font-size:11px">süreç başından beri</span></div>
+        <span class="sp"></span>
+        <button class="btn ghost sm" data-act="reportHTML" title="Güvenlik duruş raporunu HTML olarak aç">📄 Rapor</button>
+        <button class="btn ghost sm" data-act="reportCSV" title="KPI'ları CSV olarak indir">⬇ CSV</button></div>
       <div class="body">
         <div id="act-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px"></div>
         <div class="lbl" style="margin:14px 0 6px">Olay hızı (canlı · alım/aralık)</div>
@@ -2275,6 +2277,21 @@
       if(!$("a-pol").value){ showOut("o-dev","Listeden bir politika seçin.","err"); return Promise.resolve(); }
       return api("/api/policies/assign","POST",{device_id:state.sel,policy_id:$("a-pol").value}).then(function(){
         showOut("o-dev","Politika atandı (ajana anında iletilir).","ok"); toast("Politika atandı","Anlık push gönderildi","ok"); }); },
+    reportHTML: function(){
+      return fetch("/api/report",{headers:{Authorization:"Bearer "+state.token}}).then(function(r){
+        if(!r.ok) throw new Error("HTTP "+r.status); return r.blob();
+      }).then(function(b){
+        var url=URL.createObjectURL(b); window.open(url,"_blank");
+        setTimeout(function(){ URL.revokeObjectURL(url); },30000); toast("Rapor üretildi","","ok");
+      }).catch(function(e){ toast("Rapor başarısız",e.message,"err"); }); },
+    reportCSV: function(){
+      return fetch("/api/report?format=csv",{headers:{Authorization:"Bearer "+state.token}}).then(function(r){
+        if(!r.ok) throw new Error("HTTP "+r.status); return r.blob();
+      }).then(function(b){
+        var url=URL.createObjectURL(b), a=document.createElement("a");
+        a.href=url; a.download="xems-report.csv"; document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url); toast("CSV indirildi","","ok");
+      }).catch(function(e){ toast("CSV başarısız",e.message,"err"); }); },
     bulkBody: function(){
       var tag=$("bulk-tag").value.trim(), action=$("bulk-action").value;
       if(!tag){ showOut("o-bulk","Etiket girin.","err"); return null; }
