@@ -335,6 +335,14 @@ func run() error {
 	// Admin HTTP API (TLS).
 	adminSvc := admin.NewService(backend, bidx, cfg.EnrollTokenTTL)
 	adminSvc.SetPublisher(notifier) // politika atamada anlık push
+	// Çift-kontrol (dört-göz) WIPE: XDR_WIPE_DUAL_CONTROL=1 ise WIPE bir ADMIN'in
+	// talebi + FARKLI bir ADMIN'in onayını gerektirir (tek ele geçirilmiş ADMIN filo
+	// silemez). Varsayılan KAPALI (tek-ADMIN doğrudan WIPE — eski davranış).
+	wipeDual := os.Getenv("XDR_WIPE_DUAL_CONTROL") == "1"
+	adminSvc.SetWipeDualControl(wipeDual)
+	if wipeDual {
+		log.Println("çift-kontrol WIPE: iki farklı ADMIN onayı ETKİN")
+	}
 	readSvc := adminread.NewService(backend, cipher)
 	sessions := security.NewSessionSigner(security.DeriveKey(cfg.MasterKey, security.LabelSessionToken))
 	adminAPI := adminapi.New(adminSvc, readSvc, backend, sessions, cfg.AdminSessionTTL)
@@ -408,6 +416,7 @@ func run() error {
 		"log_format":            getenv("XDR_LOG_FORMAT", "text"),
 		"persistence":           cfg.DatabaseURL != "",
 		"cluster_enabled":       clusterOn,
+		"wipe_dual_control":     wipeDual,
 	})
 	// Zaman aşımları: yavaş-istemci (slowloris) DoS'una karşı bağlantı ömrünü
 	// sınırla. WriteTimeout KASITLI olarak ayarlanmadı — /api/stream (SSE)

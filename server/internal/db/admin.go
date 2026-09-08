@@ -103,6 +103,40 @@ func (s *Store) SetEventCase(ctx context.Context, eventID, adminID, assignee, no
 	return nil
 }
 
+// SavePendingWipe, ikinci-onay bekleyen WIPE talebini saklar (çift-kontrol; upsert).
+func (s *Store) SavePendingWipe(ctx context.Context, deviceID, requestedBy, reason string) error {
+	const q = `
+		INSERT INTO pending_wipes (device_id, requested_by, reason, requested_at)
+		VALUES ($1::uuid, $2::uuid, NULLIF($3,''), now())
+		ON CONFLICT (device_id) DO UPDATE
+		   SET requested_by = EXCLUDED.requested_by, reason = EXCLUDED.reason, requested_at = now()`
+	if _, err := s.pool.Exec(ctx, q, deviceID, requestedBy, reason); err != nil {
+		return fmt.Errorf("db: bekleyen wipe kaydı: %w", err)
+	}
+	return nil
+}
+
+// GetPendingWipe, cihaz için bekleyen WIPE talebini (talep eden admin id'si) döner.
+func (s *Store) GetPendingWipe(ctx context.Context, deviceID string) (string, bool, error) {
+	var rb string
+	err := s.pool.QueryRow(ctx, `SELECT requested_by::text FROM pending_wipes WHERE device_id = $1::uuid`, deviceID).Scan(&rb)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("db: bekleyen wipe okuma: %w", err)
+	}
+	return rb, true, nil
+}
+
+// DeletePendingWipe, bekleyen WIPE talebini siler (onay/iptal sonrası; yoksa no-op).
+func (s *Store) DeletePendingWipe(ctx context.Context, deviceID string) error {
+	if _, err := s.pool.Exec(ctx, `DELETE FROM pending_wipes WHERE device_id = $1::uuid`, deviceID); err != nil {
+		return fmt.Errorf("db: bekleyen wipe silme: %w", err)
+	}
+	return nil
+}
+
 func (s *Store) WriteAudit(ctx context.Context, adminID, action, targetType, targetID string) error {
 	// Kurcalama-kanıtı hash zinciri (SEC C-1): önceki entry_hash okunur, yeni hash
 	// hesaplanır ve prev_hash+entry_hash+created_at ile eklenir — hepsi tek

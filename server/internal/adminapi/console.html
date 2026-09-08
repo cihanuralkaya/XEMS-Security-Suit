@@ -510,6 +510,11 @@
               <button class="btn warn sm" data-act="restart" disabled>🔄 Yeniden Başlat</button>
               <button class="btn danger sm" data-act="wipe" disabled>💥 Veriyi Sil (ADMIN)</button>
             </div>
+            <!-- Çift-kontrol (dört-göz) bekleyen WIPE talepleri; boşsa gizli. -->
+            <div id="pending-wipes" style="margin-top:10px;display:none">
+              <div class="lbl" style="color:var(--crit)">⚠ Onay Bekleyen WIPE Talepleri (dört-göz)</div>
+              <div id="pending-wipes-list" style="display:flex;flex-direction:column;gap:6px;margin-top:6px"></div>
+            </div>
             <div class="lbl" style="margin-top:14px">Adli — Dosya Toplama (IR)</div>
             <div style="display:flex;gap:6px;margin-top:6px">
               <input id="cf-path" placeholder="ör. C:\Windows\Temp\suspicious.log" style="flex:1;padding:6px 9px;font-size:12px" disabled>
@@ -1500,6 +1505,43 @@
     $("live-txt").textContent = ok ? ("canlı ("+mode+") · "+new Date().toLocaleTimeString()) : "bağlantı yok";
   }
   function soft(p){ return p.catch(function(){ return {}; }); }
+  // loadPendingWipes: çift-kontrol bekleyen WIPE taleplerini listeler; her biri için
+  // Onayla (farklı ADMIN) + İptal düğmesi. Boşsa bölüm gizlenir. VIEWER'da 403 → gizli.
+  function loadPendingWipes(){
+    var box=$("pending-wipes"), list=$("pending-wipes-list"); if(!box||!list) return;
+    return api("/api/devices/pending-wipes").then(function(r){
+      var pw=(r&&r.pending_wipes)||[];
+      list.innerHTML="";
+      if(!pw.length){ box.style.display="none"; return; }
+      box.style.display="block";
+      pw.forEach(function(w){
+        var row=document.createElement("div");
+        row.style.cssText="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 8px;background:var(--panel2);border:1px solid var(--crit);border-radius:8px";
+        var info=document.createElement("div"); info.style.cssText="flex:1;font-size:11.5px";
+        info.innerHTML="<b>"+esc(deviceName(w.device_id))+"</b> · talep: "+esc(w.requested_by||"?")+
+          (w.reason?(" · <span style='color:var(--muted)'>"+esc(w.reason)+"</span>"):"");
+        var ap=document.createElement("button"); ap.className="btn danger sm"; ap.type="button"; ap.textContent="✅ Onayla (WIPE)";
+        ap.title="Farklı bir ADMIN olarak onayla → WIPE kuyruğa girer (kendi talebinizi onaylayamazsınız)";
+        ap.onclick=function(){ approveWipe(w.device_id); };
+        var cn=document.createElement("button"); cn.className="btn ghost sm"; cn.type="button"; cn.textContent="İptal";
+        cn.onclick=function(){ cancelWipe(w.device_id); };
+        row.appendChild(info); row.appendChild(ap); row.appendChild(cn);
+        list.appendChild(row);
+      });
+    }).catch(function(){ box.style.display="none"; }); // VIEWER/yetkisiz: sessizce gizle
+  }
+  function approveWipe(id){
+    if(!confirm("⚠ Bu WIPE talebini ONAYLIYORSUNUZ — cihazın VERİSİ SİLİNECEK (geri alınamaz). Devam?")) return;
+    api("/api/devices/"+encodeURIComponent(id)+"/wipe/approve","POST",{}).then(function(){
+      toast("WIPE onaylandı — kuyruğa girdi",deviceName(id),"err"); refresh();
+    }).catch(function(e){ toast("Onay başarısız",e.message,"err"); });
+  }
+  function cancelWipe(id){
+    api("/api/devices/"+encodeURIComponent(id)+"/wipe/cancel","POST",{}).then(function(){
+      toast("WIPE talebi iptal edildi",deviceName(id),"ok"); refresh();
+    }).catch(function(e){ toast("İptal başarısız",e.message,"err"); });
+  }
+
   function refresh(){
     return Promise.all([
       api("/api/devices?limit=500"),
@@ -1519,7 +1561,7 @@
       state.policies = (r[6] && r[6].policies) || [];
       renderStats(); renderSeverity(); renderOSInventory(); renderTopDevices(); renderComplianceCard(); renderTactics(); renderDevices(); renderEvents(); renderAudit();
       renderTokens(); renderAdmins(); renderPolicies(); setLive(true);
-      loadActivity();
+      loadActivity(); loadPendingWipes();
       if(state.sel) loadDetail(state.sel);
     }).catch(function(e){ setLive(false); });
   }
@@ -2107,8 +2149,14 @@
         showOut("o-dev","Yeniden başlatma komutu kuyruğa alındı.","ok"); toast("Yeniden başlatma istendi",selName(),"warn"); }); },
     wipe: function(){
       if(!confirm("⚠ “"+selName()+"” cihazının VERİSİ SİLİNECEK (yıkıcı, ADMIN yetkisi). Emin misiniz?")) return Promise.resolve();
-      return api("/api/devices/"+encodeURIComponent(state.sel)+"/wipe","POST",{}).then(function(){
-        showOut("o-dev","Veri silme komutu kuyruğa alındı (ADMIN + denetim izi).","ok"); toast("Veri silme istendi",selName(),"err"); }); },
+      return api("/api/devices/"+encodeURIComponent(state.sel)+"/wipe","POST",{}).then(function(r){
+        if(r&&r.status==="wipe_pending_approval"){
+          showOut("o-dev","WIPE TALEBİ kaydedildi — çift-kontrol açık: FARKLI bir ADMIN 'Bekleyen WIPE' bölümünden onaylamadıkça veri SİLİNMEZ (dört-göz).","warn");
+          toast("WIPE onay bekliyor",selName(),"warn"); loadPendingWipes();
+        } else {
+          showOut("o-dev","Veri silme komutu kuyruğa alındı (ADMIN + denetim izi).","ok"); toast("Veri silme istendi",selName(),"err");
+        }
+      }); },
     collectFile: function(){
       var path=($("cf-path").value||"").trim();
       if(!path){ showOut("o-dev","Toplanacak dosya yolunu girin.","err"); return Promise.resolve(); }

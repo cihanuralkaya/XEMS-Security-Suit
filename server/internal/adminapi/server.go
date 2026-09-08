@@ -203,6 +203,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/devices/{id}/lock", s.authed(s.handleLockDevice))
 	mux.HandleFunc("POST /api/devices/{id}/restart", s.authed(s.handleRestartDevice))
 	mux.HandleFunc("POST /api/devices/{id}/wipe", s.authed(s.handleWipeDevice))
+	mux.HandleFunc("POST /api/devices/{id}/wipe/approve", s.authed(s.handleApproveWipe))
+	mux.HandleFunc("POST /api/devices/{id}/wipe/cancel", s.authed(s.handleCancelWipe))
+	mux.HandleFunc("GET /api/devices/pending-wipes", s.authed(s.handlePendingWipes))
 	mux.HandleFunc("GET /api/devices/{id}/artifacts", s.authed(s.handleListArtifacts))
 	mux.HandleFunc("GET /api/artifacts/{id}/download", s.authed(s.handleDownloadArtifact))
 	mux.HandleFunc("GET /api/activity", s.authed(s.handleActivity))
@@ -855,12 +858,52 @@ func (s *Server) handleRestartDevice(w http.ResponseWriter, r *http.Request, adm
 	writeJSON(w, http.StatusOK, map[string]string{"status": "restart_queued"})
 }
 
-// handleWipeDevice, uzaktan veri silme komutu kuyruğa ekler (ADMIN; yıkıcı + audit).
+// handleWipeDevice, uzaktan veri silme başlatır (ADMIN; yıkıcı + audit). Çift-kontrol
+// AÇIKSA komut hemen kuyruğa GİRMEZ — WIPE talebi kaydedilir ve farklı bir ADMIN'in
+// onayı beklenir (dört-göz). KAPALIYSA doğrudan kuyruğa alınır (eski davranış).
 func (s *Server) handleWipeDevice(w http.ResponseWriter, r *http.Request, adminID string) {
+	if s.adminSvc.WipeDualControl() {
+		var req struct {
+			Reason string `json:"reason"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req) // gerekçe opsiyonel
+		if respondErr(w, s.adminSvc.RequestWipe(r.Context(), adminID, r.PathValue("id"), req.Reason)) {
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "wipe_pending_approval"})
+		return
+	}
 	if respondErr(w, s.adminSvc.WipeDevice(r.Context(), adminID, r.PathValue("id"))) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "wipe_queued"})
+}
+
+// handleApproveWipe, bekleyen bir WIPE talebini onaylar ve komutu kuyruğa alır
+// (ADMIN; onaylayan talep edenden FARKLI olmalı — dört-göz).
+func (s *Server) handleApproveWipe(w http.ResponseWriter, r *http.Request, adminID string) {
+	if respondErr(w, s.adminSvc.ApproveWipe(r.Context(), adminID, r.PathValue("id"))) {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "wipe_queued"})
+}
+
+// handleCancelWipe, bekleyen bir WIPE talebini iptal eder (ADMIN).
+func (s *Server) handleCancelWipe(w http.ResponseWriter, r *http.Request, adminID string) {
+	if respondErr(w, s.adminSvc.CancelWipe(r.Context(), adminID, r.PathValue("id"))) {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "wipe_cancelled"})
+}
+
+// handlePendingWipes, ikinci-onay bekleyen WIPE taleplerini listeler (çift-kontrol
+// konsol görünümü; onay/iptal için).
+func (s *Server) handlePendingWipes(w http.ResponseWriter, r *http.Request, _ string) {
+	rows, err := s.reader.PendingWipes(r.Context())
+	if respondErr(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"pending_wipes": rows})
 }
 
 // handleCollectFile, bir cihazdan adli/IR dosya toplama komutu kuyruğa ekler

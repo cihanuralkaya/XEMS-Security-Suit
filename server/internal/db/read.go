@@ -140,6 +140,30 @@ func (s *Store) EventAcks(ctx context.Context) (map[string]adminread.EventAck, e
 	return out, rows.Err()
 }
 
+// ListPendingWipes, ikinci-onay bekleyen tüm WIPE taleplerini (talep eden admin
+// e-postasıyla) en yeniden eskiye döner (çift-kontrol görünürlüğü).
+func (s *Store) ListPendingWipes(ctx context.Context) ([]adminread.PendingWipeRow, error) {
+	const q = `
+		SELECT p.device_id::text, COALESCE(ad.email, p.requested_by::text), COALESCE(p.reason,''), p.requested_at
+		  FROM pending_wipes p
+		  LEFT JOIN admins ad ON ad.id = p.requested_by
+		  ORDER BY p.requested_at DESC`
+	rows, err := s.pool.Query(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("db: bekleyen wipe listesi: %w", err)
+	}
+	defer rows.Close()
+	var out []adminread.PendingWipeRow
+	for rows.Next() {
+		var r adminread.PendingWipeRow
+		if err := rows.Scan(&r.DeviceID, &r.RequestedBy, &r.Reason, &r.RequestedAt); err != nil {
+			return nil, fmt.Errorf("db: bekleyen wipe okuma: %w", err)
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) ListAudit(ctx context.Context, limit int) ([]adminread.AuditRow, error) {
 	const q = `
 		SELECT a.id, COALESCE(ad.email,''), a.action::text,

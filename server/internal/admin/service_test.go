@@ -28,6 +28,7 @@ type memStore struct {
 	erased     string                       // EraseDeviceData ile silinen son deviceID
 	eventAcks  map[string]string            // eventID -> status (triyaj)
 	eventCases map[string][2]string         // eventID -> {assignee, note} (vaka)
+	pendWipes  map[string]string            // deviceID -> requestedBy (çift-kontrol WIPE)
 	cmdParams  map[string]map[string]string // cmdType -> son params
 	nextPolID  int
 	nextAdmID  int
@@ -46,6 +47,22 @@ func (m *memStore) SetEventCase(_ context.Context, eventID, _, assignee, note st
 		m.eventCases = map[string][2]string{}
 	}
 	m.eventCases[eventID] = [2]string{assignee, note}
+	return nil
+}
+
+func (m *memStore) SavePendingWipe(_ context.Context, deviceID, requestedBy, _ string) error {
+	if m.pendWipes == nil {
+		m.pendWipes = map[string]string{}
+	}
+	m.pendWipes[deviceID] = requestedBy
+	return nil
+}
+func (m *memStore) GetPendingWipe(_ context.Context, deviceID string) (string, bool, error) {
+	rb, ok := m.pendWipes[deviceID]
+	return rb, ok, nil
+}
+func (m *memStore) DeletePendingWipe(_ context.Context, deviceID string) error {
+	delete(m.pendWipes, deviceID)
 	return nil
 }
 
@@ -289,6 +306,54 @@ func TestCollectFileRBACAndParams(t *testing.T) {
 	}
 	if !hasAudit(store.audits, "COLLECT_FILE", "device", "dev-1") {
 		t.Fatalf("denetim izine yazılmalıydı: %+v", store.audits)
+	}
+}
+
+// Çift-kontrol WIPE (dört-göz): OPERATOR talep edemez; talep aşamasında komut
+// kuyruğa GİRMEZ; talep eden kendi talebini onaylayamaz; FARKLI bir ADMIN onaylayınca
+// WIPE kuyruğa girer ve bekleyen talep temizlenir; audit WIPE_REQUEST+WIPE_APPROVE.
+func TestWipeDualControlFourEyes(t *testing.T) {
+	store := newMemStore()
+	store.roles["adminA"] = RoleAdmin
+	store.roles["adminB"] = RoleAdmin
+	store.roles["op"] = RoleOperator
+	svc, _ := newService(t, store)
+	ctx := context.Background()
+
+	if err := svc.RequestWipe(ctx, "op", "dev-1", "kayıp cihaz"); err != ErrForbidden {
+		t.Fatalf("OPERATOR RequestWipe reddedilmeli: %v", err)
+	}
+	if err := svc.ApproveWipe(ctx, "adminB", "dev-1"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("bekleyen yokken onay reddedilmeli: %v", err)
+	}
+	if err := svc.RequestWipe(ctx, "adminA", "dev-1", "kayıp cihaz"); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range store.commands {
+		if c.cmdType == "WIPE" {
+			t.Fatal("talep aşamasında WIPE kuyruğa GİRMEMELİ")
+		}
+	}
+	if err := svc.ApproveWipe(ctx, "adminA", "dev-1"); err != ErrForbidden {
+		t.Fatalf("kendi talebini onaylama reddedilmeli (dört-göz): %v", err)
+	}
+	if err := svc.ApproveWipe(ctx, "adminB", "dev-1"); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, c := range store.commands {
+		if c.cmdType == "WIPE" && c.deviceID == "dev-1" && c.issuedBy == "adminB" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("onay sonrası WIPE kuyruğa girmeli: %+v", store.commands)
+	}
+	if err := svc.ApproveWipe(ctx, "adminB", "dev-1"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("onay sonrası bekleyen temizlenmeli: %v", err)
+	}
+	if !hasAudit(store.audits, "WIPE_REQUEST", "device", "dev-1") || !hasAudit(store.audits, "WIPE_APPROVE", "device", "dev-1") {
+		t.Fatalf("denetim izi eksik: %+v", store.audits)
 	}
 }
 

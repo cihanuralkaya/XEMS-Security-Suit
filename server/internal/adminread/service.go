@@ -117,6 +117,9 @@ type Store interface {
 	// ListArtifacts, bir cihazdan toplanan dosya artefaktlarının META verisini
 	// (içerik HARİÇ) en yeniden eskiye döner (adli/IR).
 	ListArtifacts(ctx context.Context, deviceID string) ([]ArtifactRow, error)
+	// ListPendingWipes, ikinci-onay bekleyen tüm WIPE taleplerini döner (çift-kontrol
+	// görünürlüğü — konsolun onay/iptal için gösterdiği liste).
+	ListPendingWipes(ctx context.Context) ([]PendingWipeRow, error)
 	// GetArtifact, tek bir artefaktın içeriğini (indirme için) döner.
 	GetArtifact(ctx context.Context, id string) (ArtifactContent, bool, error)
 	ListAudit(ctx context.Context, limit int) ([]AuditRow, error)
@@ -512,6 +515,19 @@ func (s *Service) Summary(ctx context.Context) (SummaryDTO, error) {
 		DevicesByOS:         byOS,
 		Since:               since,
 	}, nil
+}
+
+// PendingWipeRow, ikinci-onay bekleyen bir WIPE talebidir (çift-kontrol görünümü).
+type PendingWipeRow struct {
+	DeviceID    string    `json:"device_id"`
+	RequestedBy string    `json:"requested_by"` // talep eden admin (e-posta ya da id)
+	Reason      string    `json:"reason,omitempty"`
+	RequestedAt time.Time `json:"requested_at"`
+}
+
+// PendingWipes, ikinci-onay bekleyen WIPE taleplerini döner (çift-kontrol konsol görünümü).
+func (s *Service) PendingWipes(ctx context.Context) ([]PendingWipeRow, error) {
+	return s.store.ListPendingWipes(ctx)
 }
 
 // LatestSoftwareByDevice, her cihazın en son yazılım envanterini döner (zafiyet

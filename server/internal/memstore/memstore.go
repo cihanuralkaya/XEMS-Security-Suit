@@ -127,7 +127,15 @@ type Store struct {
 	auditSeq   int64                       // audit_log identity taklidi
 	eventAcks  map[string]eventAckRec      // eventID -> triyaj durumu (alarm yaşam-döngüsü)
 	artifacts  []artifactRec               // toplanan dosya artefaktları (adli/IR)
+	pendWipes  map[string]pendingWipeRec   // deviceID -> bekleyen WIPE talebi (çift-kontrol)
 	seq        int
+}
+
+// pendingWipeRec, ikinci-onay bekleyen bir WIPE talebidir (bellek-içi).
+type pendingWipeRec struct {
+	requestedBy string
+	reason      string
+	at          time.Time
 }
 
 // eventAckRec, bir olayın triyaj/vaka durumudur (bellek-içi).
@@ -904,6 +912,50 @@ func (s *Store) SearchSoftware(_ context.Context, query string) (map[string][]st
 }
 
 // SetEventAck, bir olayın triyaj durumunu ayarlar (upsert). Alarm yaşam-döngüsü.
+// SavePendingWipe, ikinci-onay bekleyen WIPE talebini saklar (çift-kontrol).
+func (s *Store) SavePendingWipe(_ context.Context, deviceID, requestedBy, reason string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.pendWipes == nil {
+		s.pendWipes = map[string]pendingWipeRec{}
+	}
+	s.pendWipes[deviceID] = pendingWipeRec{requestedBy: requestedBy, reason: reason, at: time.Now()}
+	return nil
+}
+
+// GetPendingWipe, cihaz için bekleyen WIPE talebini döner (talep eden admin id'si).
+func (s *Store) GetPendingWipe(_ context.Context, deviceID string) (string, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rec, ok := s.pendWipes[deviceID]
+	return rec.requestedBy, ok, nil
+}
+
+// DeletePendingWipe, bekleyen WIPE talebini siler (onay/iptal sonrası).
+func (s *Store) DeletePendingWipe(_ context.Context, deviceID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.pendWipes, deviceID)
+	return nil
+}
+
+// ListPendingWipes, bekleyen tüm WIPE taleplerini döner (talep eden admin e-postasıyla).
+func (s *Store) ListPendingWipes(_ context.Context) ([]adminread.PendingWipeRow, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]adminread.PendingWipeRow, 0, len(s.pendWipes))
+	for dev, rec := range s.pendWipes {
+		email := rec.requestedBy
+		if a, ok := s.adminsByID[rec.requestedBy]; ok {
+			email = a.email
+		}
+		out = append(out, adminread.PendingWipeRow{
+			DeviceID: dev, RequestedBy: email, Reason: rec.reason, RequestedAt: rec.at,
+		})
+	}
+	return out, nil
+}
+
 func (s *Store) SetEventAck(_ context.Context, eventID, adminID, status string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -43,6 +43,7 @@ type memStore struct {
 	eventAcks  map[string]adminread.EventAck
 	artifacts  map[string]adminread.ArtifactContent
 	artMeta    []adminread.ArtifactRow
+	pendWipes  map[string]string // deviceID -> requestedBy (çift-kontrol WIPE)
 }
 
 type adminRec struct{ id, hash string }
@@ -344,6 +345,28 @@ func (m *memStore) SetEventCase(_ context.Context, eventID, adminID, assignee, n
 }
 func (m *memStore) EventAcks(_ context.Context) (map[string]adminread.EventAck, error) {
 	return m.eventAcks, nil
+}
+func (m *memStore) SavePendingWipe(_ context.Context, deviceID, requestedBy, _ string) error {
+	if m.pendWipes == nil {
+		m.pendWipes = map[string]string{}
+	}
+	m.pendWipes[deviceID] = requestedBy
+	return nil
+}
+func (m *memStore) GetPendingWipe(_ context.Context, deviceID string) (string, bool, error) {
+	rb, ok := m.pendWipes[deviceID]
+	return rb, ok, nil
+}
+func (m *memStore) DeletePendingWipe(_ context.Context, deviceID string) error {
+	delete(m.pendWipes, deviceID)
+	return nil
+}
+func (m *memStore) ListPendingWipes(_ context.Context) ([]adminread.PendingWipeRow, error) {
+	var out []adminread.PendingWipeRow
+	for dev, rb := range m.pendWipes {
+		out = append(out, adminread.PendingWipeRow{DeviceID: dev, RequestedBy: rb})
+	}
+	return out, nil
 }
 func (m *memStore) LatestSoftwareByDevice(_ context.Context) (map[string][]string, error) {
 	return nil, nil
@@ -894,6 +917,52 @@ func TestDetectionTestEndpoint(t *testing.T) {
 	// bir kategoride (INFO) aynı metin eşleşmemeli.
 	if code, n, _ := do("INFO", "kurcalama"); code != http.StatusOK || n != 0 {
 		t.Fatalf("kategori kapsamı: eşleşme olmamalıydı: code=%d matched=%d", code, n)
+	}
+}
+
+// Çift-kontrol WIPE uçtan uca (HTTP): adminA talep → pending (kuyruğa girmez);
+// adminA kendi talebini onaylayamaz (403); adminB onaylar → queued (kuyruğa girer).
+func TestWipeDualControlHTTP(t *testing.T) {
+	srv, store := newServer(t)
+	srv.adminSvc.SetWipeDualControl(true)
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	addAdmin(t, store, "adA", "a@x", "secret", admin.RoleAdmin)
+	addAdmin(t, store, "adB", "b@x", "secret", admin.RoleAdmin)
+	_, la := post(t, ts.URL+"/api/login", "", map[string]string{"email": "a@x", "password": "secret"})
+	_, lb := post(t, ts.URL+"/api/login", "", map[string]string{"email": "b@x", "password": "secret"})
+	tokA, tokB := la["token"], lb["token"]
+	if tokA == "" || tokB == "" {
+		t.Fatal("token alınamadı")
+	}
+
+	// adminA talep → pending; komut kuyruğa GİRMEMELİ.
+	code, body := post(t, ts.URL+"/api/devices/dev-1/wipe", tokA, map[string]string{"reason": "kayıp cihaz"})
+	if code != http.StatusOK || body["status"] != "wipe_pending_approval" {
+		t.Fatalf("talep pending dönmeli: %d %v", code, body)
+	}
+	for _, c := range store.commands {
+		if strings.Contains(c, "WIPE") {
+			t.Fatalf("talep aşamasında WIPE kuyruğa GİRMEMELİ: %v", store.commands)
+		}
+	}
+	// adminA kendi talebini onaylayamaz → 403 (dört-göz).
+	if code, _ := post(t, ts.URL+"/api/devices/dev-1/wipe/approve", tokA, map[string]string{}); code != http.StatusForbidden {
+		t.Fatalf("kendi onayı 403 dönmeli, %d", code)
+	}
+	// adminB onaylar → queued.
+	if code, b := post(t, ts.URL+"/api/devices/dev-1/wipe/approve", tokB, map[string]string{}); code != http.StatusOK || b["status"] != "wipe_queued" {
+		t.Fatalf("farklı ADMIN onayı queued dönmeli: %d %v", code, b)
+	}
+	found := false
+	for _, c := range store.commands {
+		if strings.Contains(c, "dev-1:WIPE") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("onay sonrası WIPE kuyruğa girmeli: %v", store.commands)
 	}
 }
 

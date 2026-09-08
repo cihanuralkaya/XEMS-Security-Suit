@@ -294,3 +294,16 @@ CREATE TABLE audit_log (
 );
 CREATE INDEX idx_audit_admin  ON audit_log (admin_id, created_at DESC);
 CREATE INDEX idx_audit_target ON audit_log (target_type, target_id);
+
+-- ---------------------------------------------------------------------------
+-- ÇİFT-KONTROL (DÖRT-GÖZ) BEKLEYEN WIPE TALEPLERİ
+-- ---------------------------------------------------------------------------
+-- WIPE geri döndürülemez olduğundan, XDR_WIPE_DUAL_CONTROL=1 iken bir ADMIN talep
+-- eder ve FARKLI bir ADMIN onaylayana dek komut kuyruğa GİRMEZ. Tek ele geçirilmiş/
+-- kötü-niyetli ADMIN filoyu silemez.
+CREATE TABLE pending_wipes (
+    device_id    UUID PRIMARY KEY REFERENCES devices(id) ON DELETE CASCADE,
+    requested_by UUID NOT NULL REFERENCES admins(id),
+    reason       TEXT,
+    requested_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

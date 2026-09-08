@@ -123,6 +123,14 @@ type Store interface {
 	ActivateMFA(ctx context.Context, adminID string) error
 	// DisableMFA, TOTP sırrını siler ve MFA'yı kapatır.
 	DisableMFA(ctx context.Context, adminID string) error
+	// SavePendingWipe, bir cihaz için ikinci-onay bekleyen WIPE talebini saklar
+	// (çift-kontrol / dört-göz). deviceID başına upsert.
+	SavePendingWipe(ctx context.Context, deviceID, requestedBy, reason string) error
+	// GetPendingWipe, cihaz için bekleyen WIPE talebini (talep eden admin id'si)
+	// döner. Yoksa ("", false, nil).
+	GetPendingWipe(ctx context.Context, deviceID string) (requestedBy string, exists bool, err error)
+	// DeletePendingWipe, bekleyen WIPE talebini siler (onay/iptal sonrası). Yoksa no-op.
+	DeletePendingWipe(ctx context.Context, deviceID string) error
 }
 
 // validRuleType, kabul edilen kural tiplerini doğrular.
@@ -143,12 +151,13 @@ type Publisher interface {
 
 // Service, admin işlemlerini yürütür.
 type Service struct {
-	store    Store
-	bidx     *security.BlindIndexer
-	tokenTTL time.Duration
-	now      func() time.Time
-	genToken func() (string, error)
-	pub      Publisher
+	store           Store
+	bidx            *security.BlindIndexer
+	tokenTTL        time.Duration
+	now             func() time.Time
+	genToken        func() (string, error)
+	pub             Publisher
+	wipeDualControl bool // açıksa WIPE iki farklı ADMIN onayı gerektirir (dört-göz)
 }
 
 // NewService oluşturur.
@@ -358,6 +367,69 @@ func (s *Service) WipeDevice(ctx context.Context, adminID, deviceID string) erro
 		return err
 	}
 	_ = s.store.WriteAudit(ctx, adminID, "WIPE", "device", deviceID)
+	return nil
+}
+
+// SetWipeDualControl, WIPE için çift-kontrolü (iki farklı ADMIN onayı) açar/kapatır.
+func (s *Service) SetWipeDualControl(on bool) { s.wipeDualControl = on }
+
+// WipeDualControl, çift-kontrolün açık olup olmadığını döner (görünürlük/yönlendirme).
+func (s *Service) WipeDualControl() bool { return s.wipeDualControl }
+
+// RequestWipe, çift-kontrol modunda bir WIPE talebini kaydeder (ADMIN). Komut HENÜZ
+// kuyruğa GİRMEZ — farklı bir ADMIN ApproveWipe ile onaylamalıdır (dört-göz ilkesi;
+// tek ele geçirilmiş/kötü-niyetli ADMIN filo silemez). Denetim izine yazılır.
+func (s *Service) RequestWipe(ctx context.Context, adminID, deviceID, reason string) error {
+	if err := s.require(ctx, adminID, RoleAdmin); err != nil {
+		return err
+	}
+	if strings.TrimSpace(deviceID) == "" {
+		return fmt.Errorf("%w: cihaz kimliği zorunlu", ErrInvalidInput)
+	}
+	if len(reason) > 500 {
+		return fmt.Errorf("%w: gerekçe çok uzun", ErrInvalidInput)
+	}
+	if err := s.store.SavePendingWipe(ctx, deviceID, adminID, strings.TrimSpace(reason)); err != nil {
+		return err
+	}
+	_ = s.store.WriteAudit(ctx, adminID, "WIPE_REQUEST", "device", deviceID)
+	return nil
+}
+
+// ApproveWipe, bekleyen bir WIPE talebini onaylar ve komutu kuyruğa alır (ADMIN).
+// Onaylayan, talep edenden FARKLI olmalıdır — kendi talebini onaylayamaz (dört-göz).
+// Onaydan sonra bekleyen talep silinir. Denetim izine yazılır.
+func (s *Service) ApproveWipe(ctx context.Context, approverID, deviceID string) error {
+	if err := s.require(ctx, approverID, RoleAdmin); err != nil {
+		return err
+	}
+	requestedBy, exists, err := s.store.GetPendingWipe(ctx, deviceID)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return fmt.Errorf("%w: bekleyen WIPE talebi yok", ErrInvalidInput)
+	}
+	if requestedBy == approverID {
+		return ErrForbidden // kendi talebini onaylayamaz (dört-göz)
+	}
+	if err := s.store.EnqueueCommand(ctx, deviceID, "WIPE", approverID); err != nil {
+		return err
+	}
+	_ = s.store.DeletePendingWipe(ctx, deviceID)
+	_ = s.store.WriteAudit(ctx, approverID, "WIPE_APPROVE", "device", deviceID)
+	return nil
+}
+
+// CancelWipe, bekleyen bir WIPE talebini iptal eder (ADMIN). Denetim izine yazılır.
+func (s *Service) CancelWipe(ctx context.Context, adminID, deviceID string) error {
+	if err := s.require(ctx, adminID, RoleAdmin); err != nil {
+		return err
+	}
+	if err := s.store.DeletePendingWipe(ctx, deviceID); err != nil {
+		return err
+	}
+	_ = s.store.WriteAudit(ctx, adminID, "WIPE_CANCEL", "device", deviceID)
 	return nil
 }
 
