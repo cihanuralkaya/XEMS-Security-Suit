@@ -15,7 +15,7 @@ olarak kapsam dışıdır (bkz. aşağıda).
 
 - Dil: **Go** (tek dil), iletişim **gRPC + mTLS**, TLS 1.3.
 - ~15 000 satır üretim Go + kapsamlı test.
-- **267 test fonksiyonu / 45 test paketi**, tümü geçiyor (`go test ./...`).
+- **277 test fonksiyonu / 47 test paketi**, tümü geçiyor (`go test ./...`).
 - Cross-compile doğrulandı: Windows (native), Linux, macOS.
 - **Bellek-içi demo modu** canlı çalıştırıldı (`XDR_DATABASE_URL` boş): gerçek
   enrollment, gerçek ağ keşfi, tüm admin/konsol akışları uçtan uca denendi.
@@ -114,6 +114,10 @@ proto üret + `go vet` + `go test ./...` + smoke test + çapraz derleme (artifac
 | SIEM iletici (syslog + CEF/LEEF) | ✅ opsiyonel | `server/internal/notify/siem.go`, c2 main | birim |
 | Vaka/olay yönetimi (sorumlu + not, denetimli) | ✅ | `admin.UpdateEventCase`, `adminread`, `db`, `memstore`, console | birim + smoke + canlı |
 | Yatay ölçekleme / HA (çok-düğüm SSE fan-out) | ✅ opsiyonel | `server/internal/cluster` (Postgres LISTEN/NOTIFY), `eventbus`, `db` | birim + smoke (gerçek pg_notify) |
+| IoC tehdit istihbaratı canlı hot-reload (yeniden başlatmasız) | ✅ opsiyonel | `grpc` (atomic.Pointer), `ioc`, c2 main | birim + canlı (gerçek sunucu) |
+| Tespit kuralları canlı hot-reload (yeniden başlatmasız) | ✅ opsiyonel | `grpc`+`adminapi` (atomic.Pointer), `detect`, c2 main | birim + canlı (gerçek sunucu) |
+| Artefakt saklama budaması (adli/IR dosya, sınırsız büyümeyi önler) | ✅ | `retention`, `db`, `memstore` | birim + smoke |
+| Yerel CI-paritesi kapısı (make check/check-all) + CI -race | ✅ | Makefile, `.github/workflows/ci.yml` | CI (eşzamanlılık yarış dedektörü) |
 
 ## İlk inceleme bulguları — karşılıklar
 
@@ -205,7 +209,7 @@ protection is deliberately out of scope (see below).
 
 - Language: **Go** (single language), communication over **gRPC + mTLS**, TLS 1.3.
 - ~15,000 lines of production Go + comprehensive tests.
-- **267 test functions / 45 test packages**, all passing (`go test ./...`).
+- **277 test functions / 47 test packages**, all passing (`go test ./...`).
 - Cross-compilation verified: Windows (native), Linux, macOS.
 - **In-memory demo mode** run live (`XDR_DATABASE_URL` empty): real enrollment, real
   network discovery, all admin/console flows exercised end-to-end.
@@ -294,6 +298,10 @@ proto generation + `go vet` + `go test ./...` + smoke test + cross-compilation.
 | SIEM forwarder (syslog + CEF/LEEF) | done optional | `server/internal/notify/siem.go`, c2 main | unit |
 | Case/incident management (assignee + note, audited) | done | `admin.UpdateEventCase`, `adminread`, `db`, `memstore`, console | unit + smoke + live |
 | Horizontal scale / HA (multi-node SSE fan-out) | done optional | `server/internal/cluster` (Postgres LISTEN/NOTIFY), `eventbus`, `db` | unit + smoke (real pg_notify) |
+| IoC threat-intel live hot-reload (no restart) | done optional | `grpc` (atomic.Pointer), `ioc`, c2 main | unit + live (real server) |
+| Detection-rule live hot-reload (no restart) | done optional | `grpc`+`adminapi` (atomic.Pointer), `detect`, c2 main | unit + live (real server) |
+| Artifact retention pruning (forensic files, prevents unbounded growth) | done | `retention`, `db`, `memstore` | unit + smoke |
+| Local CI-parity gate (make check/check-all) + CI -race | done | Makefile, `.github/workflows/ci.yml` | CI (concurrency race detector) |
 
 ## Initial review findings - responses
 
