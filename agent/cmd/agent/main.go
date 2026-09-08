@@ -39,6 +39,7 @@ import (
 	"xems.corp/suite/agent/internal/deviceaction"
 	"xems.corp/suite/agent/internal/discovery"
 	"xems.corp/suite/agent/internal/enforce"
+	"xems.corp/suite/agent/internal/fim"
 	"xems.corp/suite/agent/internal/inventory"
 	"xems.corp/suite/agent/internal/liveness"
 	"xems.corp/suite/agent/internal/netconn"
@@ -194,6 +195,13 @@ func run() error {
 	if usbPolicy := getenv("XEMS_USB_POLICY", "audit"); usbPolicy != "off" {
 		usbTr = &usbTracker{policy: usbPolicy}
 	}
+	// Dosya bütünlüğü izleme (FIM): XEMS_FIM_PATHS (virgülle ayrılmış dosya/dizin)
+	// ayarlıysa bu yolların SHA-256'sı periyodik alınır; ekleme/değiştirme/silme
+	// SECURITY olayı olarak bildirilir. İlk tarama taban çizgisi. Boşsa kapalı.
+	var fimTr *fimTracker
+	if paths := splitCSV(os.Getenv("XEMS_FIM_PATHS")); len(paths) > 0 {
+		fimTr = &fimTracker{paths: paths}
+	}
 
 	// Karantina yöneticisi: izolasyonda yalnız C2'ye izin verilir.
 	// SAFE MODE (XEMS_SAFE_MODE): gerçek firewall'a dokunmaz — demo/test için.
@@ -322,6 +330,10 @@ func run() error {
 		// Çıkarılabilir medya izleme (etkinse): yeni takılan USB medyayı bildir (#7).
 		if usbTr != nil {
 			usbTr.report(buf, safeMode)
+		}
+		// Dosya bütünlüğü izleme (etkinse): izlenen yollardaki değişiklikleri bildir.
+		if fimTr != nil {
+			fimTr.report(buf)
 		}
 		flushEvents(hbCtx, cli, ident, buf)
 	}
@@ -659,6 +671,36 @@ func runCertRenewal(ctx context.Context, cfg envConfig, holder *transport.CertHo
 			return
 		case <-check.C:
 		}
+	}
+}
+
+// fimTracker, izlenen yolların bütünlüğünü izler (FIM); ekleme/değiştirme/silme
+// değişikliklerini SECURITY olayı olarak yayınlar. İlk tarama taban çizgisidir.
+type fimTracker struct {
+	paths []string
+	tr    fim.Tracker
+}
+
+func (f *fimTracker) report(buf *collector.Buffer) {
+	for _, ch := range f.tr.Diff(fim.Scan(f.paths)) {
+		sev := "MEDIUM"
+		if ch.Type == fim.Deleted {
+			sev = "HIGH" // kritik dosya silinmesi daha yüksek öncelik
+		}
+		det := map[string]any{"fim": true, "path": ch.Path, "change": string(ch.Type)}
+		if ch.Hash != "" {
+			det["sha256"] = ch.Hash
+		}
+		if ch.OldHash != "" {
+			det["old_sha256"] = ch.OldHash
+		}
+		buf.Add(collector.Event{
+			Category:   "SECURITY",
+			Severity:   sev,
+			Message:    "dosya bütünlüğü değişikliği (" + string(ch.Type) + "): " + ch.Path,
+			OccurredAt: time.Now(),
+			Details:    det,
+		})
 	}
 }
 

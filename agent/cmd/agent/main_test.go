@@ -2,6 +2,8 @@ package main
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"xems.corp/suite/agent/internal/collector"
@@ -149,5 +151,35 @@ func TestSelectWipeFnNotArmedIsSafe(t *testing.T) {
 	fn := selectWipeFn(false)
 	if err := fn(); err != deviceaction.ErrWipeNotArmed {
 		t.Fatalf("ARM'sız WIPE güdüğü ErrWipeNotArmed dönmeli (silme YOK), dönen: %v", err)
+	}
+}
+
+// fimTracker.report: ilk tur taban çizgisi (olay yok); izlenen dosya değişince
+// SECURITY / FILE-INTEGRITY olayı (change=modified) üretilmeli (#3 FIM).
+func TestFimTrackerReportsChanges(t *testing.T) {
+	dir := t.TempDir()
+	fp := filepath.Join(dir, "f.txt")
+	if err := os.WriteFile(fp, []byte("v1"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	buf := collector.NewBuffer(16)
+	ft := &fimTracker{paths: []string{dir}}
+	ft.report(buf) // taban çizgisi
+	if n := len(buf.Pending(10)); n != 0 {
+		t.Fatalf("taban çizgisi olay üretmemeli: %d", n)
+	}
+	if err := os.WriteFile(fp, []byte("v2-değişti"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ft.report(buf)
+	evs := buf.Pending(10)
+	if len(evs) != 1 || evs[0].Category != "SECURITY" {
+		t.Fatalf("değişiklik SECURITY olayı üretmeli: %+v", evs)
+	}
+	if ch, _ := evs[0].Details["change"].(string); ch != "modified" {
+		t.Fatalf("change=modified beklendi: %+v", evs[0].Details)
+	}
+	if fimFlag, _ := evs[0].Details["fim"].(bool); !fimFlag {
+		t.Fatalf("olay details.fim=true taşımalı: %+v", evs[0].Details)
 	}
 }
