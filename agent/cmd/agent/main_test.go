@@ -9,6 +9,7 @@ import (
 	"xems.corp/suite/agent/internal/collector"
 	"xems.corp/suite/agent/internal/deviceaction"
 	"xems.corp/suite/agent/internal/netconn"
+	"xems.corp/suite/agent/internal/persistence"
 	"xems.corp/suite/agent/internal/usbmon"
 )
 
@@ -181,5 +182,26 @@ func TestFimTrackerReportsChanges(t *testing.T) {
 	}
 	if fimFlag, _ := evs[0].Details["fim"].(bool); !fimFlag {
 		t.Fatalf("olay details.fim=true taşımalı: %+v", evs[0].Details)
+	}
+}
+
+// persistenceTracker.emit: yeni autostart girdisi POLICY_VIOLATION/HIGH olayı
+// üretmeli; Details kind/name taşımalı (#5).
+func TestPersistenceTrackerEmit(t *testing.T) {
+	buf := collector.NewBuffer(16)
+	p := &persistenceTracker{}
+	p.emit(buf, []persistence.Entry{{Kind: persistence.RunKey, Name: "Evil", Value: `C:\Temp\evil.exe`}})
+	evs := buf.Pending(10)
+	if len(evs) != 1 || evs[0].Category != "POLICY_VIOLATION" || evs[0].Severity != "HIGH" {
+		t.Fatalf("yeni kalıcılık girdisi POLICY_VIOLATION/HIGH üretmeli: %+v", evs)
+	}
+	if k, _ := evs[0].Details["kind"].(string); k != "run_key" {
+		t.Fatalf("details.kind=run_key beklendi: %+v", evs[0].Details)
+	}
+	// Boş girdi listesi olay üretmemeli.
+	buf.Ack(evs[0].Seq)
+	p.emit(buf, nil)
+	if n := len(buf.Pending(10)); n != 0 {
+		t.Fatalf("boş girdi listesi olay üretmemeli: %d", n)
 	}
 }

@@ -45,6 +45,7 @@ import (
 	"xems.corp/suite/agent/internal/liveness"
 	"xems.corp/suite/agent/internal/netconn"
 	"xems.corp/suite/agent/internal/osinfo"
+	"xems.corp/suite/agent/internal/persistence"
 	"xems.corp/suite/agent/internal/policy"
 	"xems.corp/suite/agent/internal/quarantine"
 	"xems.corp/suite/agent/internal/resource"
@@ -223,6 +224,13 @@ func run() error {
 	if paths := splitCSV(os.Getenv("XEMS_FIM_PATHS")); len(paths) > 0 {
 		fimTr = &fimTracker{paths: paths}
 	}
+	// Kalıcılık (autostart) izleme (#5; varsayılan AÇIK, XEMS_PERSISTENCE_DISABLE ile
+	// kapatılır). Run anahtarları/görevler/cron/systemd; yeni girdiler POLICY_VIOLATION
+	// olayı olarak bildirilir. İlk tarama taban çizgisidir.
+	var persistTr *persistenceTracker
+	if os.Getenv("XEMS_PERSISTENCE_DISABLE") == "" {
+		persistTr = &persistenceTracker{}
+	}
 
 	// Karantina yöneticisi: izolasyonda yalnız C2'ye izin verilir.
 	// SAFE MODE (XEMS_SAFE_MODE): gerçek firewall'a dokunmaz — demo/test için.
@@ -356,6 +364,10 @@ func run() error {
 		// Dosya bütünlüğü izleme (etkinse): izlenen yollardaki değişiklikleri bildir.
 		if fimTr != nil {
 			fimTr.report(buf)
+		}
+		// Kalıcılık izleme (etkinse): yeni autostart girdilerini bildir (#5).
+		if persistTr != nil {
+			persistTr.report(buf)
 		}
 		flushEvents(hbCtx, cli, ident, buf)
 	}
@@ -720,6 +732,33 @@ func (f *fimTracker) report(buf *collector.Buffer) {
 			Category:   "SECURITY",
 			Severity:   sev,
 			Message:    "dosya bütünlüğü değişikliği (" + string(ch.Type) + "): " + ch.Path,
+			OccurredAt: time.Now(),
+			Details:    det,
+		})
+	}
+}
+
+// persistenceTracker, kalıcılık (autostart) noktalarını izler; YENİ girdileri
+// POLICY_VIOLATION olayı olarak yayınlar (MITRE TA0003). İlk tarama taban çizgisidir.
+type persistenceTracker struct {
+	tr persistence.Tracker
+}
+
+func (p *persistenceTracker) report(buf *collector.Buffer) {
+	p.emit(buf, p.tr.Diff(persistence.Scan()))
+}
+
+// emit, verilen yeni kalıcılık girdilerini olay olarak yayınlar (test edilebilir).
+func (p *persistenceTracker) emit(buf *collector.Buffer, added []persistence.Entry) {
+	for _, e := range added {
+		det := map[string]any{"persistence": true, "kind": string(e.Kind), "name": e.Name}
+		if e.Value != "" {
+			det["value"] = e.Value
+		}
+		buf.Add(collector.Event{
+			Category:   "POLICY_VIOLATION",
+			Severity:   "HIGH",
+			Message:    "yeni kalıcılık girdisi (" + string(e.Kind) + "): " + e.Name,
 			OccurredAt: time.Now(),
 			Details:    det,
 		})
