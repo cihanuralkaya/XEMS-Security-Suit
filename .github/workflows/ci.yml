@@ -42,8 +42,12 @@ jobs:
       - name: go vet
         run: go vet ./...
 
-      - name: go test
-        run: go test ./...
+      # -race: eşzamanlı kod (eventbus pub/sub, cluster fan-out, memstore/collector
+      # kilitleri) veri yarışına karşı doğrulanır. CGO gerektirir; ubuntu-latest'te
+      # gcc mevcuttur. Yerel Windows geliştirme hostunda cgo/gcc yoksa `go test ./...`
+      # (yarışsız) çalıştırın.
+      - name: go test (-race)
+        run: go test -race ./...
 
       - name: Uçtan uca smoke test
         run: bash scripts/smoke-test.sh
