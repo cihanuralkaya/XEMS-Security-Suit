@@ -118,6 +118,12 @@ proto üret + `go vet` + `go test ./...` + smoke test + çapraz derleme (artifac
 | Tespit kuralları canlı hot-reload (yeniden başlatmasız) | ✅ opsiyonel | `grpc`+`adminapi` (atomic.Pointer), `detect`, c2 main | birim + canlı (gerçek sunucu) |
 | Artefakt saklama budaması (adli/IR dosya, sınırsız büyümeyi önler) | ✅ | `retention`, `db`, `memstore` | birim + smoke |
 | Yerel CI-paritesi kapısı (make check/check-all) + CI -race | ✅ | Makefile, `.github/workflows/ci.yml` | CI (eşzamanlılık yarış dedektörü) |
+| Çift-kontrol (dört-göz) WIPE onayı (opsiyonel) | ✅ | `admin`, `adminapi`, `db`, `memstore`, console | birim + HTTP + canlı |
+| Gerçek yıkıcı MDM zorlama (WIPE kripto-silme + USB engelleme, 3-katman guard) | ✅ Win/Linux | `agent/internal/deviceaction`+`usbmon`, agent main | birim (guard kapıları) |
+| Retro-hunt + SIEM olay araması (geçmiş olaylar) | ✅ | `adminread`+`adminapi` (QueryEvents), db, console | birim + HTTP + smoke |
+| Alarm korelasyonu + otomatik incident gruplama | ✅ | `server/internal/correlate`, grpc, db, console | birim + smoke |
+| Dosya bütünlüğü izleme (FIM) — ajan | ✅ | `agent/internal/fim` (SHA-256), agent main | birim |
+| Ajan öz-tasdiki (takas/yama ikili tespiti) | ✅ | proto, `grpc`, `db`, `memstore`, agent | birim (kurcalama teşhisi) |
 
 ## İlk inceleme bulguları — karşılıklar
 
@@ -302,6 +308,12 @@ proto generation + `go vet` + `go test ./...` + smoke test + cross-compilation.
 | Detection-rule live hot-reload (no restart) | done optional | `grpc`+`adminapi` (atomic.Pointer), `detect`, c2 main | unit + live (real server) |
 | Artifact retention pruning (forensic files, prevents unbounded growth) | done | `retention`, `db`, `memstore` | unit + smoke |
 | Local CI-parity gate (make check/check-all) + CI -race | done | Makefile, `.github/workflows/ci.yml` | CI (concurrency race detector) |
+| Dual-control (four-eyes) WIPE approval (optional) | done | `admin`, `adminapi`, `db`, `memstore`, console | unit + HTTP + live |
+| Real destructive MDM enforcement (WIPE crypto-erase + USB block, 3-layer guard) | done Win/Linux | `agent/internal/deviceaction`+`usbmon`, agent main | unit (guard gates) |
+| Retro-hunt + SIEM historical event search | done | `adminread`+`adminapi` (QueryEvents), db, console | unit + HTTP + smoke |
+| Alert correlation + auto-incident grouping | done | `server/internal/correlate`, grpc, db, console | unit + smoke |
+| File Integrity Monitoring (FIM) — agent | done | `agent/internal/fim` (SHA-256), agent main | unit |
+| Agent self-attestation (swapped/patched binary detection) | done | proto, `grpc`, `db`, `memstore`, agent | unit (tamper detection) |
 
 ## Initial review findings - responses
 
