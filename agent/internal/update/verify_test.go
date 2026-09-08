@@ -75,3 +75,31 @@ func sha256Hex(b []byte) string {
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:])
 }
+
+// İmza-anahtarı rotasyonu (#9): birden çok güvenilen anahtar olduğunda ESKİ
+// anahtarla imzalanmış manifesto YENİ anahtarı da tanıyan doğrulayıcıyla geçerli
+// olmalı; güvenilmeyen anahtar reddedilmeli.
+func TestVerifierMultiKeyRotation(t *testing.T) {
+	oldPub, oldPriv, _ := ed25519.GenerateKey(rand.Reader)
+	newPub, _, _ := ed25519.GenerateKey(rand.Reader)
+	roguePub, roguePriv, _ := ed25519.GenerateKey(rand.Reader)
+	_ = roguePub
+
+	m := otawire.Manifest{TargetVersion: "2.0.0", SHA256Hex: "ab", DownloadURL: "https://x/y"}
+	oldSig := ed25519.Sign(oldPriv, otawire.CanonicalBytes(m))
+	rogueSig := ed25519.Sign(roguePriv, otawire.CanonicalBytes(m))
+
+	// Hem eski hem yeni anahtara güvenen doğrulayıcı.
+	v, err := NewVerifierMulti(newPub, oldPub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Eski anahtarla imzalı manifesto kabul edilmeli (rotasyon örtüşmesi).
+	if err := v.VerifyManifest(m, oldSig); err != nil {
+		t.Fatalf("eski anahtar imzası kabul edilmeliydi: %v", err)
+	}
+	// Güvenilmeyen (rogue) anahtarla imza reddedilmeli.
+	if err := v.VerifyManifest(m, rogueSig); err != ErrBadSignature {
+		t.Fatalf("güvenilmeyen imza reddedilmeliydi: %v", err)
+	}
+}

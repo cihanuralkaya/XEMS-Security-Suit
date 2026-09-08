@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -43,6 +44,12 @@ type Config struct {
 	// anahtarları bundan türetilir. Diske DÜZ yazılmaz; ortamdan/sır yöneticisinden gelir.
 	MasterKey []byte
 
+	// Eski ana anahtarlar (anahtar rotasyonu örtüşmesi): XEMS_MASTER_KEY_OLD,
+	// virgülle ayrılmış base64 32-baytlık anahtarlar. Yeni veri MasterKey ile
+	// şifrelenir; eski veri bu anahtarlarla ÇÖZÜLMEYE devam eder (veri kaybı yok).
+	// Tüm eski veri yeniden şifrelendikten sonra kaldırılabilir.
+	MasterKeysOld [][]byte
+
 	// İmzalanan istemci sertifikalarının ömrü (kısa ömür + yenileme modeli).
 	ClientCertTTL time.Duration
 }
@@ -78,6 +85,24 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("config: XEMS_MASTER_KEY 32 bayt olmalı (base64 çözülünce), %d bayt", len(key))
 	}
 	c.MasterKey = key
+
+	// Eski ana anahtarlar (rotasyon örtüşmesi; opsiyonel).
+	if old := os.Getenv("XEMS_MASTER_KEY_OLD"); old != "" {
+		for _, part := range strings.Split(old, ",") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			ok, err := base64.StdEncoding.DecodeString(part)
+			if err != nil {
+				return nil, fmt.Errorf("config: XEMS_MASTER_KEY_OLD base64 çözülemedi: %w", err)
+			}
+			if len(ok) != 32 {
+				return nil, fmt.Errorf("config: XEMS_MASTER_KEY_OLD her anahtar 32 bayt olmalı, %d bayt", len(ok))
+			}
+			c.MasterKeysOld = append(c.MasterKeysOld, ok)
+		}
+	}
 
 	// Zorunlu TLS materyali yolları — erken, anlaşılır hata (yanlış-yapılandırmayı
 	// başlangıçta yakala; demo modu dahil gRPC sunucuları TLS gerektirir).

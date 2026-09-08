@@ -152,10 +152,20 @@ func run() error {
 		return err
 	}
 
-	// Ana anahtardan amaç-ayrımlı alt anahtarlar türet (diske yazılmaz).
-	cipher, err := security.NewFieldCipher(security.DeriveKey(cfg.MasterKey, security.LabelFieldEncryption))
+	// Ana anahtardan amaç-ayrımlı alt anahtarlar türet (diske yazılmaz). Anahtar
+	// rotasyonu (#9): eski ana anahtarlardan türetilen alan-şifreleme anahtarları
+	// keyring'e çözme için eklenir — yeni veri yeni anahtarla şifrelenir, eski veri
+	// eski anahtarla çözülmeye DEVAM eder (veri kaybı yok).
+	oldFieldKeys := make([][]byte, 0, len(cfg.MasterKeysOld))
+	for _, k := range cfg.MasterKeysOld {
+		oldFieldKeys = append(oldFieldKeys, security.DeriveKey(k, security.LabelFieldEncryption))
+	}
+	cipher, err := security.NewFieldCipherRing(security.DeriveKey(cfg.MasterKey, security.LabelFieldEncryption), oldFieldKeys...)
 	if err != nil {
 		return err
+	}
+	if len(oldFieldKeys) > 0 {
+		log.Printf("alan şifreleme: anahtar rotasyonu etkin (%d eski anahtar çözme halkasında)", len(oldFieldKeys))
 	}
 	bidx := security.NewBlindIndexer(security.DeriveKey(cfg.MasterKey, security.LabelBlindIndex))
 

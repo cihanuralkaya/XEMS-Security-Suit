@@ -25,25 +25,43 @@ var (
 	ErrHashMismatch = errors.New("update: paket SHA-256 uyuşmuyor")
 )
 
-// Verifier, gömülü public key ile güncellemeleri doğrular.
+// Verifier, GÜVENİLEN public key(ler)le güncellemeleri doğrular. Birden çok anahtar
+// desteği imza-anahtarı ROTASYONU içindir (#9): örtüşme penceresinde hem eski hem
+// yeni anahtar güvenilir; yeni anahtarla imzalanır, ajanlar ikisini de kabul eder.
 type Verifier struct {
-	pub ed25519.PublicKey
+	pubs []ed25519.PublicKey
 }
 
-// NewVerifier, Ed25519 public key ile doğrulayıcı oluşturur.
+// NewVerifier, tek Ed25519 public key ile doğrulayıcı oluşturur (geriye uyumlu).
 func NewVerifier(pub ed25519.PublicKey) (*Verifier, error) {
-	if len(pub) != ed25519.PublicKeySize {
+	return NewVerifierMulti(pub)
+}
+
+// NewVerifierMulti, birden çok GÜVENİLEN public key ile doğrulayıcı oluşturur
+// (rotasyon örtüşmesi). En az bir geçerli anahtar gerekir.
+func NewVerifierMulti(pubs ...ed25519.PublicKey) (*Verifier, error) {
+	var valid []ed25519.PublicKey
+	for _, p := range pubs {
+		if len(p) == ed25519.PublicKeySize {
+			valid = append(valid, p)
+		}
+	}
+	if len(valid) == 0 {
 		return nil, errors.New("update: geçersiz Ed25519 public key boyutu")
 	}
-	return &Verifier{pub: pub}, nil
+	return &Verifier{pubs: valid}, nil
 }
 
-// VerifyManifest, manifesto imzasını doğrular.
+// VerifyManifest, manifesto imzasını GÜVENİLEN anahtarlardan HERHANGİ biriyle
+// doğrular (rotasyon: eski VEYA yeni anahtar kabul edilir).
 func (v *Verifier) VerifyManifest(m otawire.Manifest, signature []byte) error {
-	if !ed25519.Verify(v.pub, otawire.CanonicalBytes(m), signature) {
-		return ErrBadSignature
+	msg := otawire.CanonicalBytes(m)
+	for _, p := range v.pubs {
+		if ed25519.Verify(p, msg, signature) {
+			return nil
+		}
 	}
-	return nil
+	return ErrBadSignature
 }
 
 // VerifyPayload, indirilen paketin SHA-256'sını manifestodaki hex ile

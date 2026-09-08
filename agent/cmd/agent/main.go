@@ -243,15 +243,24 @@ func run() error {
 	}
 	quar := quarantine.NewManager(isolator, buf, filterEmpty([]string{c2Host}))
 
-	// OTA doğrulayıcı (opsiyonel): public key verilmişse güncelleme imzaları doğrulanır.
+	// OTA doğrulayıcı (opsiyonel): public key(ler) verilmişse güncelleme imzaları
+	// doğrulanır. XEMS_UPDATE_PUBKEY virgülle ayrılmış birden çok anahtar alabilir —
+	// imza-anahtarı ROTASYONU örtüşmesi (#9): eski + yeni anahtar aynı anda güvenilir.
 	var updVerifier *update.Verifier
 	if cfg.updatePubKey != "" {
-		if raw, err := base64.StdEncoding.DecodeString(cfg.updatePubKey); err == nil {
-			if v, err := update.NewVerifier(raw); err == nil {
-				updVerifier = v
-			} else {
-				log.Printf("OTA public key geçersiz, güncelleme kontrolü kapalı: %v", err)
+		var pubs []ed25519.PublicKey
+		for _, k := range splitCSV(cfg.updatePubKey) {
+			if raw, err := base64.StdEncoding.DecodeString(k); err == nil && len(raw) == ed25519.PublicKeySize {
+				pubs = append(pubs, ed25519.PublicKey(raw))
 			}
+		}
+		if v, err := update.NewVerifierMulti(pubs...); err == nil {
+			updVerifier = v
+			if len(pubs) > 1 {
+				log.Printf("OTA: %d güvenilen imza anahtarı (rotasyon örtüşmesi)", len(pubs))
+			}
+		} else {
+			log.Printf("OTA public key geçersiz, güncelleme kontrolü kapalı: %v", err)
 		}
 	}
 	downloader := update.NewHTTPDownloader(0)
