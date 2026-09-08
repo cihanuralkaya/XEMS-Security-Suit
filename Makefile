@@ -1,7 +1,7 @@
 # XDR/MDM — geliştirme görevleri
 # Not: Go, buf ve protoc-gen eklentileri kurulu olmalı (bkz. README).
 
-.PHONY: proto tidy build build-server build-agent build-watchdog test e2e dev-certs release smoke clean
+.PHONY: proto tidy build build-server build-agent build-watchdog test e2e dev-certs release smoke clean fmt fmt-check vet check check-all
 
 ## proto: .proto dosyalarından Go kodunu üretir (gen/ altına).
 proto:
@@ -23,6 +23,30 @@ build-agent:
 
 build-watchdog:
 	go build -o bin/watchdog ./agent/cmd/watchdog
+
+## fmt: izlenen tüm Go kaynaklarını gofmt ile yerinde biçimlendirir.
+##      (git ls-files: yerel scratch/gitignore'lı dizinleri hariç tutar — CI temiz
+##       checkout'ta neyi görüyorsa onu biçimlendirir.)
+fmt:
+	git ls-files '*.go' | xargs gofmt -w
+
+## fmt-check: biçimsiz izlenen dosya varsa hata verir (CI gofmt kapısıyla aynı sonuç).
+fmt-check:
+	@unformatted="$$(git ls-files '*.go' | xargs gofmt -l)"; \
+	if [ -n "$$unformatted" ]; then \
+		echo "Biçimsiz dosyalar (make fmt ile düzeltin):"; echo "$$unformatted"; exit 1; \
+	fi
+
+## vet: go vet ./... — CI bunu çalıştırır ama `go test` ÇALIŞTIRMAZ; commit öncesi
+##      atlanması kırmızı CI'nın en sık nedenidir.
+vet:
+	go vet ./...
+
+## check: commit öncesi CI-paritesi HIZLI kapı (gofmt + vet + test). Push'tan önce çalıştırın.
+check: fmt-check vet test
+
+## check-all: check + uçtan uca smoke (tam yerel CI-paritesi; proto üretimi buf gerektirir, ayrı: make proto).
+check-all: check smoke
 
 ## test: tüm birim + entegrasyon testlerini çalıştırır.
 test:
