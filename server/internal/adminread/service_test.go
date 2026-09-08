@@ -135,6 +135,9 @@ func (m *memStore) EventAcks(_ context.Context) (map[string]EventAck, error) {
 func (m *memStore) ListPendingWipes(_ context.Context) ([]PendingWipeRow, error) {
 	return nil, nil
 }
+func (m *memStore) ListIncidents(_ context.Context, _ int) ([]IncidentRow, error) {
+	return nil, nil
+}
 func (m *memStore) QueryEvents(_ context.Context, f EventFilter) ([]EventRow, error) {
 	var out []EventRow
 	for _, e := range m.events {

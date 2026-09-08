@@ -17,6 +17,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	xemsv1 "xems.corp/suite/gen/xems/v1"
+	"xems.corp/suite/server/internal/correlate"
 	"xems.corp/suite/server/internal/detect"
 	"xems.corp/suite/server/internal/ioc"
 	"xems.corp/suite/server/internal/metrics"
@@ -100,18 +101,19 @@ func (noopResponder) AutoQuarantine(context.Context, string, string) error { ret
 // AgentHandler, AgentService gRPC sunucusunu uygular.
 type AgentHandler struct {
 	xemsv1.UnimplementedAgentServiceServer
-	devices   DeviceRegistry
-	events    EventSink
-	policies  PolicyProvider
-	updates   UpdateProvider
-	notifier  PolicyNotifier
-	admin     AdminNotifier
-	alerter   notify.Notifier
-	responder AutoResponder
-	detector  atomic.Pointer[detect.Engine] // tespit motoru (canlı hot-reload için atomik)
-	iocSet    atomic.Pointer[ioc.Set]       // tehdit istihbaratı göstergeleri (nil = kapalı; canlı hot-reload için atomik)
-	artifacts ArtifactSink                  // adli/IR dosya toplama deposu
-	now       func() time.Time
+	devices    DeviceRegistry
+	events     EventSink
+	policies   PolicyProvider
+	updates    UpdateProvider
+	notifier   PolicyNotifier
+	admin      AdminNotifier
+	alerter    notify.Notifier
+	responder  AutoResponder
+	detector   atomic.Pointer[detect.Engine] // tespit motoru (canlı hot-reload için atomik)
+	correlator *correlate.Correlator         // olay korelasyonu (nil = gruplama/bastırma yok)
+	iocSet     atomic.Pointer[ioc.Set]       // tehdit istihbaratı göstergeleri (nil = kapalı; canlı hot-reload için atomik)
+	artifacts  ArtifactSink                  // adli/IR dosya toplama deposu
+	now        func() time.Time
 }
 
 // ArtifactSink, ajanın topladığı dosya artefaktlarını saklar (adli/IR).
@@ -176,6 +178,10 @@ func (h *AgentHandler) SetDetector(e *detect.Engine) {
 	}
 	h.detector.Store(e)
 }
+
+// SetCorrelator, olay korelasyonunu (incident gruplama + alarm-fırtınası bastırma)
+// etkinleştirir. nil ise her tespit ayrı alarm üretir (eski davranış).
+func (h *AgentHandler) SetCorrelator(c *correlate.Correlator) { h.correlator = c }
 
 // SetAlerter, yüksek önem düzeyli olaylarda dış uyarı (webhook) gönderimini
 // etkinleştirir. nil ise noop kalır (uyarı gönderilmez).
@@ -289,6 +295,14 @@ func (h *AgentHandler) ReportEvents(stream xemsv1.AgentService_ReportEventsServe
 			if dets := h.detector.Load().Evaluate(e); len(dets) > 0 { // atomik Load: hot-reload ile yarışsız
 				metrics.AddDetections(len(dets))
 				for _, d := range dets {
+					// Korelasyon: aynı cihaz+kural penceresindeki tekrarları tek
+					// incident'e katla ve YİNELENEN alarmı bastır (alarm-fırtınası).
+					if h.correlator != nil {
+						if _, suppress := h.correlator.Observe(stream.Context(), deviceID, d.RuleID, d.Technique.ID, d.Severity, e.Message); suppress {
+							metrics.IncAlertSuppressed()
+							continue
+						}
+					}
 					metrics.IncAlertRaised()
 					h.alerter.Notify(notify.Alert{
 						DeviceID:      deviceID,

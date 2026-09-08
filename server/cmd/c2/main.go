@@ -26,6 +26,7 @@ import (
 	"xems.corp/suite/server/internal/adminread"
 	"xems.corp/suite/server/internal/cluster"
 	"xems.corp/suite/server/internal/config"
+	"xems.corp/suite/server/internal/correlate"
 	"xems.corp/suite/server/internal/db"
 	"xems.corp/suite/server/internal/detect"
 	"xems.corp/suite/server/internal/enroll"
@@ -53,6 +54,7 @@ type Backend interface {
 	admin.Store
 	adminread.Store
 	xgrpc.ArtifactSink
+	correlate.IncidentSink
 	revocation.Source
 	retention.Store
 	adminapi.AuthStore
@@ -230,6 +232,14 @@ func run() error {
 	}
 	detector := detect.NewEngine(detectRules)
 	agentHandler.SetDetector(detector)
+	// Olay korelasyonu (#2): aynı cihaz+kural penceresindeki tespitleri tek
+	// incident'e katla ve yinelenen alarmları bastır (alarm-fırtınası). Pencere
+	// XEMS_CORRELATION_WINDOW (varsayılan 10dk). Backend incident'leri kalıcılaştırır.
+	corrWindow := 10 * time.Minute
+	if d, err := time.ParseDuration(os.Getenv("XEMS_CORRELATION_WINDOW")); err == nil && d > 0 {
+		corrWindow = d
+	}
+	agentHandler.SetCorrelator(correlate.New(corrWindow, backend))
 
 	// Dış uyarı (SOC webhook): XEMS_ALERT_WEBHOOK_URL ayarlıysa yüksek önem düzeyli
 	// olaylar bir HTTPS webhook'una gönderilir (Slack/Teams/genel). Eşik

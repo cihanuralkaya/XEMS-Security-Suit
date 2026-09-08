@@ -751,6 +751,17 @@
           </div>
         </div>
 
+        <div class="card" data-view="security" data-span="2">
+          <div class="head"><h2>🧩 Olay Korelasyonu (Incident)</h2>
+            <span class="sp"></span><span id="inc-count" class="count">0</span></div>
+          <div class="body">
+            <p class="hint" style="margin:0 0 10px">İlişkili tespitler tek bir incident'e gruplanır (aynı cihaz+kural penceresinde) — yinelenen alarmlar bastırılır. Tekrar sayısı ve son-görülme izlenir.</p>
+            <div class="tbl-wrap"><table><thead><tr><th>Son görülme</th><th>Cihaz</th><th>Kural</th><th>Önem</th><th>Tekrar</th><th>Örnek</th></tr></thead>
+              <tbody id="inc-body"></tbody></table></div>
+            <div id="inc-empty" class="empty" style="padding:12px">Henüz korelasyonlu olay yok.</div>
+          </div>
+        </div>
+
         <div class="card" data-view="security">
           <div class="head"><h2>🧭 MITRE Taktik Dağılımı <span class="count" id="tac-count">0</span></h2>
             <span class="sp"></span><span class="mono" style="color:var(--faint);font-size:11px">son olaylardan</span></div>
@@ -1588,7 +1599,7 @@
       state.policies = (r[6] && r[6].policies) || [];
       renderStats(); renderSeverity(); renderOSInventory(); renderTopDevices(); renderComplianceCard(); renderTactics(); renderDevices(); renderEvents(); renderAudit();
       renderTokens(); renderAdmins(); renderPolicies(); setLive(true);
-      loadActivity(); loadPendingWipes();
+      loadActivity(); loadPendingWipes(); loadIncidents();
       if(state.sel) loadDetail(state.sel);
     }).catch(function(e){ setLive(false); });
   }
@@ -1871,6 +1882,26 @@
       out.innerHTML='<p class="hint" style="margin:0 0 8px">⚡ '+m.length+' kural tetiklenir:</p>'+
         '<div class="tbl-wrap"><table><thead><tr><th>ID</th><th>Ad</th><th>Önem</th><th>Teknik</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
     }).catch(function(e){ out.innerHTML='<p class="hint" style="margin:0;color:var(--bad,#f43f5e)">Test başarısız: '+esc(e.message)+'</p>'; });
+  }
+  // loadIncidents: korelasyonla gruplanmış olayları (incident) yükler. Sonuç
+  // kullanıcı-görünür HTML olduğundan tüm alanlar esc()'ten geçer.
+  function loadIncidents(){
+    var body=$("inc-body"), empty=$("inc-empty"), cnt=$("inc-count"); if(!body) return;
+    return api("/api/incidents").then(function(r){
+      var inc=(r&&r.incidents)||[]; body.innerHTML="";
+      if(cnt) cnt.textContent=inc.length;
+      if(empty) empty.style.display=inc.length?"none":"block";
+      inc.forEach(function(x){
+        var tr=document.createElement("tr");
+        tr.innerHTML="<td class='mono' style='font-size:11px'>"+esc(relTime(x.last_seen))+"</td>"+
+          "<td>"+esc(deviceName(x.device_id||""))+"</td>"+
+          "<td class='mono' style='font-size:11px'>"+esc(x.rule_id||"")+(x.technique?(" · "+esc(x.technique)):"")+"</td>"+
+          "<td><span class='sev "+esc(x.severity||"")+"'>"+esc(x.severity||"")+"</span></td>"+
+          "<td class='mono'>"+(x.count||1)+(x.count>1?" ×":"")+"</td>"+
+          "<td>"+esc(x.sample_message||"")+"</td>";
+        body.appendChild(tr);
+      });
+    }).catch(function(){ if(empty){ empty.style.display="block"; empty.textContent="Yüklenemedi."; } });
   }
   // runHunt: retro-hunt / arama. "rules" modu mevcut tespit motorunu geçmiş
   // olaylara uygular; "query" modu alan-filtreli arama yapar. Sonuçlar kullanıcı-

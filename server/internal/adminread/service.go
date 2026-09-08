@@ -93,6 +93,8 @@ type Store interface {
 	// QueryEvents, zaman-pencereli + alan-filtreli olay sorgusudur (retro-hunt /
 	// SIEM arama primitifi). Tüm alanlar opsiyonel; Since/Until sıfır ise sınırsız.
 	QueryEvents(ctx context.Context, f EventFilter) ([]EventRow, error)
+	// ListIncidents, korelasyonla gruplanmış olayları en yeniden eskiye döner.
+	ListIncidents(ctx context.Context, limit int) ([]IncidentRow, error)
 	// ListEvents, olayları en yeniden eskiye listeler. deviceID/severity/category
 	// boş ("") ise ilgili filtre uygulanmaz (opsiyonel sunucu-tarafı filtre).
 	ListEvents(ctx context.Context, deviceID, severity, category string, limit int) ([]EventRow, error)
@@ -518,6 +520,26 @@ func (s *Service) Summary(ctx context.Context) (SummaryDTO, error) {
 		DevicesByOS:         byOS,
 		Since:               since,
 	}, nil
+}
+
+// IncidentRow, korelasyonla gruplanmış bir olaydır (incident); ilişkili tespitler
+// tek satırda katlanır (sayaç + son-görülme).
+type IncidentRow struct {
+	ID            string    `json:"id"`
+	DeviceID      string    `json:"device_id"`
+	RuleID        string    `json:"rule_id"`
+	Technique     string    `json:"technique,omitempty"`
+	Severity      string    `json:"severity"`
+	SampleMessage string    `json:"sample_message"`
+	Count         int       `json:"count"`
+	FirstSeen     time.Time `json:"first_seen"`
+	LastSeen      time.Time `json:"last_seen"`
+	Status        string    `json:"status"`
+}
+
+// Incidents, korelasyonla gruplanmış olayları en yeniden eskiye döner (konsol).
+func (s *Service) Incidents(ctx context.Context, limit int) ([]IncidentRow, error) {
+	return s.store.ListIncidents(ctx, clampLimit(limit))
 }
 
 // EventFilter, retro-hunt / SIEM arama için zaman-pencereli + alan-filtreli olay

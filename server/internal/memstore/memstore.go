@@ -128,7 +128,16 @@ type Store struct {
 	eventAcks  map[string]eventAckRec       // eventID -> triyaj durumu (alarm yaşam-döngüsü)
 	artifacts  []artifactRec                // toplanan dosya artefaktları (adli/IR)
 	pendWipes  map[string]pendingWipeRec    // deviceID -> bekleyen WIPE talebi (çift-kontrol)
+	incidents  []incidentRec                // korelasyonla gruplanmış olaylar
+	incSeq     int
 	seq        int
+}
+
+// incidentRec, korelasyonla gruplanmış bir olaydır (bellek-içi).
+type incidentRec struct {
+	id, deviceID, corrKey, ruleID, technique, severity, sampleMsg, status string
+	count                                                                 int
+	firstSeen, lastSeen                                                   time.Time
 }
 
 // pendingWipeRec, ikinci-onay bekleyen bir WIPE talebidir (bellek-içi).
@@ -953,6 +962,54 @@ func (s *Store) SearchSoftware(_ context.Context, query string) (map[string][]st
 }
 
 // SetEventAck, bir olayın triyaj durumunu ayarlar (upsert). Alarm yaşam-döngüsü.
+// OpenIncident, yeni bir incident açar (korelasyon; correlate.IncidentSink).
+func (s *Store) OpenIncident(_ context.Context, deviceID, key, ruleID, technique, severity, message string, at time.Time) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.incSeq++
+	id := fmt.Sprintf("inc-%d", s.incSeq)
+	s.incidents = append(s.incidents, incidentRec{
+		id: id, deviceID: deviceID, corrKey: key, ruleID: ruleID, technique: technique,
+		severity: severity, sampleMsg: message, count: 1, firstSeen: at, lastSeen: at, status: "OPEN",
+	})
+	return id, nil
+}
+
+// BumpIncident, mevcut incident'in sayaç/son-görülme değerini günceller.
+func (s *Store) BumpIncident(_ context.Context, id string, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.incidents {
+		if s.incidents[i].id == id {
+			s.incidents[i].count++
+			s.incidents[i].lastSeen = at
+			break
+		}
+	}
+	return nil
+}
+
+// ListIncidents, incident'leri son-görülmeye göre en yeniden eskiye döner.
+func (s *Store) ListIncidents(_ context.Context, limit int) ([]adminread.IncidentRow, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cp := make([]incidentRec, len(s.incidents))
+	copy(cp, s.incidents)
+	sort.Slice(cp, func(i, j int) bool { return cp[i].lastSeen.After(cp[j].lastSeen) })
+	out := make([]adminread.IncidentRow, 0, len(cp))
+	for _, r := range cp {
+		if limit > 0 && len(out) >= limit {
+			break
+		}
+		out = append(out, adminread.IncidentRow{
+			ID: r.id, DeviceID: r.deviceID, RuleID: r.ruleID, Technique: r.technique,
+			Severity: r.severity, SampleMessage: r.sampleMsg, Count: r.count,
+			FirstSeen: r.firstSeen, LastSeen: r.lastSeen, Status: r.status,
+		})
+	}
+	return out, nil
+}
+
 // SavePendingWipe, ikinci-onay bekleyen WIPE talebini saklar (çift-kontrol).
 func (s *Store) SavePendingWipe(_ context.Context, deviceID, requestedBy, reason string) error {
 	s.mu.Lock()

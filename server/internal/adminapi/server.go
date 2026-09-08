@@ -195,6 +195,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/detections/rules", s.authed(s.handleDetectionRules))
 	mux.HandleFunc("POST /api/detections/test", s.authed(s.handleTestDetection))
 	mux.HandleFunc("POST /api/hunt", s.authed(s.handleHunt))
+	mux.HandleFunc("GET /api/incidents", s.authed(s.handleIncidents))
 	mux.HandleFunc("GET /api/software", s.authed(s.handleSoftwareSearch))
 	mux.HandleFunc("GET /api/vulnerabilities", s.authed(s.handleVulnerabilities))
 	mux.HandleFunc("POST /api/events/{id}/ack", s.authed(s.handleAckEvent))
@@ -906,6 +907,15 @@ func (s *Server) handleHunt(w http.ResponseWriter, r *http.Request, _ string) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"mode": req.Mode, "scanned": len(events), "hits": hits})
+}
+
+// handleIncidents, korelasyonla gruplanmış olayları (incident) listeler (salt-okunur).
+func (s *Server) handleIncidents(w http.ResponseWriter, r *http.Request, _ string) {
+	rows, err := s.reader.Incidents(r.Context(), 200)
+	if respondErr(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"incidents": rows})
 }
 
 // handleLockDevice, uzaktan ekran kilitleme komutu kuyruğa ekler (OPERATOR+).

@@ -46,6 +46,28 @@ func (s *Store) ListDevices(ctx context.Context, limit int) ([]adminread.DeviceR
 // ListEvents, olay loglarını (deviceID boşsa tümünü) en yeniden eskiye listeler.
 // severity ve category boş ("") değilse ilgili ENUM sütununa göre sunucu-tarafında
 // filtre uygulanır. details, ham JSON metni olarak okunur (yoksa nil).
+// ListIncidents, korelasyonla gruplanmış olayları son-görülmeye göre döner.
+func (s *Store) ListIncidents(ctx context.Context, limit int) ([]adminread.IncidentRow, error) {
+	const q = `
+		SELECT id::text, COALESCE(device_id::text,''), COALESCE(rule_id,''), COALESCE(technique,''),
+		       COALESCE(severity,''), COALESCE(sample_msg,''), count, first_seen, last_seen, status
+		  FROM incidents ORDER BY last_seen DESC LIMIT $1`
+	rows, err := s.pool.Query(ctx, q, limit)
+	if err != nil {
+		return nil, fmt.Errorf("db: incident listesi: %w", err)
+	}
+	defer rows.Close()
+	var out []adminread.IncidentRow
+	for rows.Next() {
+		var r adminread.IncidentRow
+		if err := rows.Scan(&r.ID, &r.DeviceID, &r.RuleID, &r.Technique, &r.Severity, &r.SampleMessage, &r.Count, &r.FirstSeen, &r.LastSeen, &r.Status); err != nil {
+			return nil, fmt.Errorf("db: incident okuma: %w", err)
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 // QueryEvents, zaman-pencereli + alan-filtreli olay sorgusudur (retro-hunt / SIEM
 // arama). Tüm ölçütler opsiyonel; boş/sıfır alan filtrelemez. Mesaj araması ILIKE
 // (büyük/küçük harf duyarsız alt-dize).

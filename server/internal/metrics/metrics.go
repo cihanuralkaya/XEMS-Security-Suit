@@ -26,6 +26,7 @@ var (
 	alertsRaised   atomic.Int64
 	autoQuarantine atomic.Int64
 	iocHits        atomic.Int64
+	alertsSuppress atomic.Int64 // korelasyonla bastırılan yinelenen alarmlar (#2)
 	// Yatay ölçekleme (#10) küme fan-out sayaçları: yayınlanan (NOTIFY), alınan
 	// (LISTEN→yerel dağıtım) ve yerel-dağıtıma-düşülen (NOTIFY başarısız). Fallback
 	// sayacının artması DB'ye NOTIFY erişiminde sorun olduğunu gösterir.
@@ -58,6 +59,7 @@ func Counters() map[string]int64 {
 		"alerts_raised":     alertsRaised.Load(),
 		"auto_quarantine":   autoQuarantine.Load(),
 		"ioc_hits":          iocHits.Load(),
+		"alerts_suppressed": alertsSuppress.Load(),
 		"cluster_published": clusterPublished.Load(),
 		"cluster_received":  clusterReceived.Load(),
 		"cluster_fallback":  clusterFallback.Load(),
@@ -93,6 +95,9 @@ func IncAutoQuarantine() { autoQuarantine.Add(1) }
 
 // IncIocHit, tehdit istihbaratı (IoC) eşleşme sayacını artırır.
 func IncIocHit() { iocHits.Add(1) }
+
+// IncAlertSuppressed, korelasyonla bastırılan yinelenen alarm sayacını artırır (#2).
+func IncAlertSuppressed() { alertsSuppress.Add(1) }
 
 // IncClusterPublished, kümeye NOTIFY ile yayınlanan bildirim sayacını artırır (#10).
 func IncClusterPublished() { clusterPublished.Add(1) }
@@ -148,6 +153,10 @@ func Write(w io.Writer, s Snapshot) {
 	fmt.Fprintf(w, "# HELP xems_ioc_hits_total Tehdit istihbaratı (IoC) eşleşmeleri.\n")
 	fmt.Fprintf(w, "# TYPE xems_ioc_hits_total counter\n")
 	fmt.Fprintf(w, "xems_ioc_hits_total %d\n", iocHits.Load())
+
+	fmt.Fprintf(w, "# HELP xems_alerts_suppressed_total Korelasyonla bastırılan yinelenen alarmlar.\n")
+	fmt.Fprintf(w, "# TYPE xems_alerts_suppressed_total counter\n")
+	fmt.Fprintf(w, "xems_alerts_suppressed_total %d\n", alertsSuppress.Load())
 
 	fmt.Fprintf(w, "# HELP xems_cluster_notices_total Küme fan-out bildirimleri (yön etiketli, #10 HA).\n")
 	fmt.Fprintf(w, "# TYPE xems_cluster_notices_total counter\n")

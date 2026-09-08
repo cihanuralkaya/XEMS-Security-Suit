@@ -103,6 +103,27 @@ func (s *Store) SetEventCase(ctx context.Context, eventID, adminID, assignee, no
 	return nil
 }
 
+// OpenIncident, yeni bir korelasyon incident'i açar (correlate.IncidentSink).
+func (s *Store) OpenIncident(ctx context.Context, deviceID, key, ruleID, technique, severity, message string, at time.Time) (string, error) {
+	const q = `
+		INSERT INTO incidents (device_id, corr_key, rule_id, technique, severity, sample_msg, first_seen, last_seen)
+		VALUES (NULLIF($1,'')::uuid, $2, NULLIF($3,''), NULLIF($4,''), NULLIF($5,''), $6, $7, $7)
+		RETURNING id::text`
+	var id string
+	if err := s.pool.QueryRow(ctx, q, deviceID, key, ruleID, technique, severity, message, at).Scan(&id); err != nil {
+		return "", fmt.Errorf("db: incident aç: %w", err)
+	}
+	return id, nil
+}
+
+// BumpIncident, mevcut incident'in sayaç/son-görülme değerini günceller.
+func (s *Store) BumpIncident(ctx context.Context, id string, at time.Time) error {
+	if _, err := s.pool.Exec(ctx, `UPDATE incidents SET count = count + 1, last_seen = $2 WHERE id = $1::uuid`, id, at); err != nil {
+		return fmt.Errorf("db: incident güncelle: %w", err)
+	}
+	return nil
+}
+
 // SavePendingWipe, ikinci-onay bekleyen WIPE talebini saklar (çift-kontrol; upsert).
 func (s *Store) SavePendingWipe(ctx context.Context, deviceID, requestedBy, reason string) error {
 	const q = `

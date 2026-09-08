@@ -307,3 +307,23 @@ CREATE TABLE pending_wipes (
     reason       TEXT,
     requested_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ---------------------------------------------------------------------------
+-- OLAY KORELASYONU (INCIDENT) — ilişkili tespitlerin gruplandığı olaylar
+-- ---------------------------------------------------------------------------
+-- Aynı cihaz + kural için bir zaman penceresindeki tespitler tek bir incident'e
+-- katlanır (alarm-fırtınası bastırma + gruplama). count/last_seen güncellenir.
+CREATE TABLE incidents (
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    device_id   UUID REFERENCES devices(id) ON DELETE CASCADE,
+    corr_key    TEXT NOT NULL,
+    rule_id     TEXT,
+    technique   TEXT,
+    severity    TEXT,
+    sample_msg  TEXT,
+    count       INTEGER NOT NULL DEFAULT 1,
+    first_seen  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_seen   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    status      TEXT NOT NULL DEFAULT 'OPEN'
+);
+CREATE INDEX idx_incidents_last ON incidents (last_seen DESC);

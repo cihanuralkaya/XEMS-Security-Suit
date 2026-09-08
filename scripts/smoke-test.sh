@@ -191,6 +191,9 @@ curl -sk "$B/api/hunt" -X POST -H "Authorization: Bearer $TOK" \
   -H 'Content-Type: application/json' -d '{"mode":"rules","limit":500}' \
   | grep -q '"scanned"' \
   && pass "/api/hunt retro-hunt çalıştı (geçmiş olaylar tarandı)" || fail "/api/hunt başarısız"
+# Olay korelasyonu (#2): incident listeleme ucu yanıt versin.
+curl -sk "$B/api/incidents" -H "Authorization: Bearer $TOK" | grep -q '"incidents"' \
+  && pass "/api/incidents korelasyon ucu döndü" || fail "/api/incidents başarısız"
 # Zengin telemetri: cihaz OS sürümü (ilk heartbeat'ten sonra dolar) — poll et.
 osv=""
 for _ in $(seq 1 40); do
