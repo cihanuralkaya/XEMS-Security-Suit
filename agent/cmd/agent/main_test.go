@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"xdr.corp/suite/agent/internal/collector"
+	"xdr.corp/suite/agent/internal/deviceaction"
 	"xdr.corp/suite/agent/internal/netconn"
 	"xdr.corp/suite/agent/internal/usbmon"
 )
@@ -116,22 +117,37 @@ func TestUsbTrackerPolicyAndDedup(t *testing.T) {
 		t.Fatalf("audit: SECURITY/MEDIUM olay beklendi: %+v", evs)
 	}
 
-	// block politikası: HIGH + POLICY_VIOLATION + blocked:false (güdük).
+	// block politikası GÜVENLİ-MODDA: HIGH + POLICY_VIOLATION üretir ama gerçek
+	// engelleme UYGULANMAZ (blocked:false + "güvenli mod" notu). GÜVENLİ MOD kullanılır
+	// çünkü safeMode=false gerçek usbmon.Block'u (mountvol/eject) test host'unda çalıştırır.
 	buf2 := collector.NewBuffer(32)
 	tb := &usbTracker{policy: "block"}
-	tb.reportDrives(buf2, false, nil) // taban çizgisi
-	tb.reportDrives(buf2, false, []usbmon.Drive{{ID: "F:"}})
+	tb.reportDrives(buf2, true /*safeMode*/, nil) // taban çizgisi
+	tb.reportDrives(buf2, true, []usbmon.Drive{{ID: "F:"}})
 	evs2 := buf2.Pending(10)
 	if len(evs2) != 1 || evs2[0].Category != "POLICY_VIOLATION" || evs2[0].Severity != "HIGH" {
 		t.Fatalf("block: POLICY_VIOLATION/HIGH olay beklendi: %+v", evs2)
 	}
 	if b, _ := evs2[0].Details["blocked"].(bool); b {
-		t.Fatalf("engelleme güdük — blocked:false olmalı: %+v", evs2[0].Details)
+		t.Fatalf("güvenli modda gerçek engelleme uygulanmamalı — blocked:false olmalı: %+v", evs2[0].Details)
+	}
+	if note, _ := evs2[0].Details["note"].(string); note == "" {
+		t.Fatalf("güvenli-mod block olayı 'note' taşımalı: %+v", evs2[0].Details)
 	}
 	// Aynı sürücü tekrar: yeni olay yok.
 	buf2.Ack(evs2[0].Seq)
-	tb.reportDrives(buf2, false, []usbmon.Drive{{ID: "F:"}})
+	tb.reportDrives(buf2, true, []usbmon.Drive{{ID: "F:"}})
 	if n := len(buf2.Pending(10)); n != 0 {
 		t.Fatalf("tekrar görülen sürücü olay üretmemeli: %d", n)
+	}
+}
+
+// selectWipeFn: ARM'lı DEĞİLKEN (güvenli varsayılan) gerçek yıkıcı Wipe SEÇİLMEMELİ —
+// dönen güdük hiçbir şey silmeden ErrWipeNotArmed dönmeli. (ARM'lı dal gerçek silme
+// yaptığından burada ÇAĞRILMAZ; yalnız derleme + kod incelemesiyle doğrulanır.)
+func TestSelectWipeFnNotArmedIsSafe(t *testing.T) {
+	fn := selectWipeFn(false)
+	if err := fn(); err != deviceaction.ErrWipeNotArmed {
+		t.Fatalf("ARM'sız WIPE güdüğü ErrWipeNotArmed dönmeli (silme YOK), dönen: %v", err)
 	}
 }

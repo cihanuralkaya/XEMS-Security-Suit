@@ -483,12 +483,26 @@ func handleCommands(ctx context.Context, cmds []*xdrv1.Command, quar *quarantine
 		case xdrv1.Command_COMMAND_TYPE_RESTART:
 			doDeviceAction(buf, safeMode, "RESTART", "yeniden başlatma", deviceaction.Restart)
 		case xdrv1.Command_COMMAND_TYPE_WIPE:
-			// WIPE bu sürümde gerçek silme yapmaz (güvenli güdük); komut+olay akışı tam.
-			doDeviceAction(buf, safeMode, "WIPE", "veri silme", deviceaction.Wipe)
+			// WIPE geri döndürülemez kripto-silme yapar. ÜÇÜNCÜ güvenlik katmanı:
+			// gerçek silme yalnız ajan AÇIKÇA ARM'lıysa (XDR_ALLOW_WIPE=1) çağrılır;
+			// aksi halde yalnız olay üretilir, VERİ SİLİNMEZ. (Diğer iki katman: sunucu
+			// RBAC=ADMIN ve doDeviceAction'daki güvenli-mod denetimi.)
+			doDeviceAction(buf, safeMode, "WIPE", "veri silme", selectWipeFn(deviceaction.WipeArmed()))
 		default:
 			// Diğer komut tipleri ileride.
 		}
 	}
+}
+
+// selectWipeFn, WIPE için çalıştırılacak fonksiyonu ARM durumuna göre seçer.
+// ARM'lı DEĞİLSE (güvenli varsayılan) gerçek yıkıcı Wipe YERİNE, hiçbir şey silmeyen
+// ve ErrWipeNotArmed dönen bir güdük döner — kazara veri kaybını önler. ARM'lıysa
+// gerçek kripto-silme (deviceaction.Wipe) döner.
+func selectWipeFn(armed bool) func() error {
+	if !armed {
+		return func() error { return deviceaction.ErrWipeNotArmed }
+	}
+	return deviceaction.Wipe
 }
 
 // doDeviceAction, bir MDM uzak eylemini uygular ve sonucu olay olarak bildirir.
@@ -816,13 +830,20 @@ func (t *usbTracker) reportDrives(buf *collector.Buffer, safeMode bool, drives [
 		det := map[string]any{"drive": d.ID, "label": d.Label, "policy": t.policy}
 		if t.policy == "block" {
 			sev = "HIGH"
-			// Gerçek engelleme (registry/eject) yıkıcı+platforma özgü; güvenli-mod
-			// KAPALI olsa bile bu sürümde uygulanmaz (bilinçli güdük) — politika
-			// ihlali olay olarak bildirilir, komut/görünürlük akışı tamdır.
 			msg = "çıkarılabilir medya politika ihlali (engelle): " + d.ID
-			det["blocked"] = false
-			det["note"] = "block stub (platform-specific enforcement not applied)"
-			_ = safeMode
+			// Gerçek engelleme HEDEFLİ + geri döndürülebilir (mountvol /p ya da eject).
+			// Güvenli-mod AÇIKKEN gerçek eylem uygulanmaz (yalnız olay) — demo/test'te
+			// kullanıcı medyasını kesintiye uğratmaz.
+			if safeMode {
+				det["blocked"] = false
+				det["note"] = "güvenli mod: gerçek engelleme uygulanmadı"
+			} else if err := usbmon.Block(d.ID); err != nil {
+				det["blocked"] = false
+				det["error"] = err.Error()
+				msg += " — engelleme başarısız"
+			} else {
+				det["blocked"] = true
+			}
 			buf.Add(collector.Event{Category: "POLICY_VIOLATION", Severity: sev, Message: msg, OccurredAt: time.Now(), Details: det})
 		} else {
 			buf.Add(collector.Event{Category: "SECURITY", Severity: sev, Message: msg, OccurredAt: time.Now(), Details: det})

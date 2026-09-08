@@ -2,12 +2,11 @@
 
 package deviceaction
 
-import "errors"
-
 // Lock, desteklenmeyen platformda hata döner.
-func Lock() error { return errors.New("deviceaction: kilitleme bu platformda desteklenmiyor") }
+func Lock() error { return ErrActionUnsupported }
 
 // Restart, desteklenmeyen platformda hata döner.
-func Restart() error {
-	return errors.New("deviceaction: yeniden başlatma bu platformda desteklenmiyor")
-}
+func Restart() error { return ErrActionUnsupported }
+
+// Wipe, desteklenmeyen platformda hata döner.
+func Wipe() error { return ErrActionUnsupported }

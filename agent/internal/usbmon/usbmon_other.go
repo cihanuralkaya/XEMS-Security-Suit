@@ -8,3 +8,6 @@ type noScanner struct{}
 func NewScanner() Scanner { return noScanner{} }
 
 func (noScanner) Scan() []Drive { return nil }
+
+// Block, desteklenmeyen platformda hata döner.
+func Block(string) error { return ErrBlockUnsupported }

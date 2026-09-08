@@ -5,7 +5,13 @@
 // (XDR_USB_POLICY; engelleme güvenli-mod KAPALIYKEN uygulanır).
 package usbmon
 
-import "strings"
+import (
+	"errors"
+	"strings"
+)
+
+// ErrBlockUnsupported, çıkarılabilir-medya engelleme bu platformda desteklenmediğinde döner.
+var ErrBlockUnsupported = errors.New("usbmon: engelleme bu platformda desteklenmiyor")
 
 // Drive, çıkarılabilir bir depolama aygıtıdır.
 type Drive struct {

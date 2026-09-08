@@ -1,20 +1,30 @@
 package deviceaction
 
-import (
-	"errors"
-	"testing"
-)
+import "testing"
 
-// Wipe, bu sürümde KASITLI olarak gerçek silme yapmamalı — her zaman
-// ErrWipeNotImplemented dönmeli. Bu, birinin yanlışlıkla yıkıcı gerçek silme
-// bağlamasına karşı bir güvenlik-koruma (regresyon) testidir; kırılırsa
-// gözden geçirilmeden birleştirilmemeli.
-func TestWipeIsSafeStub(t *testing.T) {
-	err := Wipe()
-	if err == nil {
-		t.Fatal("Wipe() nil döndü — WIPE gerçek silme YAPMAMALI (güvenlik güdüğü)")
+// UYARI: Wipe() ARTIK GERÇEK kripto-silme yapar (BitLocker/LUKS anahtar imhası).
+// Bu test Wipe()'ı ASLA çağırmaz — yalnız ARM kapısını (WipeArmed) doğrular.
+// Gerçek silme davranışı yalnız derleme + kod incelemesiyle doğrulanır, çalıştırılmaz.
+
+// WipeArmed, güvenli varsayılan: XDR_ALLOW_WIPE ayarlı değilken ajan silmeye
+// ARM'lı OLMAMALI. Bu, kazara veri kaybını önleyen üçüncü güvenlik katmanıdır.
+func TestWipeArmedDefaultsOff(t *testing.T) {
+	t.Setenv("XDR_ALLOW_WIPE", "") // açıkça boş
+	if WipeArmed() {
+		t.Fatal("XDR_ALLOW_WIPE boşken ajan silmeye ARM'lı OLMAMALI (güvenli varsayılan)")
 	}
-	if !errors.Is(err, ErrWipeNotImplemented) {
-		t.Fatalf("Wipe() ErrWipeNotImplemented dönmeliydi, dönen: %v", err)
+}
+
+// XDR_ALLOW_WIPE=1 açıkça ayarlandığında ARM'lı olmalı; diğer değerler ARM'lamaz.
+func TestWipeArmedOnlyWithExactFlag(t *testing.T) {
+	t.Setenv("XDR_ALLOW_WIPE", "1")
+	if !WipeArmed() {
+		t.Fatal("XDR_ALLOW_WIPE=1 iken ARM'lı olmalı")
+	}
+	for _, v := range []string{"0", "true", "yes", "2", " 1"} {
+		t.Setenv("XDR_ALLOW_WIPE", v)
+		if WipeArmed() {
+			t.Fatalf("XDR_ALLOW_WIPE=%q ARM'lamamalı (yalnız tam '1')", v)
+		}
 	}
 }

@@ -109,8 +109,8 @@ proto üret + `go vet` + `go test ./...` + smoke test + çapraz derleme (artifac
 | Ağ bağlantı telemetrisi (dinleyen/kurulu) | ✅ Win/Linux | `agent/internal/netconn`, grpc, db | birim |
 | İsteğe-bağlı dosya/artefakt toplama (adli/IR) | ✅ | `admin.CollectFile`, `grpc.UploadArtifact`, `artifacts` tablosu | birim + canlı |
 | Envanterden zafiyet eşleştirme (CVE) | ✅ opsiyonel | `server/internal/vuln`, `adminread`, console | birim + smoke |
-| MDM uzak eylemler (LOCK/RESTART/WIPE) | ✅ mantık/OS-derlendi + safe-mode | `admin`, `agent/internal/deviceaction`, proto | birim + smoke |
-| USB/çıkarılabilir medya kontrolü | ✅ Win/Linux | `agent/internal/usbmon` | birim |
+| MDM uzak eylemler: LOCK/RESTART (gerçek) + WIPE (gerçek kripto-silme, 3 katman) | ✅ Win/Linux | `admin`, `agent/internal/deviceaction`, proto | birim (ARM kapısı) + smoke |
+| USB/çıkarılabilir medya kontrolü: denetle + gerçek engelleme (dismount/eject) | ✅ Win/Linux | `agent/internal/usbmon` | birim (safe-mode kapısı) |
 | SIEM iletici (syslog + CEF/LEEF) | ✅ opsiyonel | `server/internal/notify/siem.go`, c2 main | birim |
 | Vaka/olay yönetimi (sorumlu + not, denetimli) | ✅ | `admin.UpdateEventCase`, `adminread`, `db`, `memstore`, console | birim + smoke + canlı |
 | Yatay ölçekleme / HA (çok-düğüm SSE fan-out) | ✅ opsiyonel | `server/internal/cluster` (Postgres LISTEN/NOTIFY), `eventbus`, `db` | birim + smoke (gerçek pg_notify) |
@@ -293,8 +293,8 @@ proto generation + `go vet` + `go test ./...` + smoke test + cross-compilation.
 | Network connection telemetry (listening/established) | done Win/Linux | `agent/internal/netconn`, grpc, db | unit |
 | On-demand file/artifact collection (forensics/IR) | done | `admin.CollectFile`, `grpc.UploadArtifact`, `artifacts` table | unit + live |
 | Vulnerability mapping from inventory (CVE) | done optional | `server/internal/vuln`, `adminread`, console | unit + smoke |
-| MDM remote actions (LOCK/RESTART/WIPE) | done logic/OS-compiled + safe-mode | `admin`, `agent/internal/deviceaction`, proto | unit + smoke |
-| USB/removable-media control | done Win/Linux | `agent/internal/usbmon` | unit |
+| MDM remote actions: LOCK/RESTART (real) + WIPE (real crypto-erase, 3-layer guard) | done Win/Linux | `admin`, `agent/internal/deviceaction`, proto | unit (arm gate) + smoke |
+| USB/removable-media control: audit + real block (dismount/eject) | done Win/Linux | `agent/internal/usbmon` | unit (safe-mode gate) |
 | SIEM forwarder (syslog + CEF/LEEF) | done optional | `server/internal/notify/siem.go`, c2 main | unit |
 | Case/incident management (assignee + note, audited) | done | `admin.UpdateEventCase`, `adminread`, `db`, `memstore`, console | unit + smoke + live |
 | Horizontal scale / HA (multi-node SSE fan-out) | done optional | `server/internal/cluster` (Postgres LISTEN/NOTIFY), `eventbus`, `db` | unit + smoke (real pg_notify) |

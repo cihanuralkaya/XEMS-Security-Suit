@@ -20,3 +20,11 @@ func (winScanner) Scan() []Drive {
 	}
 	return parseWinDrives(string(out))
 }
+
+// Block, verilen çıkarılabilir sürücüyü (sürücü harfi, ör. "E:") bağlama noktasını
+// kaldırıp dismount ederek erişime kapatır (mountvol /p). HEDEFLİDİR (yalnız bu
+// sürücü) ve GERİ DÖNÜŞTÜRÜLEBİLİR (yeniden takma ile erişim geri gelir). Yalnız
+// güvenli-mod KAPALIYKEN ve politika "block" iken çağrılır (çağıran denetler).
+func Block(driveID string) error {
+	return exec.Command("mountvol", driveID, "/p").Run()
+}

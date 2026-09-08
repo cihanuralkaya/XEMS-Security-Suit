@@ -4,6 +4,7 @@ package usbmon
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -30,4 +31,11 @@ func (linuxScanner) Scan() []Drive {
 		ds = append(ds, Drive{ID: "/dev/" + name})
 	}
 	return ds
+}
+
+// Block, verilen çıkarılabilir aygıtı (ör. "/dev/sdb") unmount edip çıkarır
+// (eject). HEDEFLİDİR (yalnız bu aygıt) ve GERİ DÖNÜŞTÜRÜLEBİLİR (yeniden takma).
+// Yalnız güvenli-mod KAPALIYKEN ve politika "block" iken çağrılır (çağıran denetler).
+func Block(driveID string) error {
+	return exec.Command("eject", driveID).Run()
 }

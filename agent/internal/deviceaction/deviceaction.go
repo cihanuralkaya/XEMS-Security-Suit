@@ -2,17 +2,27 @@
 // başlatma, veri silme) OS-özel olarak uygular. Yıkıcı eylemler (RESTART/WIPE)
 // yalnız güvenli-mod KAPALIYKEN çağrılır (çağıran katman güvenli-modu denetler).
 //
-// WIPE KASITLI OLARAK gerçek yıkıcı silme YAPMAZ: platforma özgü güvenli-silme
-// (BitLocker anahtar imhası / secure-erase) entegrasyonu ayrı ve riskli olduğundan
-// bu sürümde bir GÜDÜK'tür (komut/RBAC/denetim/olay akışı tamdır, fiziksel silme
-// yoktur). Böylece test/demo sırasında yanlışlıkla veri kaybı olmaz.
+// WIPE, geri döndürülemez KRİPTO-SİLME'dir: disk şifreleme anahtarını yok ederek
+// tüm veriyi anında kurtarılamaz kılar (Windows: BitLocker koruyucuları + zorla
+// kurtarma; Linux: cryptsetup luksErase). GERİ DÖNÜŞÜ YOKTUR. Bu yüzden ÜÇ bağımsız
+// güvenlik katmanı gerekir: (1) sunucu RBAC (WIPE → ADMIN), (2) ajan güvenli-mod
+// KAPALI, (3) ajan açıkça ARM'lı (XDR_ALLOW_WIPE=1). Üçü de sağlanmadıkça WIPE yalnız
+// bir olay üretir, veri SİLİNMEZ — kazara/yanlış-yapılandırma kaynaklı veri kaybını önler.
 package deviceaction
 
-import "errors"
+import (
+	"errors"
+	"os"
+)
 
-// ErrWipeNotImplemented, WIPE'ın bu sürümde gerçek silme yapmadığını belirtir.
-var ErrWipeNotImplemented = errors.New("deviceaction: WIPE bu sürümde gerçek silme yapmaz (platform secure-erase entegrasyonu gerekir)")
+// ErrWipeNotArmed, WIPE komutu alındığında ama ajan gerçek silmeye ARM'lanmadığında
+// (XDR_ALLOW_WIPE=1 değil) döner — kazara veri kaybını önleyen üçüncü güvenlik katmanı.
+var ErrWipeNotArmed = errors.New("deviceaction: WIPE ARM'lanmadı — gerçek silme için ajanda XDR_ALLOW_WIPE=1 gerekir")
 
-// Wipe, veri silmeyi gerçekleştirmez (güvenlik gereği güdük). Her platformda
-// aynı; gerçek dağıtımda platforma özgü güvenli-silme ile değiştirilir.
-func Wipe() error { return ErrWipeNotImplemented }
+// ErrActionUnsupported, eylem bu platformda desteklenmediğinde döner.
+var ErrActionUnsupported = errors.New("deviceaction: bu eylem bu platformda desteklenmiyor")
+
+// WipeArmed, ajanın gerçek (yıkıcı) silmeye açıkça izin verilip verilmediğini döner.
+// Yalnız XDR_ALLOW_WIPE=1 iken true. Sunucu RBAC'ı ve güvenli-moddan BAĞIMSIZ EK bir
+// kilittir; üretim-dışı/yanlış yapılandırılmış dağıtımlarda kazara wipe'ı önler.
+func WipeArmed() bool { return os.Getenv("XDR_ALLOW_WIPE") == "1" }
