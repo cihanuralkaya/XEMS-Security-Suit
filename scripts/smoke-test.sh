@@ -186,6 +186,11 @@ curl -sk "$B/api/detections/test" -H "Authorization: Bearer $TOK" \
   -H 'Content-Type: application/json' -d '{"category":"SECURITY","message":"ajan kurcalama girisimi"}' \
   | grep -q "XEMS-0001" \
   && pass "/api/detections/test kuralı eşleştirdi" || fail "/api/detections/test başarısız"
+# Retro-hunt (#1): mevcut kuralları geçmiş olaylara uygula (QueryEvents + değerlendirme).
+curl -sk "$B/api/hunt" -X POST -H "Authorization: Bearer $TOK" \
+  -H 'Content-Type: application/json' -d '{"mode":"rules","limit":500}' \
+  | grep -q '"scanned"' \
+  && pass "/api/hunt retro-hunt çalıştı (geçmiş olaylar tarandı)" || fail "/api/hunt başarısız"
 # Zengin telemetri: cihaz OS sürümü (ilk heartbeat'ten sonra dolar) — poll et.
 osv=""
 for _ in $(seq 1 40); do

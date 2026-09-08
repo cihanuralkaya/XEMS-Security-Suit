@@ -135,6 +135,31 @@ func (m *memStore) EventAcks(_ context.Context) (map[string]EventAck, error) {
 func (m *memStore) ListPendingWipes(_ context.Context) ([]PendingWipeRow, error) {
 	return nil, nil
 }
+func (m *memStore) QueryEvents(_ context.Context, f EventFilter) ([]EventRow, error) {
+	var out []EventRow
+	for _, e := range m.events {
+		if f.Severity != "" && e.Severity != f.Severity {
+			continue
+		}
+		if f.Category != "" && e.Category != f.Category {
+			continue
+		}
+		if f.DeviceID != "" && e.DeviceID != f.DeviceID {
+			continue
+		}
+		if f.MessageContains != "" && !strings.Contains(strings.ToLower(e.Message), strings.ToLower(f.MessageContains)) {
+			continue
+		}
+		if !f.Since.IsZero() && e.CreatedAt.Before(f.Since) {
+			continue
+		}
+		if !f.Until.IsZero() && e.CreatedAt.After(f.Until) {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out, nil
+}
 func (m *memStore) LatestSoftwareByDevice(_ context.Context) (map[string][]string, error) {
 	return m.latestSW, nil
 }

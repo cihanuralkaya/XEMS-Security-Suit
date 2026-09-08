@@ -724,6 +724,33 @@
           </div>
         </div>
 
+        <div class="card" data-view="security" data-span="2">
+          <div class="head"><h2>🔎 Retro-Hunt / Arama</h2>
+            <span class="sp"></span><span class="mono" style="color:var(--faint);font-size:11px">geçmiş olaylar</span></div>
+          <div class="body">
+            <p class="hint" style="margin:0 0 10px">Mevcut tespit kurallarını GEÇMİŞ olaylara uygula ("yeni göstergeyle eski olayları tara — zaten vurulduk mu?") ya da olay geçmişinde alan/zaman filtreli arama yap. Salt-okunur.</p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px">
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--faint)">Mod
+                <select id="hunt-mode" style="padding:6px 9px;font-size:12px">
+                  <option value="rules">Kurallarla tara (retro)</option>
+                  <option value="query">Alan araması</option>
+                </select>
+              </label>
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--faint);flex:1;min-width:200px">Mesaj içerir
+                <input id="hunt-msg" placeholder="ör. mimikatz (query modu)" style="width:100%;padding:6px 9px;font-size:12px">
+              </label>
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--faint)">Kategori
+                <input id="hunt-cat" list="rt-cats" placeholder="hepsi" style="width:150px;padding:6px 9px;font-size:12px">
+              </label>
+              <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--faint)">Önem
+                <input id="hunt-sev" placeholder="hepsi" style="width:110px;padding:6px 9px;font-size:12px">
+              </label>
+              <button class="btn sm" id="hunt-run" type="button">🔎 Tara</button>
+            </div>
+            <div id="hunt-result"></div>
+          </div>
+        </div>
+
         <div class="card" data-view="security">
           <div class="head"><h2>🧭 MITRE Taktik Dağılımı <span class="count" id="tac-count">0</span></h2>
             <span class="sp"></span><span class="mono" style="color:var(--faint);font-size:11px">son olaylardan</span></div>
@@ -1845,6 +1872,31 @@
         '<div class="tbl-wrap"><table><thead><tr><th>ID</th><th>Ad</th><th>Önem</th><th>Teknik</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
     }).catch(function(e){ out.innerHTML='<p class="hint" style="margin:0;color:var(--bad,#f43f5e)">Test başarısız: '+esc(e.message)+'</p>'; });
   }
+  // runHunt: retro-hunt / arama. "rules" modu mevcut tespit motorunu geçmiş
+  // olaylara uygular; "query" modu alan-filtreli arama yapar. Sonuçlar kullanıcı-
+  // görünür HTML olduğundan tüm alanlar esc()'ten geçer.
+  function runHunt(){
+    var mode=$("hunt-mode").value, out=$("hunt-result");
+    var body={mode:mode, message_contains:($("hunt-msg").value||"").trim(),
+      category:($("hunt-cat").value||"").trim(), severity:($("hunt-sev").value||"").trim(), limit:500};
+    out.innerHTML='<p class="hint" style="margin:0">Taranıyor…</p>';
+    api("/api/hunt","POST",body).then(function(r){
+      var hits=(r&&r.hits)||[], scanned=(r&&r.scanned)||0;
+      if(!hits.length){ out.innerHTML='<p class="hint" style="margin:0;color:var(--faint)">✓ '+scanned+' olay tarandı — eşleşme yok.</p>'; return; }
+      var rows=hits.map(function(h){
+        var e=h.event||{}, m=(h.matched||[]).join(", ");
+        return "<tr><td class='mono' style='font-size:11px'>"+esc(relTime(e.created_at||e.occurred_at||""))+"</td>"+
+          "<td>"+esc(deviceName(e.device_id||""))+"</td>"+
+          "<td><span class='sev "+esc(e.severity||"")+"'>"+esc(e.severity||"")+"</span></td>"+
+          "<td>"+esc(e.message||"")+"</td>"+
+          (mode==="rules"?("<td class='mono' style='color:var(--accent)'>"+esc(m)+"</td>"):"")+"</tr>";
+      }).join("");
+      var techHdr = mode==="rules" ? "<th>Eşleşen kural</th>" : "";
+      out.innerHTML='<p class="hint" style="margin:0 0 8px">⚡ '+hits.length+' isabet / '+scanned+' olay tarandı'+
+        (mode==="rules"?" (geçmiş olaylara mevcut kurallar uygulandı)":"")+':</p>'+
+        '<div class="tbl-wrap"><table><thead><tr><th>Zaman</th><th>Cihaz</th><th>Önem</th><th>Mesaj</th>'+techHdr+'</tr></thead><tbody>'+rows+'</tbody></table></div>';
+    }).catch(function(e){ out.innerHTML='<p class="hint" style="margin:0;color:var(--bad,#f43f5e)">Tarama başarısız: '+esc(e.message)+'</p>'; });
+  }
   // testEventAgainstRules: gerçek bir olayı Kural Test Aracı'na taşır — Güvenlik
   // görünümüne geçer, kategori/mesajı doldurur, testi çalıştırır ve aracı görünür
   // kılar. Olaylar akışını tespit motoruna bağlar (bu olay hangi kuralları tetikler?).
@@ -2306,6 +2358,7 @@
   };
   $("posture-csv").onclick=exportPosture;
   $("rt-run").onclick=testRule;
+  $("hunt-run").onclick=runHunt;
   $("evt-pending").onclick=function(){ state.pendingOnly=!state.pendingOnly; this.className="btn ghost sm"+(state.pendingOnly?" on":""); renderEvents(); };
   $("sw-run").onclick=searchSoftware;
   $("sw-q").addEventListener("keydown",function(ev){ if(ev.key==="Enter"){ ev.preventDefault(); searchSoftware(); } });

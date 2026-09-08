@@ -90,6 +90,9 @@ type PolicyRow struct {
 // Store, okuma sorgularının kalıcılık kaynağıdır.
 type Store interface {
 	ListDevices(ctx context.Context, limit int) ([]DeviceRow, error)
+	// QueryEvents, zaman-pencereli + alan-filtreli olay sorgusudur (retro-hunt /
+	// SIEM arama primitifi). Tüm alanlar opsiyonel; Since/Until sıfır ise sınırsız.
+	QueryEvents(ctx context.Context, f EventFilter) ([]EventRow, error)
 	// ListEvents, olayları en yeniden eskiye listeler. deviceID/severity/category
 	// boş ("") ise ilgili filtre uygulanmaz (opsiyonel sunucu-tarafı filtre).
 	ListEvents(ctx context.Context, deviceID, severity, category string, limit int) ([]EventRow, error)
@@ -515,6 +518,35 @@ func (s *Service) Summary(ctx context.Context) (SummaryDTO, error) {
 		DevicesByOS:         byOS,
 		Since:               since,
 	}, nil
+}
+
+// EventFilter, retro-hunt / SIEM arama için zaman-pencereli + alan-filtreli olay
+// sorgusunun ölçütleridir. Boş string / sıfır zaman = o alan filtrelenmez.
+type EventFilter struct {
+	DeviceID        string
+	Severity        string
+	Category        string
+	MessageContains string    // mesajda alt-dize (ILIKE); büyük/küçük harf duyarsız
+	Since           time.Time // olay >= Since (created_at)
+	Until           time.Time // olay <= Until
+	Limit           int
+}
+
+// QueryEvents, zaman-pencereli olay sorgusunu depoya devreder (retro-hunt/arama).
+func (s *Service) QueryEvents(ctx context.Context, f EventFilter) ([]EventDTO, error) {
+	f.Limit = clampLimit(f.Limit)
+	rows, err := s.store.QueryEvents(ctx, f)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]EventDTO, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, EventDTO{
+			ID: r.ID, DeviceID: r.DeviceID, Category: r.Category, Severity: r.Severity,
+			Message: r.Message, OccurredAt: r.OccurredAt, CreatedAt: r.CreatedAt, Details: r.Details,
+		})
+	}
+	return out, nil
 }
 
 // PendingWipeRow, ikinci-onay bekleyen bir WIPE talebidir (çift-kontrol görünümü).

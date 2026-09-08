@@ -15,6 +15,7 @@ import (
 
 	"xems.corp/suite/server/internal/admin"
 	"xems.corp/suite/server/internal/adminread"
+	"xems.corp/suite/server/internal/detect"
 	"xems.corp/suite/server/internal/eventbus"
 	"xems.corp/suite/server/internal/security"
 )
@@ -365,6 +366,22 @@ func (m *memStore) ListPendingWipes(_ context.Context) ([]adminread.PendingWipeR
 	var out []adminread.PendingWipeRow
 	for dev, rb := range m.pendWipes {
 		out = append(out, adminread.PendingWipeRow{DeviceID: dev, RequestedBy: rb})
+	}
+	return out, nil
+}
+func (m *memStore) QueryEvents(_ context.Context, f adminread.EventFilter) ([]adminread.EventRow, error) {
+	var out []adminread.EventRow
+	for _, e := range m.evtRows {
+		if f.Severity != "" && e.Severity != f.Severity {
+			continue
+		}
+		if f.Category != "" && e.Category != f.Category {
+			continue
+		}
+		if f.MessageContains != "" && !strings.Contains(strings.ToLower(e.Message), strings.ToLower(f.MessageContains)) {
+			continue
+		}
+		out = append(out, e)
 	}
 	return out, nil
 }
@@ -1168,5 +1185,66 @@ func TestArtifactCollectionHTTP(t *testing.T) {
 	}
 	if cd := dresp.Header.Get("Content-Disposition"); !strings.Contains(cd, "app.log") {
 		t.Fatalf("Content-Disposition dosya adı içermeli: %q", cd)
+	}
+}
+
+// Retro-hunt (#1): "rules" modu mevcut tespit motorunu GEÇMİŞ olaylara uygular
+// (yeni kuralla eski olayları tarama); "query" modu zaman/alan filtreli arama.
+func TestHuntHTTP(t *testing.T) {
+	srv, store := newServer(t)
+	// Özel tek-kurallı motor: "mimikatz" içeren SECURITY olayı eşleşsin.
+	srv.SetDetector(detect.NewEngine([]detect.Rule{{
+		ID: "HUNT-1", Name: "mimikatz", Category: "SECURITY",
+		Contains: []string{"mimikatz"}, Severity: "CRITICAL",
+	}}))
+	store.evtRows = []adminread.EventRow{
+		{ID: "e1", Category: "SECURITY", Severity: "HIGH", Message: "mimikatz.exe çalıştı", CreatedAt: time.Now()},
+		{ID: "e2", Category: "SYSTEM", Severity: "INFO", Message: "normal olay", CreatedAt: time.Now()},
+	}
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+	addAdmin(t, store, "ad1", "a@x", "secret", admin.RoleViewer)
+	_, lb := post(t, ts.URL+"/api/login", "", map[string]string{"email": "a@x", "password": "secret"})
+	tok := lb["token"]
+	if tok == "" {
+		t.Fatal("token alınamadı")
+	}
+
+	type huntResp struct {
+		Scanned int `json:"scanned"`
+		Hits    []struct {
+			Event struct {
+				ID string `json:"id"`
+			} `json:"event"`
+			Matched []string `json:"matched"`
+		} `json:"hits"`
+	}
+	hunt := func(body map[string]any) huntResp {
+		b, _ := json.Marshal(body)
+		req, _ := http.NewRequest("POST", ts.URL+"/api/hunt", bytes.NewReader(b))
+		req.Header.Set("Authorization", "Bearer "+tok)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var out huntResp
+		_ = json.NewDecoder(resp.Body).Decode(&out)
+		return out
+	}
+
+	// rules modu: motor 2 geçmiş olaya uygulanır; yalnız e1 (mimikatz) eşleşir.
+	r := hunt(map[string]any{"mode": "rules"})
+	if r.Scanned != 2 {
+		t.Fatalf("2 olay taranmalıydı: %d", r.Scanned)
+	}
+	if len(r.Hits) != 1 || r.Hits[0].Event.ID != "e1" || len(r.Hits[0].Matched) == 0 {
+		t.Fatalf("rules-hunt yalnız e1'i eşleştirmeliydi: %+v", r.Hits)
+	}
+	// query modu: message_contains "normal" → yalnız e2.
+	q := hunt(map[string]any{"mode": "query", "message_contains": "normal"})
+	if len(q.Hits) != 1 || q.Hits[0].Event.ID != "e2" {
+		t.Fatalf("query-hunt 'normal' → e2 eşleşmeliydi: %+v", q.Hits)
 	}
 }

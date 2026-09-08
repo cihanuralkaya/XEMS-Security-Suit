@@ -776,6 +776,47 @@ func (s *Store) ListDevices(_ context.Context, limit int) ([]adminread.DeviceRow
 	return out, nil
 }
 
+// QueryEvents, zaman-pencereli + alan-filtreli olay sorgusu (retro-hunt/arama).
+func (s *Store) QueryEvents(_ context.Context, f adminread.EventFilter) ([]adminread.EventRow, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	mc := strings.ToLower(f.MessageContains)
+	var out []adminread.EventRow
+	for i := len(s.events) - 1; i >= 0; i-- {
+		e := s.events[i]
+		if f.DeviceID != "" && e.deviceID != f.DeviceID {
+			continue
+		}
+		if f.Severity != "" && e.severity != f.Severity {
+			continue
+		}
+		if f.Category != "" && e.category != f.Category {
+			continue
+		}
+		if mc != "" && !strings.Contains(strings.ToLower(e.message), mc) {
+			continue
+		}
+		if !f.Since.IsZero() && e.createdAt.Before(f.Since) {
+			continue
+		}
+		if !f.Until.IsZero() && e.createdAt.After(f.Until) {
+			continue
+		}
+		var details []byte
+		if e.details != "" {
+			details = []byte(e.details)
+		}
+		out = append(out, adminread.EventRow{
+			ID: e.id, DeviceID: e.deviceID, Category: e.category, Severity: e.severity,
+			Message: e.message, OccurredAt: e.occurredAt, CreatedAt: e.createdAt, Details: details,
+		})
+		if f.Limit > 0 && len(out) >= f.Limit {
+			break
+		}
+	}
+	return out, nil
+}
+
 func (s *Store) ListEvents(_ context.Context, deviceID, severity, category string, limit int) ([]adminread.EventRow, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -46,6 +46,49 @@ func (s *Store) ListDevices(ctx context.Context, limit int) ([]adminread.DeviceR
 // ListEvents, olay loglarını (deviceID boşsa tümünü) en yeniden eskiye listeler.
 // severity ve category boş ("") değilse ilgili ENUM sütununa göre sunucu-tarafında
 // filtre uygulanır. details, ham JSON metni olarak okunur (yoksa nil).
+// QueryEvents, zaman-pencereli + alan-filtreli olay sorgusudur (retro-hunt / SIEM
+// arama). Tüm ölçütler opsiyonel; boş/sıfır alan filtrelemez. Mesaj araması ILIKE
+// (büyük/küçük harf duyarsız alt-dize).
+func (s *Store) QueryEvents(ctx context.Context, f adminread.EventFilter) ([]adminread.EventRow, error) {
+	const q = `
+		SELECT id::text, device_id::text, category::text, severity::text, message, occurred_at, created_at,
+		       COALESCE(details::text, '')
+		  FROM event_logs
+		 WHERE ($1 = '' OR device_id = NULLIF($1,'')::uuid)
+		   AND ($2 = '' OR severity = $2::severity)
+		   AND ($3 = '' OR category = $3::event_category)
+		   AND ($4 = '' OR message ILIKE '%' || $4 || '%')
+		   AND ($5::timestamptz IS NULL OR created_at >= $5)
+		   AND ($6::timestamptz IS NULL OR created_at <= $6)
+		 ORDER BY created_at DESC
+		 LIMIT $7`
+	var since, until *time.Time
+	if !f.Since.IsZero() {
+		since = &f.Since
+	}
+	if !f.Until.IsZero() {
+		until = &f.Until
+	}
+	rows, err := s.pool.Query(ctx, q, f.DeviceID, f.Severity, f.Category, f.MessageContains, since, until, f.Limit)
+	if err != nil {
+		return nil, fmt.Errorf("db: olay sorgusu: %w", err)
+	}
+	defer rows.Close()
+	var out []adminread.EventRow
+	for rows.Next() {
+		var e adminread.EventRow
+		var details string
+		if err := rows.Scan(&e.ID, &e.DeviceID, &e.Category, &e.Severity, &e.Message, &e.OccurredAt, &e.CreatedAt, &details); err != nil {
+			return nil, fmt.Errorf("db: olay sorgu okuma: %w", err)
+		}
+		if details != "" {
+			e.Details = []byte(details)
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) ListEvents(ctx context.Context, deviceID, severity, category string, limit int) ([]adminread.EventRow, error) {
 	const q = `
 		SELECT id::text, device_id::text, category::text, severity::text, message, occurred_at, created_at,

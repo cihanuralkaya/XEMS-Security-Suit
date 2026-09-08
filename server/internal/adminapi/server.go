@@ -194,6 +194,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/mitre/coverage", s.authed(s.handleMitreCoverage))
 	mux.HandleFunc("GET /api/detections/rules", s.authed(s.handleDetectionRules))
 	mux.HandleFunc("POST /api/detections/test", s.authed(s.handleTestDetection))
+	mux.HandleFunc("POST /api/hunt", s.authed(s.handleHunt))
 	mux.HandleFunc("GET /api/software", s.authed(s.handleSoftwareSearch))
 	mux.HandleFunc("GET /api/vulnerabilities", s.authed(s.handleVulnerabilities))
 	mux.HandleFunc("POST /api/events/{id}/ack", s.authed(s.handleAckEvent))
@@ -840,6 +841,71 @@ func (s *Server) handleTestDetection(w http.ResponseWriter, r *http.Request, _ s
 		"matches": matches,
 		"matched": len(matches),
 	})
+}
+
+// handleHunt, RETRO-HUNT / SIEM arama: geçmiş olaylar üzerinde çalışır. mode
+// "rules" ise mevcut tespit motoru geçmiş olaylara UYGULANIR ("yeni kuralla eski
+// olayları tarama" — bir gösterge sonradan öğrenildiğinde "zaten vurulduk mu?"),
+// "query" ise zaman-pencereli + alan-filtreli arama sonuçlarını döner. Salt-okunur.
+func (s *Server) handleHunt(w http.ResponseWriter, r *http.Request, _ string) {
+	var req struct {
+		Mode            string `json:"mode"` // "rules" | "query"
+		DeviceID        string `json:"device_id"`
+		Severity        string `json:"severity"`
+		Category        string `json:"category"`
+		MessageContains string `json:"message_contains"`
+		Since           string `json:"since"` // RFC3339, opsiyonel
+		Until           string `json:"until"`
+		Limit           int    `json:"limit"`
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	f := adminread.EventFilter{
+		DeviceID: req.DeviceID, Severity: req.Severity, Category: req.Category,
+		MessageContains: req.MessageContains, Limit: req.Limit,
+	}
+	if req.Since != "" {
+		if t, err := time.Parse(time.RFC3339, req.Since); err == nil {
+			f.Since = t
+		}
+	}
+	if req.Until != "" {
+		if t, err := time.Parse(time.RFC3339, req.Until); err == nil {
+			f.Until = t
+		}
+	}
+	events, err := s.reader.QueryEvents(r.Context(), f)
+	if respondErr(w, err) {
+		return
+	}
+	type hit struct {
+		Event   adminread.EventDTO `json:"event"`
+		Matched []string           `json:"matched,omitempty"`
+	}
+	hits := make([]hit, 0)
+	if req.Mode == "rules" {
+		eng := s.detector.Load()
+		for _, e := range events {
+			dets := eng.Evaluate(model.Event{
+				Category: e.Category, Severity: e.Severity, Message: e.Message,
+				Details: string(e.Details), OccurredAt: e.OccurredAt,
+			})
+			if len(dets) == 0 {
+				continue
+			}
+			ids := make([]string, 0, len(dets))
+			for _, d := range dets {
+				ids = append(ids, d.RuleID)
+			}
+			hits = append(hits, hit{Event: e, Matched: ids})
+		}
+	} else { // "query" (varsayılan): filtrelenmiş olayları döndür
+		for _, e := range events {
+			hits = append(hits, hit{Event: e})
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"mode": req.Mode, "scanned": len(events), "hits": hits})
 }
 
 // handleLockDevice, uzaktan ekran kilitleme komutu kuyruğa ekler (OPERATOR+).
