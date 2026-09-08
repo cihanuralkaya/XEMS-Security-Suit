@@ -197,6 +197,8 @@ curl -sk "$B/api/incidents" -H "Authorization: Bearer $TOK" | grep -q '"incident
 # Zamanlanmış/dışa aktarılabilir rapor (#7): duruş raporu HTML üretimi.
 curl -sk "$B/api/report" -H "Authorization: Bearer $TOK" | grep -q "XEMS Security Suite" \
   && pass "/api/report duruş raporu üretti" || fail "/api/report başarısız"
+curl -sk "$B/api/coverage" -H "Authorization: Bearer $TOK" | grep -q "coverage_pct" \
+  && pass "/api/coverage filo kapsamı döndü" || fail "/api/coverage başarısız"
 # Zengin telemetri: cihaz OS sürümü (ilk heartbeat'ten sonra dolar) — poll et.
 osv=""
 for _ in $(seq 1 40); do

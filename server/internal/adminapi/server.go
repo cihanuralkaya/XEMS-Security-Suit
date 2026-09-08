@@ -198,6 +198,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/hunt", s.authed(s.handleHunt))
 	mux.HandleFunc("GET /api/incidents", s.authed(s.handleIncidents))
 	mux.HandleFunc("GET /api/report", s.authed(s.handleReport))
+	mux.HandleFunc("GET /api/coverage", s.authed(s.handleCoverage))
 	mux.HandleFunc("GET /api/software", s.authed(s.handleSoftwareSearch))
 	mux.HandleFunc("GET /api/vulnerabilities", s.authed(s.handleVulnerabilities))
 	mux.HandleFunc("POST /api/events/{id}/ack", s.authed(s.handleAckEvent))
@@ -977,6 +978,15 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request, _ string) 
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write([]byte(html))
+}
+
+// handleCoverage, filo koruma-kapsamı + ajan sürüm-kayması ("kim korunuyor?").
+func (s *Server) handleCoverage(w http.ResponseWriter, r *http.Request, _ string) {
+	cov, err := s.reader.Coverage(r.Context())
+	if respondErr(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, cov)
 }
 
 // handleIncidents, korelasyonla gruplanmış olayları (incident) listeler (salt-okunur).

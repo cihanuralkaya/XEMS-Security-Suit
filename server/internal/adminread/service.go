@@ -522,6 +522,45 @@ func (s *Service) Summary(ctx context.Context) (SummaryDTO, error) {
 	}, nil
 }
 
+// CoverageDTO, filo koruma-kapsamı ve ajan sürüm-kaymasıdır ("kim korunuyor?").
+type CoverageDTO struct {
+	Total          int            `json:"total"`
+	Online         int            `json:"online"`       // son onlineWindow içinde görülen
+	Stale          int            `json:"stale"`        // çevrimiçi olmayan (sessiz/çevrimdışı)
+	CoveragePct    int            `json:"coverage_pct"` // online*100/total
+	ByAgentVersion map[string]int `json:"by_agent_version"`
+	VersionCount   int            `json:"version_count"` // farklı ajan sürümü sayısı (kayma göstergesi)
+}
+
+// Coverage, "kim korunuyor?" görünümünü hesaplar: çevrimiçi kapsam yüzdesi ve ajan
+// sürüm dağılımı (sürüm-kayması). Sessiz/eski ajanlar EDR dağıtımının gerçek boşluğudur.
+func (s *Service) Coverage(ctx context.Context) (CoverageDTO, error) {
+	rows, err := s.store.ListDevices(ctx, 0)
+	if err != nil {
+		return CoverageDTO{}, err
+	}
+	now := time.Now()
+	cov := CoverageDTO{ByAgentVersion: map[string]int{}}
+	for _, r := range rows {
+		cov.Total++
+		if now.Sub(r.LastSeen) < onlineWindow {
+			cov.Online++
+		} else {
+			cov.Stale++
+		}
+		ver := r.AgentVersion
+		if ver == "" {
+			ver = "(bilinmiyor)"
+		}
+		cov.ByAgentVersion[ver]++
+	}
+	cov.VersionCount = len(cov.ByAgentVersion)
+	if cov.Total > 0 {
+		cov.CoveragePct = cov.Online * 100 / cov.Total
+	}
+	return cov, nil
+}
+
 // IncidentRow, korelasyonla gruplanmış bir olaydır (incident); ilişkili tespitler
 // tek satırda katlanır (sayaç + son-görülme).
 type IncidentRow struct {

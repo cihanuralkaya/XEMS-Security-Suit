@@ -397,6 +397,17 @@
     </div>
 
     <div class="card" data-view="overview">
+      <div class="head"><h2>🛰️ Filo Kapsamı <span class="count" id="cov-pct">—</span></h2>
+        <span class="sp"></span><span class="mono" style="color:var(--faint);font-size:11px">kim korunuyor?</span></div>
+      <div class="body">
+        <p class="hint" style="margin:0 0 8px">Çevrimiçi (korunan) oran ve ajan sürüm dağılımı (sürüm-kayması). Sessiz/eski ajanlar gerçek dağıtım boşluğudur.</p>
+        <div id="cov-summary" style="margin-bottom:8px"></div>
+        <div class="lbl" style="margin:6px 0 4px">Ajan sürüm dağılımı</div>
+        <div id="cov-versions" style="display:flex;flex-direction:column;gap:5px"></div>
+      </div>
+    </div>
+
+    <div class="card" data-view="overview">
       <div class="head"><h2>🔥 En Çok Olay Üreten Cihazlar <span class="count" id="topdev-count">0</span></h2>
         <span class="sp"></span><span class="mono" style="color:var(--faint);font-size:11px">son olaylardan · triyaj</span></div>
       <div class="body">
@@ -1602,7 +1613,7 @@
       state.policies = (r[6] && r[6].policies) || [];
       renderStats(); renderSeverity(); renderOSInventory(); renderTopDevices(); renderComplianceCard(); renderTactics(); renderDevices(); renderEvents(); renderAudit();
       renderTokens(); renderAdmins(); renderPolicies(); setLive(true);
-      loadActivity(); loadPendingWipes(); loadIncidents();
+      loadActivity(); loadPendingWipes(); loadIncidents(); loadCoverage();
       if(state.sel) loadDetail(state.sel);
     }).catch(function(e){ setLive(false); });
   }
@@ -1885,6 +1896,27 @@
       out.innerHTML='<p class="hint" style="margin:0 0 8px">⚡ '+m.length+' kural tetiklenir:</p>'+
         '<div class="tbl-wrap"><table><thead><tr><th>ID</th><th>Ad</th><th>Önem</th><th>Teknik</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
     }).catch(function(e){ out.innerHTML='<p class="hint" style="margin:0;color:var(--bad,#f43f5e)">Test başarısız: '+esc(e.message)+'</p>'; });
+  }
+  // loadCoverage: filo koruma-kapsamı + ajan sürüm dağılımı ("kim korunuyor?").
+  // Sonuç kullanıcı-görünür HTML olduğundan sürüm adları esc()'ten geçer.
+  function loadCoverage(){
+    var sum=$("cov-summary"), vers=$("cov-versions"), pctEl=$("cov-pct"); if(!sum) return;
+    return api("/api/coverage").then(function(c){
+      var pct=c.coverage_pct||0, total=c.total||0;
+      if(pctEl) pctEl.textContent="%"+pct;
+      var col = pct>=90?"var(--ok,#10b981)":(pct>=70?"var(--warn)":"var(--crit)");
+      sum.innerHTML="<span style='font-size:22px;font-weight:700;color:"+col+"'>%"+pct+"</span> kapsam · "+
+        "<b>"+(c.online||0)+"</b> çevrimiçi · <b>"+(c.stale||0)+"</b> sessiz/eski · "+total+" toplam · "+
+        "<b>"+(c.version_count||0)+"</b> farklı sürüm";
+      var bv=c.by_agent_version||{}, keys=Object.keys(bv).sort(function(a,b){return bv[b]-bv[a];});
+      vers.innerHTML = keys.length ? keys.map(function(k){
+        var n=bv[k], w=total?Math.round(n*100/total):0;
+        return "<div style='display:flex;align-items:center;gap:8px;font-size:12px'>"+
+          "<span class='mono' style='min-width:110px'>"+esc(k)+"</span>"+
+          "<span style='flex:1;height:8px;background:var(--line);border-radius:4px;overflow:hidden'><span style='display:block;height:100%;width:"+w+"%;background:var(--accent)'></span></span>"+
+          "<span class='mono' style='color:var(--muted)'>"+n+"</span></div>";
+      }).join("") : "<span class='hint'>veri yok</span>";
+    }).catch(function(){ if(pctEl) pctEl.textContent="—"; });
   }
   // loadIncidents: korelasyonla gruplanmış olayları (incident) yükler. Sonuç
   // kullanıcı-görünür HTML olduğundan tüm alanlar esc()'ten geçer.
