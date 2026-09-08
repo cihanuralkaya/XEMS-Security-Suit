@@ -108,9 +108,9 @@ type AgentHandler struct {
 	admin     AdminNotifier
 	alerter   notify.Notifier
 	responder AutoResponder
-	detector  *detect.Engine
-	iocSet    atomic.Pointer[ioc.Set] // tehdit istihbaratı göstergeleri (nil = kapalı; canlı hot-reload için atomik)
-	artifacts ArtifactSink            // adli/IR dosya toplama deposu
+	detector  atomic.Pointer[detect.Engine] // tespit motoru (canlı hot-reload için atomik)
+	iocSet    atomic.Pointer[ioc.Set]       // tehdit istihbaratı göstergeleri (nil = kapalı; canlı hot-reload için atomik)
+	artifacts ArtifactSink                  // adli/IR dosya toplama deposu
 	now       func() time.Time
 }
 
@@ -167,13 +167,14 @@ func (h *AgentHandler) UploadArtifact(ctx context.Context, req *xdrv1.UploadArti
 // (yeniden başlatmadan) güncellenebilir — hot-reload.
 func (h *AgentHandler) SetIoCSet(s *ioc.Set) { h.iocSet.Store(s) }
 
-// SetDetector, sunucu-taraflı tespit kural motorunu ayarlar. nil ise yerleşik
-// varsayılan kural seti kullanılır.
+// SetDetector, sunucu-taraflı tespit kural motorunu ayarlar/günceller. nil ise
+// yerleşik varsayılan kural seti kullanılır. Atomik saklama sayesinde ingest
+// yolu eşzamanlı değerlendirirken canlı (yeniden başlatmadan) güncellenebilir.
 func (h *AgentHandler) SetDetector(e *detect.Engine) {
 	if e == nil {
 		e = detect.NewEngine(nil)
 	}
-	h.detector = e
+	h.detector.Store(e)
 }
 
 // SetAlerter, yüksek önem düzeyli olaylarda dış uyarı (webhook) gönderimini
@@ -208,7 +209,9 @@ func NewAgentHandler(devices DeviceRegistry, events EventSink, policies PolicyPr
 	if notifier == nil {
 		notifier = noopNotifier{}
 	}
-	return &AgentHandler{devices: devices, events: events, policies: policies, updates: updates, notifier: notifier, admin: noopAdminNotifier{}, alerter: noopAlerter{}, responder: noopResponder{}, detector: detect.NewEngine(nil), artifacts: noopArtifactSink{}, now: time.Now}
+	h := &AgentHandler{devices: devices, events: events, policies: policies, updates: updates, notifier: notifier, admin: noopAdminNotifier{}, alerter: noopAlerter{}, responder: noopResponder{}, artifacts: noopArtifactSink{}, now: time.Now}
+	h.detector.Store(detect.NewEngine(nil)) // atomik alan literal'de saklanamaz; kurulumda varsayılan
+	return h
 }
 
 // Heartbeat, yaşam sinyalini işler. Yanıt SUNUCU SAATİNİ taşır — ajan, politika
@@ -283,7 +286,7 @@ func (h *AgentHandler) ReportEvents(stream xdrv1.AgentService_ReportEventsServer
 			// düzeyli + MITRE bağlamlı uyarı üret (ham olayın yerine geçer). Eşleşme
 			// yoksa jenerik yol: ham önem düzeyi + MITRE sınıflandırması. Uyarı
 			// best-effort; eşik/filtre notifier içinde. noop notifier'da maliyetsiz.
-			if dets := h.detector.Evaluate(e); len(dets) > 0 {
+			if dets := h.detector.Load().Evaluate(e); len(dets) > 0 { // atomik Load: hot-reload ile yarışsız
 				metrics.AddDetections(len(dets))
 				for _, d := range dets {
 					metrics.IncAlertRaised()

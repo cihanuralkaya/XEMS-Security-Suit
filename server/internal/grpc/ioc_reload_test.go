@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"xdr.corp/suite/server/internal/detect"
 	"xdr.corp/suite/server/internal/ioc"
 )
 
@@ -42,5 +43,23 @@ func TestIoCSetHotSwap(t *testing.T) {
 	}
 	if _, _, ok := cur.Match(map[string]any{"ip": "1.2.3.4"}, ""); ok {
 		t.Fatal("hot-swap sonrası eski gösterge (1.2.3.4) EŞLEŞMEMELİYDİ")
+	}
+}
+
+// SetDetector, ingest yolunun kullandığı tespit motorunu CANLI (yeniden
+// başlatmadan) değiştirmeli — detektör hot-reload semantiği. Atomik Load/Store
+// sayesinde eşzamanlı değerlendirme ile yarışsız.
+func TestDetectorHotSwap(t *testing.T) {
+	h := &AgentHandler{}
+	h.SetDetector(nil) // yerleşik varsayılan kurallar (Store içerir)
+	if def := len(h.detector.Load().Rules()); def == 0 {
+		t.Fatal("varsayılan kural seti boş olmamalı")
+	}
+	// Tek özel kurallı motora hot-swap: ingest artık yalnız bunu görmeli.
+	custom := detect.NewEngine([]detect.Rule{{ID: "X-HOT", Name: "hot", Severity: "HIGH"}})
+	h.SetDetector(custom)
+	rules := h.detector.Load().Rules()
+	if len(rules) != 1 || rules[0].ID != "X-HOT" {
+		t.Fatalf("hot-swap sonrası tek özel kural (X-HOT) beklendi: %+v", rules)
 	}
 }

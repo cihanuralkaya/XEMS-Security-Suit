@@ -348,6 +348,43 @@ func run() error {
 	metrics.SetBuildVersion(os.Getenv("XDR_BUILD_VERSION"))
 	adminAPI.SetMetricsToken(os.Getenv("XDR_METRICS_TOKEN"))
 	adminAPI.SetDetector(detector) // tespit kural kataloğu (ingest ile aynı motor)
+
+	// Tespit kuralları canlı hot-reload: XDR_DETECT_RELOAD_INTERVAL ayarlıysa (ör.
+	// 5m) ve özel kural dosyası varsa, dosya periyodik yeniden okunur ve motor
+	// SUNUCU YENİDEN BAŞLATILMADAN güncellenir (SOC kural ince ayarını anında
+	// dağıtır). Her iki tüketici de (ingest değerlendirmesi + konsol kataloğu)
+	// atomik güncellenir. Okuma hatasında eski motor korunur (best-effort).
+	if rf := os.Getenv("XDR_DETECT_RULES_FILE"); rf != "" {
+		if d, derr := time.ParseDuration(os.Getenv("XDR_DETECT_RELOAD_INTERVAL")); derr == nil && d > 0 {
+			startRules := len(detectRules)
+			go func() {
+				t := time.NewTicker(d)
+				defer t.Stop()
+				prev := startRules
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case <-t.C:
+					}
+					custom, e := detect.LoadRulesFile(rf)
+					if e != nil {
+						log.Printf("[detect] kural yeniden yükleme başarısız (eski korunuyor): %v", e)
+						continue
+					}
+					rules := append(detect.DefaultRules(), custom...)
+					eng := detect.NewEngine(rules)
+					agentHandler.SetDetector(eng) // atomik hot-swap (ingest yarışsız)
+					adminAPI.SetDetector(eng)     // konsol kataloğu da güncel kalır
+					if n := len(rules); n != prev {
+						log.Printf("[detect] kurallar yeniden yüklendi: %d (önceki %d)", n, prev)
+						prev = n
+					}
+				}
+			}()
+			log.Printf("tespit motoru: canlı yeniden yükleme her %s", d)
+		}
+	}
 	// Zafiyet eşleştirme (#5): XDR_VULN_FILE ayarlıysa CVE/KB veri kümesi yüklenir
 	// ve yazılım envanteriyle eşleştirilir (/api/vulnerabilities).
 	vulnCount := 0

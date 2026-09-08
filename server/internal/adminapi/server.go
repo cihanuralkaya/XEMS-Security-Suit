@@ -56,10 +56,10 @@ type Server struct {
 	dummyHash    string // SEC-004: bilinmeyen e-postada sabit-zaman için sahte Argon2 hash
 	sseConns     int64  // SEC-007: aktif SSE bağlantı sayısı (atomik)
 	auditVerify  func(context.Context) error
-	metricsToken string         // ayarlıysa /metrics bu Bearer token ile açılır; boşsa uç kapalı
-	detector     *detect.Engine // tespit kural kataloğu (görünürlük ucu)
-	vulnSet      *vuln.Set      // zafiyet veri kümesi (nil = kapalı); envanterle eşleşir
-	features     map[string]any // dağıtım koruma-duruşu (opsiyonel özellik bayrakları)
+	metricsToken string                        // ayarlıysa /metrics bu Bearer token ile açılır; boşsa uç kapalı
+	detector     atomic.Pointer[detect.Engine] // tespit kural kataloğu (görünürlük ucu; canlı hot-reload için atomik)
+	vulnSet      *vuln.Set                     // zafiyet veri kümesi (nil = kapalı); envanterle eşleşir
+	features     map[string]any                // dağıtım koruma-duruşu (opsiyonel özellik bayrakları)
 }
 
 // SetDetector, tespit kural motorunu bağlar (kural kataloğu ucu için). nil ise
@@ -68,7 +68,7 @@ func (s *Server) SetDetector(e *detect.Engine) {
 	if e == nil {
 		e = detect.NewEngine(nil)
 	}
-	s.detector = e
+	s.detector.Store(e)
 }
 
 // SetFeatures, dağıtımın hangi opsiyonel korumalarının etkin olduğunu bildirir
@@ -105,14 +105,15 @@ func New(adminSvc *admin.Service, reader *adminread.Service, auth AuthStore, ses
 	dummy := make([]byte, 16)
 	_, _ = rand.Read(dummy)
 	dummyHash, _ := security.HashPassword(string(dummy))
-	return &Server{
+	s := &Server{
 		adminSvc: adminSvc, reader: reader, auth: auth, sessions: sessions, ttl: ttl,
 		now:       time.Now,
 		loginLim:  newLoginLimiter(5, 15*time.Minute),
 		notice:    defaultPrivacyNotice,
 		dummyHash: dummyHash,
-		detector:  detect.NewEngine(nil),
 	}
+	s.detector.Store(detect.NewEngine(nil)) // atomik alan literal'de saklanamaz; kurulumda varsayılan
+	return s
 }
 
 // SetPrivacyNotice, KVKK aydınlatma metnini ayarlar (boş verilirse varsayılan
@@ -815,7 +816,7 @@ func (s *Server) handleMitreCoverage(w http.ResponseWriter, _ *http.Request, _ s
 // handleDetectionRules, devrede olan sunucu-taraflı tespit kurallarını (katalog)
 // döner. Konsol bunu "hangi tespitler etkin" görünümünde kullanır.
 func (s *Server) handleDetectionRules(w http.ResponseWriter, _ *http.Request, _ string) {
-	writeJSON(w, http.StatusOK, map[string]any{"rules": s.detector.Rules()})
+	writeJSON(w, http.StatusOK, map[string]any{"rules": s.detector.Load().Rules()})
 }
 
 // handleTestDetection, örnek bir olayı (kategori + mesaj) tespit motorundan
@@ -831,7 +832,7 @@ func (s *Server) handleTestDetection(w http.ResponseWriter, r *http.Request, _ s
 	if !decode(w, r, &req) {
 		return
 	}
-	matches := s.detector.Evaluate(model.Event{Category: req.Category, Message: req.Message})
+	matches := s.detector.Load().Evaluate(model.Event{Category: req.Category, Message: req.Message})
 	writeJSON(w, http.StatusOK, map[string]any{
 		"matches": matches,
 		"matched": len(matches),
@@ -1013,7 +1014,7 @@ func (s *Server) handleFeatures(w http.ResponseWriter, r *http.Request, adminID 
 	for k, v := range s.features {
 		out[k] = v
 	}
-	out["detection_rules"] = len(s.detector.Rules())
+	out["detection_rules"] = len(s.detector.Load().Rules())
 	out["metrics_enabled"] = s.metricsToken != ""
 	writeJSON(w, http.StatusOK, map[string]any{"features": out})
 }
