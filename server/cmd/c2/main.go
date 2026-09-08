@@ -272,6 +272,36 @@ func run() error {
 		agentHandler.SetIoCSet(set)
 		iocCount = set.Size()
 		log.Printf("tehdit istihbaratı: %d IoC göstergesi yüklendi", iocCount)
+
+		// Canlı hot-reload: XDR_IOC_RELOAD_INTERVAL ayarlıysa (ör. 5m) IoC dosyası
+		// periyodik yeniden okunur ve göstergeler SUNUCU YENİDEN BAŞLATILMADAN
+		// güncellenir (SOC yeni göstergeleri anında dağıtabilir). Okuma hatasında
+		// eski küme korunur (best-effort). Boş/0/geçersiz = kapalı (mevcut davranış).
+		if d, derr := time.ParseDuration(os.Getenv("XDR_IOC_RELOAD_INTERVAL")); derr == nil && d > 0 {
+			go func() {
+				t := time.NewTicker(d)
+				defer t.Stop()
+				prev := set.Size()
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case <-t.C:
+					}
+					ns, e := ioc.LoadFile(iocPath)
+					if e != nil {
+						log.Printf("[ioc] yeniden yükleme başarısız (eski küme korunuyor): %v", e)
+						continue
+					}
+					agentHandler.SetIoCSet(ns) // atomik hot-swap (ingest yoluyla yarışsız)
+					if n := ns.Size(); n != prev {
+						log.Printf("[ioc] göstergeler yeniden yüklendi: %d (önceki %d)", n, prev)
+						prev = n
+					}
+				}
+			}()
+			log.Printf("tehdit istihbaratı: canlı yeniden yükleme her %s", d)
+		}
 	}
 
 	// Otomatik müdahale (SOAR): XDR_AUTO_RESPONSE=1 ise kritik güvenlik olayında

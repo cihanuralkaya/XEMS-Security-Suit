@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"io"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -108,8 +109,8 @@ type AgentHandler struct {
 	alerter   notify.Notifier
 	responder AutoResponder
 	detector  *detect.Engine
-	iocSet    *ioc.Set     // tehdit istihbaratı göstergeleri (nil = kapalı)
-	artifacts ArtifactSink // adli/IR dosya toplama deposu
+	iocSet    atomic.Pointer[ioc.Set] // tehdit istihbaratı göstergeleri (nil = kapalı; canlı hot-reload için atomik)
+	artifacts ArtifactSink            // adli/IR dosya toplama deposu
 	now       func() time.Time
 }
 
@@ -161,8 +162,10 @@ func (h *AgentHandler) UploadArtifact(ctx context.Context, req *xdrv1.UploadArti
 	return &xdrv1.UploadArtifactResponse{Ok: true}, nil
 }
 
-// SetIoCSet, tehdit istihbaratı (IoC) eşleştirmesini etkinleştirir. nil ise kapalı.
-func (h *AgentHandler) SetIoCSet(s *ioc.Set) { h.iocSet = s }
+// SetIoCSet, tehdit istihbaratı (IoC) eşleştirmesini etkinleştirir/günceller. nil
+// ise kapalı. Atomik saklama sayesinde ingest yolu eşzamanlı okurken canlı olarak
+// (yeniden başlatmadan) güncellenebilir — hot-reload.
+func (h *AgentHandler) SetIoCSet(s *ioc.Set) { h.iocSet.Store(s) }
 
 // SetDetector, sunucu-taraflı tespit kural motorunu ayarlar. nil ise yerleşik
 // varsayılan kural seti kullanılır.
@@ -311,12 +314,13 @@ func (h *AgentHandler) ReportEvents(stream xdrv1.AgentService_ReportEventsServer
 			}
 			// Tehdit istihbaratı (IoC): olayın yapısal Details'i (ip/mac/process) veya
 			// mesajı bilinen-kötü bir göstergeyle eşleşirse KRİTİK uyarı (yüksek-güven).
-			if h.iocSet.Size() > 0 {
+			// Atomik Load: eşzamanlı hot-reload (SetIoCSet) ile yarışsız.
+			if iocSet := h.iocSet.Load(); iocSet.Size() > 0 {
 				var dm map[string]any
 				if e.Details != "" {
 					_ = json.Unmarshal([]byte(e.Details), &dm)
 				}
-				if lbl, ind, ok := h.iocSet.Match(dm, e.Message); ok {
+				if lbl, ind, ok := iocSet.Match(dm, e.Message); ok {
 					metrics.IncIocHit()
 					metrics.IncAlertRaised()
 					h.alerter.Notify(notify.Alert{
