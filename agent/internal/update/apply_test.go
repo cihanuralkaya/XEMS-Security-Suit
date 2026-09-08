@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"xdr.corp/suite/otawire"
+	"xems.corp/suite/otawire"
 )
 
 // payloadServer, sabit bir payload sunan test HTTPS sunucusu (SEC-012: indirici

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"xdr.corp/suite/scriptwire"
+	"xems.corp/suite/scriptwire"
 )
 
 // shell, OS'e uygun yorumlayıcı ve zararsız komut gövdeleri döner.

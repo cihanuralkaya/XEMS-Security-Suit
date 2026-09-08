@@ -1,6 +1,6 @@
 // Command anomalytrain, etiketli öznitelik verisinden (CSV) ajan için bir
 // lojistik anomali modeli eğitir ve anomaly.ModelScorer'ın yüklediği JSON
-// formatına yazar. Böylece "eğit → JSON → ajan (XDR_ANOMALY_MODEL)" hattı
+// formatına yazar. Böylece "eğit → JSON → ajan (XEMS_ANOMALY_MODEL)" hattı
 // tamamlanır.
 //
 // CSV: her satır  f1,f2,...,fn,label   (label 0=normal, 1=anomali). İlk satır
@@ -69,7 +69,7 @@ func main() {
 			fmt.Fprintf(os.Stderr, "anomalytrain: imzalama: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Printf("imza yazıldı: %s.sig (ajanda XDR_ANOMALY_PUBKEY ile doğrulanır)\n", *out)
+		fmt.Printf("imza yazıldı: %s.sig (ajanda XEMS_ANOMALY_PUBKEY ile doğrulanır)\n", *out)
 	}
 }
 
@@ -86,7 +86,7 @@ func doGenkey(keyPath string) {
 		os.Exit(1)
 	}
 	fmt.Printf("özel anahtar: %s (gizli tut)\n", keyPath)
-	fmt.Printf("Ajanlara verilecek public key:\n  XDR_ANOMALY_PUBKEY=%s\n", base64.StdEncoding.EncodeToString(pub))
+	fmt.Printf("Ajanlara verilecek public key:\n  XEMS_ANOMALY_PUBKEY=%s\n", base64.StdEncoding.EncodeToString(pub))
 }
 
 // signModel, model baytlarını Ed25519 ile imzalar ve <out>.sig'e base64 yazar.

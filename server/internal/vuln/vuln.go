@@ -1,6 +1,6 @@
 // Package vuln, yüklü yazılım envanterini bilinen zafiyet (CVE/KB) veri kümesiyle
 // eşleştirir. Veri kümesi operatör tarafından JSON dosyasından yüklenir
-// (XDR_VULN_FILE); IoC feed'iyle aynı desen. Bağımlılıksız (yalnız stdlib).
+// (XEMS_VULN_FILE); IoC feed'iyle aynı desen. Bağımlılıksız (yalnız stdlib).
 package vuln
 
 import (

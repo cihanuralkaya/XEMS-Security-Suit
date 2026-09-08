@@ -4,7 +4,7 @@
 //
 //	go run ./tools/otasign -genkey -out ./ota-keys
 //	  -> ota_ed25519.key (özel, gizli) ve public key'i base64 basar.
-//	     Public key ajanlara XDR_UPDATE_PUBKEY olarak gömülür.
+//	     Public key ajanlara XEMS_UPDATE_PUBKEY olarak gömülür.
 //
 // Sürüm imzalama:
 //
@@ -27,7 +27,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"xdr.corp/suite/otawire"
+	"xems.corp/suite/otawire"
 )
 
 func main() {
@@ -66,7 +66,7 @@ func doGenKey(outDir string) error {
 		return err
 	}
 	fmt.Printf("Özel anahtar yazıldı: %s (GİZLİ TUT)\n", keyFile)
-	fmt.Printf("Ajanlara gömülecek public key:\n  XDR_UPDATE_PUBKEY=%s\n", base64.StdEncoding.EncodeToString(pub))
+	fmt.Printf("Ajanlara gömülecek public key:\n  XEMS_UPDATE_PUBKEY=%s\n", base64.StdEncoding.EncodeToString(pub))
 	return nil
 }
 

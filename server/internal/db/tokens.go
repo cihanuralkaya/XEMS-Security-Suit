@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"xdr.corp/suite/server/internal/adminread"
+	"xems.corp/suite/server/internal/adminread"
 )
 
 // ListEnrollmentTokens, enrollment token'ların meta verisini en yeniden eskiye

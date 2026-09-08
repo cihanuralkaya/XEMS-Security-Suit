@@ -49,7 +49,7 @@ func cefEscapeExt(s string) string {
 
 // formatCEF, bir uyarıyı CEF satırı olarak biçimlendirir.
 //
-//	CEF:0|XDR|Suite|<ver>|<signatureID>|<name>|<sev>|<extension>
+//	CEF:0|XEMS|Suite|<ver>|<signatureID>|<name>|<sev>|<extension>
 func formatCEF(a Alert, product, version string) string {
 	ext := "deviceExternalId=" + cefEscapeExt(a.DeviceID) +
 		" cat=" + cefEscapeExt(a.Category) +
@@ -60,14 +60,14 @@ func formatCEF(a Alert, product, version string) string {
 	if a.Tactic != "" {
 		ext += " cs2Label=MitreTactic cs2=" + cefEscapeExt(a.Tactic)
 	}
-	return fmt.Sprintf("CEF:0|XDR|%s|%s|%s|%s|%d|%s",
+	return fmt.Sprintf("CEF:0|XEMS|%s|%s|%s|%s|%d|%s",
 		cefEscapeHeader(product), cefEscapeHeader(version),
 		cefEscapeHeader(a.Category), cefEscapeHeader(a.Message), sevToCEF(a.Severity), ext)
 }
 
 // formatLEEF, bir uyarıyı LEEF 2.0 satırı olarak biçimlendirir (tab ayraçlı).
 //
-//	LEEF:2.0|XDR|Suite|<ver>|<eventID>|<attrs>
+//	LEEF:2.0|XEMS|Suite|<ver>|<eventID>|<attrs>
 func formatLEEF(a Alert, product, version string) string {
 	attrs := "devTime=" + a.OccurredAt.Format(time.RFC3339) +
 		"\tsev=" + fmt.Sprintf("%d", sevToCEF(a.Severity)) +
@@ -77,7 +77,7 @@ func formatLEEF(a Alert, product, version string) string {
 	if a.TechniqueID != "" {
 		attrs += "\tmitreTechnique=" + a.TechniqueID
 	}
-	return fmt.Sprintf("LEEF:2.0|XDR|%s|%s|%s|%s", product, version, a.Category, attrs)
+	return fmt.Sprintf("LEEF:2.0|XEMS|%s|%s|%s|%s", product, version, a.Category, attrs)
 }
 
 // syslogPriority, RFC 3164 <PRI> öneki (facility local0=16, önem düzeyine göre).
@@ -161,7 +161,7 @@ func (n *SyslogNotifier) send(a Alert) {
 		body = formatCEF(a, n.product, n.version)
 	}
 	// RFC 3164 syslog: <PRI>Mmm dd hh:mm:ss host tag: msg
-	line := fmt.Sprintf("<%d>%s %s XDR: %s", syslogPriority(a.Severity),
+	line := fmt.Sprintf("<%d>%s %s XEMS: %s", syslogPriority(a.Severity),
 		time.Now().Format("Jan _2 15:04:05"), n.host, body)
 	conn, err := net.DialTimeout(n.proto, n.addr, httpTimeout)
 	if err != nil {

@@ -26,7 +26,7 @@ KVKK (ve muadili GDPR) gereklilikleri tasarıma baştan girer.
 
 - [ ] Çalışan bilgilendirme metni / aydınlatma metni şablonu.
 - [x] Saklama süresini otomatik uygulayan partition DROP görevi —
-      `server/internal/retention` (C2'de günlük çalışır; `XDR_RETENTION_DAYS`,
+      `server/internal/retention` (C2'de günlük çalışır; `XEMS_RETENTION_DAYS`,
       varsayılan 90 gün). Dolan `event_logs` aylık partition'ları düşürülür,
       gelecek aylar önceden oluşturulur.
 - [ ] Veri sahibi başvuru (erişim/silme) süreçlerinin operasyonel karşılığı.
@@ -60,7 +60,7 @@ counterpart) are built into the design from the start.
 
 - [ ] Employee notice / privacy-notice text template.
 - [x] Partition-DROP job that automatically enforces the retention period -
-      `server/internal/retention` (runs daily in C2; `XDR_RETENTION_DAYS`, default 90
+      `server/internal/retention` (runs daily in C2; `XEMS_RETENTION_DAYS`, default 90
       days). Elapsed monthly `event_logs` partitions are dropped and future months are
       pre-created.
 - [ ] Operational counterpart of data-subject request (access/erasure) processes.

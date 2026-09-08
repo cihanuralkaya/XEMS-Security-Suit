@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"xdr.corp/suite/agent/internal/transport"
+	"xems.corp/suite/agent/internal/transport"
 )
 
 // identity, ajanın kalıcı kimliğidir (mTLS için).
@@ -32,10 +32,10 @@ func ensureEnrolled(ctx context.Context, cfg envConfig) (*identity, error) {
 
 	// Enroll gerekli.
 	if cfg.token == "" {
-		return nil, fmt.Errorf("kayıtlı kimlik yok ve XDR_ENROLL_TOKEN verilmedi")
+		return nil, fmt.Errorf("kayıtlı kimlik yok ve XEMS_ENROLL_TOKEN verilmedi")
 	}
 	if cfg.caPath == "" {
-		return nil, fmt.Errorf("XDR_CA_PEM (güven çıpası CA) verilmedi")
+		return nil, fmt.Errorf("XEMS_CA_PEM (güven çıpası CA) verilmedi")
 	}
 	embeddedCA, err := os.ReadFile(cfg.caPath)
 	if err != nil {

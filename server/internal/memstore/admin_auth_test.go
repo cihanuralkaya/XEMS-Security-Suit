@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"xdr.corp/suite/server/internal/admin"
+	"xems.corp/suite/server/internal/admin"
 )
 
 // Pasifleştirilen yönetici artık LookupAdmin ile çözülmemeli (giriş yapamaz).

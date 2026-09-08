@@ -17,7 +17,7 @@ func sampleAlert() Alert {
 
 func TestFormatCEF(t *testing.T) {
 	s := formatCEF(sampleAlert(), "Suite", "1.2.3")
-	if !strings.HasPrefix(s, "CEF:0|XDR|Suite|1.2.3|SECURITY|") {
+	if !strings.HasPrefix(s, "CEF:0|XEMS|Suite|1.2.3|SECURITY|") {
 		t.Fatalf("CEF başlığı hatalı: %q", s)
 	}
 	// | başlıkta kaçırılmalı (mesajdaki | → \|).
@@ -44,7 +44,7 @@ func TestFormatCEFEscapesExtEquals(t *testing.T) {
 
 func TestFormatLEEF(t *testing.T) {
 	s := formatLEEF(sampleAlert(), "Suite", "1.0")
-	if !strings.HasPrefix(s, "LEEF:2.0|XDR|Suite|1.0|SECURITY|") {
+	if !strings.HasPrefix(s, "LEEF:2.0|XEMS|Suite|1.0|SECURITY|") {
 		t.Fatalf("LEEF başlığı hatalı: %q", s)
 	}
 	if !strings.Contains(s, "src=dev-1") || !strings.Contains(s, "mitreTechnique=T1562") {

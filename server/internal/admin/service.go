@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"xdr.corp/suite/server/internal/security"
+	"xems.corp/suite/server/internal/security"
 )
 
 // Role, yönetici yetki seviyesidir.
@@ -234,7 +234,7 @@ func (s *Service) BeginMFAEnrollment(ctx context.Context, adminID string) (secre
 	if err := s.store.SetPendingMFASecret(ctx, adminID, secret); err != nil {
 		return "", "", err
 	}
-	uri = security.OTPAuthURI("XDR Konsol", adminID, secret)
+	uri = security.OTPAuthURI("XEMS Konsol", adminID, secret)
 	return secret, uri, nil
 }
 

@@ -12,7 +12,7 @@ import (
 	"context"
 	"errors"
 
-	"xdr.corp/suite/server/internal/security"
+	"xems.corp/suite/server/internal/security"
 )
 
 // ErrInvalidInput, kullanıcı girdisi doğrulamayı geçemediğinde döner

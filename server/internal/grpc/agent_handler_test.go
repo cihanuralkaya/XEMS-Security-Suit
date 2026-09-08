@@ -6,20 +6,20 @@ import (
 	"testing"
 	"time"
 
-	xdrv1 "xdr.corp/suite/gen/xdr/v1"
+	xemsv1 "xems.corp/suite/gen/xems/v1"
 )
 
 type fakeProvider struct {
 	mu     sync.Mutex
-	bundle *xdrv1.PolicyBundle
+	bundle *xemsv1.PolicyBundle
 }
 
 func (f *fakeProvider) set(version string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.bundle = &xdrv1.PolicyBundle{PolicyVersion: version}
+	f.bundle = &xemsv1.PolicyBundle{PolicyVersion: version}
 }
-func (f *fakeProvider) CurrentPolicy(_ context.Context, _ string) (*xdrv1.PolicyBundle, error) {
+func (f *fakeProvider) CurrentPolicy(_ context.Context, _ string) (*xemsv1.PolicyBundle, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.bundle, nil
@@ -30,7 +30,7 @@ func TestStreamPolicyLoopInitialAndPush(t *testing.T) {
 	fp.set("v1")
 	notify := make(chan struct{}, 1)
 	sent := make(chan string, 8)
-	send := func(b *xdrv1.PolicyBundle) error { sent <- b.GetPolicyVersion(); return nil }
+	send := func(b *xemsv1.PolicyBundle) error { sent <- b.GetPolicyVersion(); return nil }
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -67,7 +67,7 @@ func TestStreamPolicyLoopNoPolicy(t *testing.T) {
 	fp := &fakeProvider{} // bundle nil
 	notify := make(chan struct{})
 	sent := make(chan string, 1)
-	send := func(b *xdrv1.PolicyBundle) error { sent <- b.GetPolicyVersion(); return nil }
+	send := func(b *xemsv1.PolicyBundle) error { sent <- b.GetPolicyVersion(); return nil }
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)

@@ -8,7 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"xdr.corp/suite/server/internal/adminread"
+	"xems.corp/suite/server/internal/adminread"
 )
 
 // DeviceByID, tek bir cihazı (şifreli alanlar dahil) döner. Cihaz yoksa

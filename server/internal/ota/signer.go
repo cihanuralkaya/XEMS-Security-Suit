@@ -11,7 +11,7 @@ import (
 	"encoding/hex"
 	"errors"
 
-	"xdr.corp/suite/otawire"
+	"xems.corp/suite/otawire"
 )
 
 // Signer, güncelleme manifestolarını imzalar.

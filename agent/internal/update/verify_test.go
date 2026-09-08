@@ -7,7 +7,7 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"xdr.corp/suite/otawire"
+	"xems.corp/suite/otawire"
 )
 
 func mustKeys(t *testing.T) (ed25519.PublicKey, ed25519.PrivateKey) {

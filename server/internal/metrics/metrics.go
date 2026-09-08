@@ -34,7 +34,7 @@ var (
 	clusterFallback  atomic.Int64
 )
 
-// buildVersion, xdr_build_info etiketinde raporlanan sürümdür.
+// buildVersion, xems_build_info etiketinde raporlanan sürümdür.
 var buildVersion = "dev"
 
 // SetBuildVersion, build bilgisini ayarlar (main tarafından bir kez).
@@ -117,76 +117,76 @@ type Snapshot struct {
 
 // Write, verilen anlık görüntüyü Prometheus metin formatında w'ye yazar.
 func Write(w io.Writer, s Snapshot) {
-	fmt.Fprintf(w, "# HELP xdr_build_info Sürüm bilgisi (etiket).\n")
-	fmt.Fprintf(w, "# TYPE xdr_build_info gauge\n")
-	fmt.Fprintf(w, "xdr_build_info{version=%q} 1\n", buildVersion)
+	fmt.Fprintf(w, "# HELP xems_build_info Sürüm bilgisi (etiket).\n")
+	fmt.Fprintf(w, "# TYPE xems_build_info gauge\n")
+	fmt.Fprintf(w, "xems_build_info{version=%q} 1\n", buildVersion)
 
-	fmt.Fprintf(w, "# HELP xdr_login_success_total Başarılı admin girişleri.\n")
-	fmt.Fprintf(w, "# TYPE xdr_login_success_total counter\n")
-	fmt.Fprintf(w, "xdr_login_success_total %d\n", loginSuccess.Load())
+	fmt.Fprintf(w, "# HELP xems_login_success_total Başarılı admin girişleri.\n")
+	fmt.Fprintf(w, "# TYPE xems_login_success_total counter\n")
+	fmt.Fprintf(w, "xems_login_success_total %d\n", loginSuccess.Load())
 
-	fmt.Fprintf(w, "# HELP xdr_login_failure_total Başarısız admin giriş denemeleri.\n")
-	fmt.Fprintf(w, "# TYPE xdr_login_failure_total counter\n")
-	fmt.Fprintf(w, "xdr_login_failure_total %d\n", loginFailure.Load())
+	fmt.Fprintf(w, "# HELP xems_login_failure_total Başarısız admin giriş denemeleri.\n")
+	fmt.Fprintf(w, "# TYPE xems_login_failure_total counter\n")
+	fmt.Fprintf(w, "xems_login_failure_total %d\n", loginFailure.Load())
 
-	fmt.Fprintf(w, "# HELP xdr_events_ingested_total Kabul edilen telemetri olayları.\n")
-	fmt.Fprintf(w, "# TYPE xdr_events_ingested_total counter\n")
-	fmt.Fprintf(w, "xdr_events_ingested_total %d\n", eventsIngested.Load())
+	fmt.Fprintf(w, "# HELP xems_events_ingested_total Kabul edilen telemetri olayları.\n")
+	fmt.Fprintf(w, "# TYPE xems_events_ingested_total counter\n")
+	fmt.Fprintf(w, "xems_events_ingested_total %d\n", eventsIngested.Load())
 
-	fmt.Fprintf(w, "# HELP xdr_detections_total Kural-eşleşmeli sunucu-taraflı tespitler.\n")
-	fmt.Fprintf(w, "# TYPE xdr_detections_total counter\n")
-	fmt.Fprintf(w, "xdr_detections_total %d\n", detections.Load())
+	fmt.Fprintf(w, "# HELP xems_detections_total Kural-eşleşmeli sunucu-taraflı tespitler.\n")
+	fmt.Fprintf(w, "# TYPE xems_detections_total counter\n")
+	fmt.Fprintf(w, "xems_detections_total %d\n", detections.Load())
 
-	fmt.Fprintf(w, "# HELP xdr_alerts_raised_total Üretilen SOC uyarıları.\n")
-	fmt.Fprintf(w, "# TYPE xdr_alerts_raised_total counter\n")
-	fmt.Fprintf(w, "xdr_alerts_raised_total %d\n", alertsRaised.Load())
+	fmt.Fprintf(w, "# HELP xems_alerts_raised_total Üretilen SOC uyarıları.\n")
+	fmt.Fprintf(w, "# TYPE xems_alerts_raised_total counter\n")
+	fmt.Fprintf(w, "xems_alerts_raised_total %d\n", alertsRaised.Load())
 
-	fmt.Fprintf(w, "# HELP xdr_auto_quarantine_total Otomatik karantina (SOAR) eylemleri.\n")
-	fmt.Fprintf(w, "# TYPE xdr_auto_quarantine_total counter\n")
-	fmt.Fprintf(w, "xdr_auto_quarantine_total %d\n", autoQuarantine.Load())
+	fmt.Fprintf(w, "# HELP xems_auto_quarantine_total Otomatik karantina (SOAR) eylemleri.\n")
+	fmt.Fprintf(w, "# TYPE xems_auto_quarantine_total counter\n")
+	fmt.Fprintf(w, "xems_auto_quarantine_total %d\n", autoQuarantine.Load())
 
-	fmt.Fprintf(w, "# HELP xdr_ioc_hits_total Tehdit istihbaratı (IoC) eşleşmeleri.\n")
-	fmt.Fprintf(w, "# TYPE xdr_ioc_hits_total counter\n")
-	fmt.Fprintf(w, "xdr_ioc_hits_total %d\n", iocHits.Load())
+	fmt.Fprintf(w, "# HELP xems_ioc_hits_total Tehdit istihbaratı (IoC) eşleşmeleri.\n")
+	fmt.Fprintf(w, "# TYPE xems_ioc_hits_total counter\n")
+	fmt.Fprintf(w, "xems_ioc_hits_total %d\n", iocHits.Load())
 
-	fmt.Fprintf(w, "# HELP xdr_cluster_notices_total Küme fan-out bildirimleri (yön etiketli, #10 HA).\n")
-	fmt.Fprintf(w, "# TYPE xdr_cluster_notices_total counter\n")
-	fmt.Fprintf(w, "xdr_cluster_notices_total{direction=\"published\"} %d\n", clusterPublished.Load())
-	fmt.Fprintf(w, "xdr_cluster_notices_total{direction=\"received\"} %d\n", clusterReceived.Load())
-	fmt.Fprintf(w, "xdr_cluster_notices_total{direction=\"fallback\"} %d\n", clusterFallback.Load())
+	fmt.Fprintf(w, "# HELP xems_cluster_notices_total Küme fan-out bildirimleri (yön etiketli, #10 HA).\n")
+	fmt.Fprintf(w, "# TYPE xems_cluster_notices_total counter\n")
+	fmt.Fprintf(w, "xems_cluster_notices_total{direction=\"published\"} %d\n", clusterPublished.Load())
+	fmt.Fprintf(w, "xems_cluster_notices_total{direction=\"received\"} %d\n", clusterReceived.Load())
+	fmt.Fprintf(w, "xems_cluster_notices_total{direction=\"fallback\"} %d\n", clusterFallback.Load())
 
-	fmt.Fprintf(w, "# HELP xdr_devices Cihaz sayıları (duruma göre).\n")
-	fmt.Fprintf(w, "# TYPE xdr_devices gauge\n")
-	fmt.Fprintf(w, "xdr_devices{state=\"total\"} %d\n", s.DevicesTotal)
-	fmt.Fprintf(w, "xdr_devices{state=\"online\"} %d\n", s.DevicesOnline)
-	fmt.Fprintf(w, "xdr_devices{state=\"offline\"} %d\n", s.DevicesOffline)
-	fmt.Fprintf(w, "xdr_devices{state=\"quarantined\"} %d\n", s.DevicesQuarantined)
+	fmt.Fprintf(w, "# HELP xems_devices Cihaz sayıları (duruma göre).\n")
+	fmt.Fprintf(w, "# TYPE xems_devices gauge\n")
+	fmt.Fprintf(w, "xems_devices{state=\"total\"} %d\n", s.DevicesTotal)
+	fmt.Fprintf(w, "xems_devices{state=\"online\"} %d\n", s.DevicesOnline)
+	fmt.Fprintf(w, "xems_devices{state=\"offline\"} %d\n", s.DevicesOffline)
+	fmt.Fprintf(w, "xems_devices{state=\"quarantined\"} %d\n", s.DevicesQuarantined)
 
-	fmt.Fprintf(w, "# HELP xdr_events_by_severity Son penceredeki olaylar (önem düzeyine göre).\n")
-	fmt.Fprintf(w, "# TYPE xdr_events_by_severity gauge\n")
+	fmt.Fprintf(w, "# HELP xems_events_by_severity Son penceredeki olaylar (önem düzeyine göre).\n")
+	fmt.Fprintf(w, "# TYPE xems_events_by_severity gauge\n")
 	sevs := make([]string, 0, len(s.EventsBySeverity))
 	for k := range s.EventsBySeverity {
 		sevs = append(sevs, k)
 	}
 	sort.Strings(sevs) // deterministik çıktı (test edilebilirlik)
 	for _, sev := range sevs {
-		fmt.Fprintf(w, "xdr_events_by_severity{severity=%q} %d\n", sev, s.EventsBySeverity[sev])
+		fmt.Fprintf(w, "xems_events_by_severity{severity=%q} %d\n", sev, s.EventsBySeverity[sev])
 	}
 
-	fmt.Fprintf(w, "# HELP xdr_sse_connections Aktif konsol SSE akış bağlantıları.\n")
-	fmt.Fprintf(w, "# TYPE xdr_sse_connections gauge\n")
-	fmt.Fprintf(w, "xdr_sse_connections %d\n", s.SSEConnections)
+	fmt.Fprintf(w, "# HELP xems_sse_connections Aktif konsol SSE akış bağlantıları.\n")
+	fmt.Fprintf(w, "# TYPE xems_sse_connections gauge\n")
+	fmt.Fprintf(w, "xems_sse_connections %d\n", s.SSEConnections)
 
 	// Çalışma-zamanı (ops) — bağımlılıksız Go runtime metrikleri.
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
-	fmt.Fprintf(w, "# HELP xdr_uptime_seconds Süreç çalışma süresi (saniye).\n")
-	fmt.Fprintf(w, "# TYPE xdr_uptime_seconds gauge\n")
-	fmt.Fprintf(w, "xdr_uptime_seconds %d\n", int64(time.Since(startTime).Seconds()))
-	fmt.Fprintf(w, "# HELP xdr_goroutines Aktif goroutine sayısı.\n")
-	fmt.Fprintf(w, "# TYPE xdr_goroutines gauge\n")
-	fmt.Fprintf(w, "xdr_goroutines %d\n", runtime.NumGoroutine())
-	fmt.Fprintf(w, "# HELP xdr_memory_alloc_bytes Ayrılmış heap belleği (bayt).\n")
-	fmt.Fprintf(w, "# TYPE xdr_memory_alloc_bytes gauge\n")
-	fmt.Fprintf(w, "xdr_memory_alloc_bytes %d\n", ms.Alloc)
+	fmt.Fprintf(w, "# HELP xems_uptime_seconds Süreç çalışma süresi (saniye).\n")
+	fmt.Fprintf(w, "# TYPE xems_uptime_seconds gauge\n")
+	fmt.Fprintf(w, "xems_uptime_seconds %d\n", int64(time.Since(startTime).Seconds()))
+	fmt.Fprintf(w, "# HELP xems_goroutines Aktif goroutine sayısı.\n")
+	fmt.Fprintf(w, "# TYPE xems_goroutines gauge\n")
+	fmt.Fprintf(w, "xems_goroutines %d\n", runtime.NumGoroutine())
+	fmt.Fprintf(w, "# HELP xems_memory_alloc_bytes Ayrılmış heap belleği (bayt).\n")
+	fmt.Fprintf(w, "# TYPE xems_memory_alloc_bytes gauge\n")
+	fmt.Fprintf(w, "xems_memory_alloc_bytes %d\n", ms.Alloc)
 }

@@ -153,7 +153,7 @@ ileride sürücü) platform-spesifik dosyalarda soyutlanır.
   ve uç noktalar test edildi.
 - **KVKK saklama otomasyonu (tamam):** `server/internal/retention` — saf plan
   (düşürülecek/oluşturulacak aylık partition'lar) + DB yürütücü; C2'de günlük
-  çalışır (`XDR_RETENTION_DAYS`, varsayılan 90). Plan mantığı sahte store ile test edildi.
+  çalışır (`XEMS_RETENTION_DAYS`, varsayılan 90). Plan mantığı sahte store ile test edildi.
 
 ---
 
@@ -303,4 +303,4 @@ driver later) are abstracted in platform-specific files.
   `GET /api/events`. Live **Devices** and **Events** tables in the console.
 - **Data-protection retention automation (done):** `server/internal/retention` — a pure
   plan (monthly partitions to drop/create) + a DB executor; runs daily in C2
-  (`XDR_RETENTION_DAYS`, default 90). Plan logic tested with a fake store.
+  (`XEMS_RETENTION_DAYS`, default 90). Plan logic tested with a fake store.

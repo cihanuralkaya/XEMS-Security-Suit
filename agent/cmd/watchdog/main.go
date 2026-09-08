@@ -19,8 +19,8 @@ import (
 	"syscall"
 	"time"
 
-	"xdr.corp/suite/agent/internal/liveness"
-	"xdr.corp/suite/agent/internal/watchdog"
+	"xems.corp/suite/agent/internal/liveness"
+	"xems.corp/suite/agent/internal/watchdog"
 )
 
 func main() {
@@ -31,8 +31,8 @@ func main() {
 		syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	agentBin := getenv("XDR_AGENT_BIN", defaultAgentBin())
-	dataDir := getenv("XDR_AGENT_DATA", "./agent-data")
+	agentBin := getenv("XEMS_AGENT_BIN", defaultAgentBin())
+	dataDir := getenv("XEMS_AGENT_DATA", "./agent-data")
 	stageDir := filepath.Join(dataDir, "updates")
 
 	// Kendi canlılık beacon'unu yaz (ajanın PeerGuard'ı bunu izler; watchdog

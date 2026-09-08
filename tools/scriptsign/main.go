@@ -4,7 +4,7 @@
 //	    -interp cmd -file ./temizle.cmd -arg /verbose
 //
 // Anahtar formatı otasign -genkey ile aynıdır (base64 Ed25519 özel anahtar).
-// Public key ajanlara XDR_SCRIPT_PUBKEY olarak gömülür.
+// Public key ajanlara XEMS_SCRIPT_PUBKEY olarak gömülür.
 package main
 
 import (
@@ -15,7 +15,7 @@ import (
 	"log"
 	"os"
 
-	"xdr.corp/suite/scriptwire"
+	"xems.corp/suite/scriptwire"
 )
 
 type argList []string

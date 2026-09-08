@@ -1,4 +1,4 @@
-// Command c2, XDR Yönetim Sunucusunu (Command & Control) başlatır.
+// Command c2, XEMS Yönetim Sunucusunu (Command & Control) başlatır.
 //
 // Bağlanan bileşenler:
 //   - EnrollmentService (tek yönlü TLS): token doğrulama + CSR imzalama (PKI)
@@ -18,28 +18,28 @@ import (
 	"syscall"
 	"time"
 
-	xgrpc "xdr.corp/suite/server/internal/grpc"
+	xgrpc "xems.corp/suite/server/internal/grpc"
 
-	"xdr.corp/suite/logx"
-	"xdr.corp/suite/server/internal/admin"
-	"xdr.corp/suite/server/internal/adminapi"
-	"xdr.corp/suite/server/internal/adminread"
-	"xdr.corp/suite/server/internal/cluster"
-	"xdr.corp/suite/server/internal/config"
-	"xdr.corp/suite/server/internal/db"
-	"xdr.corp/suite/server/internal/detect"
-	"xdr.corp/suite/server/internal/enroll"
-	"xdr.corp/suite/server/internal/eventbus"
-	"xdr.corp/suite/server/internal/ioc"
-	"xdr.corp/suite/server/internal/memstore"
-	"xdr.corp/suite/server/internal/metrics"
-	"xdr.corp/suite/server/internal/notify"
-	"xdr.corp/suite/server/internal/policypush"
-	"xdr.corp/suite/server/internal/response"
-	"xdr.corp/suite/server/internal/retention"
-	"xdr.corp/suite/server/internal/revocation"
-	"xdr.corp/suite/server/internal/security"
-	"xdr.corp/suite/server/internal/vuln"
+	"xems.corp/suite/logx"
+	"xems.corp/suite/server/internal/admin"
+	"xems.corp/suite/server/internal/adminapi"
+	"xems.corp/suite/server/internal/adminread"
+	"xems.corp/suite/server/internal/cluster"
+	"xems.corp/suite/server/internal/config"
+	"xems.corp/suite/server/internal/db"
+	"xems.corp/suite/server/internal/detect"
+	"xems.corp/suite/server/internal/enroll"
+	"xems.corp/suite/server/internal/eventbus"
+	"xems.corp/suite/server/internal/ioc"
+	"xems.corp/suite/server/internal/memstore"
+	"xems.corp/suite/server/internal/metrics"
+	"xems.corp/suite/server/internal/notify"
+	"xems.corp/suite/server/internal/policypush"
+	"xems.corp/suite/server/internal/response"
+	"xems.corp/suite/server/internal/retention"
+	"xems.corp/suite/server/internal/revocation"
+	"xems.corp/suite/server/internal/security"
+	"xems.corp/suite/server/internal/vuln"
 )
 
 // Backend, C2'nin ihtiyaç duyduğu tüm depolama arayüzlerinin birleşimidir;
@@ -68,7 +68,7 @@ type Backend interface {
 	VerifyAuditChain(ctx context.Context) error
 }
 
-// openBackend, XDR_DATABASE_URL varsa PostgreSQL, yoksa bellek-içi demo deposu
+// openBackend, XEMS_DATABASE_URL varsa PostgreSQL, yoksa bellek-içi demo deposu
 // açar. Demo modunda bir yönetici ve kurallı bir demo politikası tohumlanır ve
 // giriş bilgileri loglanır.
 func openBackend(ctx context.Context, cfg *config.Config) (Backend, error) {
@@ -81,17 +81,17 @@ func openBackend(ctx context.Context, cfg *config.Config) (Backend, error) {
 		return store, nil
 	}
 
-	// SEC-006: XDR_DATABASE_URL boşken SESSİZCE demo moduna düşme. Bellek-içi demo
-	// (kalıcılık yok + tohumlanmış admin) yalnız AÇIK bir onayla (XDR_DEMO=1)
+	// SEC-006: XEMS_DATABASE_URL boşken SESSİZCE demo moduna düşme. Bellek-içi demo
+	// (kalıcılık yok + tohumlanmış admin) yalnız AÇIK bir onayla (XEMS_DEMO=1)
 	// çalışmalı; aksi halde üretimde yanlış-yapılandırma riski (env unutulması)
 	// tohumlanmış admin ve loglanmış kimlikle açar. Bayrak yoksa hata ver.
-	if os.Getenv("XDR_DEMO") != "1" {
-		return nil, fmt.Errorf("config: XDR_DATABASE_URL zorunlu (bellek-içi demo için açıkça XDR_DEMO=1 ayarlayın)")
+	if os.Getenv("XEMS_DEMO") != "1" {
+		return nil, fmt.Errorf("config: XEMS_DATABASE_URL zorunlu (bellek-içi demo için açıkça XEMS_DEMO=1 ayarlayın)")
 	}
 
 	ms := memstore.New()
-	email := getenv("XDR_DEMO_ADMIN_EMAIL", "admin@local")
-	pass := os.Getenv("XDR_DEMO_ADMIN_PASSWORD")
+	email := getenv("XEMS_DEMO_ADMIN_EMAIL", "admin@local")
+	pass := os.Getenv("XEMS_DEMO_ADMIN_PASSWORD")
 	generated := pass == ""
 	if generated {
 		b := make([]byte, 6)
@@ -106,15 +106,15 @@ func openBackend(ctx context.Context, cfg *config.Config) (Backend, error) {
 	polID, polVer := ms.SeedDemoPolicy()
 
 	log.Println("=======================================================")
-	log.Println(" BELLEK-İÇİ DEMO MODU (XDR_DEMO=1) — kalıcılık yok")
+	log.Println(" BELLEK-İÇİ DEMO MODU (XEMS_DEMO=1) — kalıcılık yok")
 	// Parolayı YALNIZ otomatik üretildiyse logla (operatörün bilmesi için);
-	// XDR_DEMO_ADMIN_PASSWORD ile verildiyse loglamaya gerek yok (kimlik sızıntısı).
+	// XEMS_DEMO_ADMIN_PASSWORD ile verildiyse loglamaya gerek yok (kimlik sızıntısı).
 	if generated {
 		log.Printf("  Konsol girişi  e-posta: %s   parola: %s (otomatik üretildi)", email, pass)
 	} else {
-		log.Printf("  Konsol girişi  e-posta: %s   (parola XDR_DEMO_ADMIN_PASSWORD'den)", email)
+		log.Printf("  Konsol girişi  e-posta: %s   (parola XEMS_DEMO_ADMIN_PASSWORD'den)", email)
 	}
-	log.Printf("  Demo politika  id: %s  (sürüm %s; 'xdr-demo-blocked.exe' engeller)", polID, polVer)
+	log.Printf("  Demo politika  id: %s  (sürüm %s; 'xems-demo-blocked.exe' engeller)", polID, polVer)
 	log.Println("=======================================================")
 	return ms, nil
 }
@@ -127,9 +127,9 @@ func getenv(k, def string) string {
 }
 
 func main() {
-	// Loglama biçimi: XDR_LOG_FORMAT=json ise yapısal JSON (SIEM/log toplama);
+	// Loglama biçimi: XEMS_LOG_FORMAT=json ise yapısal JSON (SIEM/log toplama);
 	// aksi halde "[c2] " prefix'li standart metin.
-	logx.Setup(os.Getenv("XDR_LOG_FORMAT"), "[c2] ")
+	logx.Setup(os.Getenv("XEMS_LOG_FORMAT"), "[c2] ")
 
 	if err := run(); err != nil {
 		log.Fatalf("başlatma hatası: %v", err)
@@ -175,7 +175,7 @@ func run() error {
 		return err
 	}
 
-	// Depo seçimi: XDR_DATABASE_URL varsa PostgreSQL, yoksa bellek-içi DEMO deposu.
+	// Depo seçimi: XEMS_DATABASE_URL varsa PostgreSQL, yoksa bellek-içi DEMO deposu.
 	backend, err := openBackend(ctx, cfg)
 	if err != nil {
 		return err
@@ -197,17 +197,17 @@ func run() error {
 	liveBus := eventbus.New()
 	agentHandler.SetAdminNotifier(liveBus)
 
-	// Yatay ölçekleme (#10): XDR_CLUSTER=1 ve PostgreSQL kullanılıyorsa, canlı
+	// Yatay ölçekleme (#10): XEMS_CLUSTER=1 ve PostgreSQL kullanılıyorsa, canlı
 	// bildirimler düğümler arası Postgres LISTEN/NOTIFY ile fan-out edilir; böylece
 	// yük dengeleyici arkasındaki HANGİ düğüme bağlı olursa olsun tüm adminler tüm
 	// olayları görür. Tek-düğüm (veya memstore) modunda bellek-içi bus kullanılır.
 	clusterOn := false
-	if os.Getenv("XDR_CLUSTER") == "1" {
+	if os.Getenv("XEMS_CLUSTER") == "1" {
 		store, ok := backend.(*db.Store)
 		if !ok {
-			return fmt.Errorf("config: XDR_CLUSTER=1 için PostgreSQL (XDR_DATABASE_URL) zorunlu")
+			return fmt.Errorf("config: XEMS_CLUSTER=1 için PostgreSQL (XEMS_DATABASE_URL) zorunlu")
 		}
-		broker := cluster.New(ctx, store, liveBus, os.Getenv("XDR_CLUSTER_CHANNEL"),
+		broker := cluster.New(ctx, store, liveBus, os.Getenv("XEMS_CLUSTER_CHANNEL"),
 			func(m string) { log.Println("[cluster] " + m) })
 		broker.SetMetrics(metrics.IncClusterPublished, metrics.IncClusterReceived, metrics.IncClusterFallback)
 		liveBus.SetSink(broker.Publish) // yayınlar NOTIFY'a; dağıtım LISTEN'den
@@ -217,10 +217,10 @@ func run() error {
 	}
 
 	// Sunucu-taraflı tespit motoru (tek kaynak): ingest'te değerlendirme + konsol
-	// kural kataloğu ucu aynı motoru paylaşır. XDR_DETECT_RULES_FILE ayarlıysa
+	// kural kataloğu ucu aynı motoru paylaşır. XEMS_DETECT_RULES_FILE ayarlıysa
 	// operatör-tanımlı özel kurallar yerleşiklere EKLENİR (koda dokunmadan).
 	detectRules := detect.DefaultRules()
-	if rf := os.Getenv("XDR_DETECT_RULES_FILE"); rf != "" {
+	if rf := os.Getenv("XEMS_DETECT_RULES_FILE"); rf != "" {
 		custom, err := detect.LoadRulesFile(rf)
 		if err != nil {
 			return fmt.Errorf("tespit kuralları yüklenemedi: %w", err)
@@ -231,13 +231,13 @@ func run() error {
 	detector := detect.NewEngine(detectRules)
 	agentHandler.SetDetector(detector)
 
-	// Dış uyarı (SOC webhook): XDR_ALERT_WEBHOOK_URL ayarlıysa yüksek önem düzeyli
+	// Dış uyarı (SOC webhook): XEMS_ALERT_WEBHOOK_URL ayarlıysa yüksek önem düzeyli
 	// olaylar bir HTTPS webhook'una gönderilir (Slack/Teams/genel). Eşik
-	// XDR_ALERT_MIN_SEVERITY (varsayılan HIGH).
+	// XEMS_ALERT_MIN_SEVERITY (varsayılan HIGH).
 	alertingOn, iocCount, autoRespOn, siemOn := false, 0, false, false
 	var notifiers []notify.Notifier
-	if hook := os.Getenv("XDR_ALERT_WEBHOOK_URL"); hook != "" {
-		alerter, err := notify.NewWebhookNotifier(hook, getenv("XDR_ALERT_MIN_SEVERITY", "HIGH"), os.Getenv("XDR_ALERT_FORMAT"))
+	if hook := os.Getenv("XEMS_ALERT_WEBHOOK_URL"); hook != "" {
+		alerter, err := notify.NewWebhookNotifier(hook, getenv("XEMS_ALERT_MIN_SEVERITY", "HIGH"), os.Getenv("XEMS_ALERT_FORMAT"))
 		if err != nil {
 			return err
 		}
@@ -245,26 +245,26 @@ func run() error {
 		alertingOn = true
 		log.Println("dış uyarı: webhook etkin (yüksek önem düzeyli olaylar)")
 	}
-	// SIEM iletici (#8): XDR_SIEM_ADDR ayarlıysa olaylar syslog+CEF/LEEF olarak
-	// bir SIEM'e (ArcSight/QRadar/Splunk) iletilir. proto XDR_SIEM_PROTO (udp|tcp),
-	// biçim XDR_SIEM_FORMAT (cef|leef), eşik XDR_SIEM_MIN_SEVERITY.
-	if siemAddr := os.Getenv("XDR_SIEM_ADDR"); siemAddr != "" {
-		sn, err := notify.NewSyslogNotifier(siemAddr, os.Getenv("XDR_SIEM_PROTO"),
-			os.Getenv("XDR_SIEM_FORMAT"), getenv("XDR_SIEM_MIN_SEVERITY", "HIGH"), os.Getenv("XDR_BUILD_VERSION"))
+	// SIEM iletici (#8): XEMS_SIEM_ADDR ayarlıysa olaylar syslog+CEF/LEEF olarak
+	// bir SIEM'e (ArcSight/QRadar/Splunk) iletilir. proto XEMS_SIEM_PROTO (udp|tcp),
+	// biçim XEMS_SIEM_FORMAT (cef|leef), eşik XEMS_SIEM_MIN_SEVERITY.
+	if siemAddr := os.Getenv("XEMS_SIEM_ADDR"); siemAddr != "" {
+		sn, err := notify.NewSyslogNotifier(siemAddr, os.Getenv("XEMS_SIEM_PROTO"),
+			os.Getenv("XEMS_SIEM_FORMAT"), getenv("XEMS_SIEM_MIN_SEVERITY", "HIGH"), os.Getenv("XEMS_BUILD_VERSION"))
 		if err != nil {
 			return err
 		}
 		notifiers = append(notifiers, sn)
 		siemOn = true
-		log.Printf("SIEM iletici etkin: %s (%s/%s)", siemAddr, getenv("XDR_SIEM_PROTO", "udp"), getenv("XDR_SIEM_FORMAT", "cef"))
+		log.Printf("SIEM iletici etkin: %s (%s/%s)", siemAddr, getenv("XEMS_SIEM_PROTO", "udp"), getenv("XEMS_SIEM_FORMAT", "cef"))
 	}
 	if len(notifiers) > 0 {
 		agentHandler.SetAlerter(notify.NewMulti(notifiers...))
 	}
 
-	// Tehdit istihbaratı (IoC): XDR_IOC_FILE ayarlıysa bilinen-kötü göstergeler
+	// Tehdit istihbaratı (IoC): XEMS_IOC_FILE ayarlıysa bilinen-kötü göstergeler
 	// (IP/MAC/alan adı/hash/süreç) yüklenir; eşleşen olaylar KRİTİK uyarı üretir.
-	if iocPath := os.Getenv("XDR_IOC_FILE"); iocPath != "" {
+	if iocPath := os.Getenv("XEMS_IOC_FILE"); iocPath != "" {
 		set, err := ioc.LoadFile(iocPath)
 		if err != nil {
 			return fmt.Errorf("IoC listesi yüklenemedi: %w", err)
@@ -273,11 +273,11 @@ func run() error {
 		iocCount = set.Size()
 		log.Printf("tehdit istihbaratı: %d IoC göstergesi yüklendi", iocCount)
 
-		// Canlı hot-reload: XDR_IOC_RELOAD_INTERVAL ayarlıysa (ör. 5m) IoC dosyası
+		// Canlı hot-reload: XEMS_IOC_RELOAD_INTERVAL ayarlıysa (ör. 5m) IoC dosyası
 		// periyodik yeniden okunur ve göstergeler SUNUCU YENİDEN BAŞLATILMADAN
 		// güncellenir (SOC yeni göstergeleri anında dağıtabilir). Okuma hatasında
 		// eski küme korunur (best-effort). Boş/0/geçersiz = kapalı (mevcut davranış).
-		if d, derr := time.ParseDuration(os.Getenv("XDR_IOC_RELOAD_INTERVAL")); derr == nil && d > 0 {
+		if d, derr := time.ParseDuration(os.Getenv("XEMS_IOC_RELOAD_INTERVAL")); derr == nil && d > 0 {
 			go func() {
 				t := time.NewTicker(d)
 				defer t.Stop()
@@ -304,9 +304,9 @@ func run() error {
 		}
 	}
 
-	// Otomatik müdahale (SOAR): XDR_AUTO_RESPONSE=1 ise kritik güvenlik olayında
+	// Otomatik müdahale (SOAR): XEMS_AUTO_RESPONSE=1 ise kritik güvenlik olayında
 	// cihaz otomatik karantinaya alınır. Varsayılan KAPALI (karantina bozucudur).
-	if os.Getenv("XDR_AUTO_RESPONSE") == "1" {
+	if os.Getenv("XEMS_AUTO_RESPONSE") == "1" {
 		agentHandler.SetAutoResponder(response.New(backend))
 		autoRespOn = true
 		log.Println("otomatik müdahale: kritik olayda otomatik karantina ETKİN")
@@ -335,10 +335,10 @@ func run() error {
 	// Admin HTTP API (TLS).
 	adminSvc := admin.NewService(backend, bidx, cfg.EnrollTokenTTL)
 	adminSvc.SetPublisher(notifier) // politika atamada anlık push
-	// Çift-kontrol (dört-göz) WIPE: XDR_WIPE_DUAL_CONTROL=1 ise WIPE bir ADMIN'in
+	// Çift-kontrol (dört-göz) WIPE: XEMS_WIPE_DUAL_CONTROL=1 ise WIPE bir ADMIN'in
 	// talebi + FARKLI bir ADMIN'in onayını gerektirir (tek ele geçirilmiş ADMIN filo
 	// silemez). Varsayılan KAPALI (tek-ADMIN doğrudan WIPE — eski davranış).
-	wipeDual := os.Getenv("XDR_WIPE_DUAL_CONTROL") == "1"
+	wipeDual := os.Getenv("XEMS_WIPE_DUAL_CONTROL") == "1"
 	adminSvc.SetWipeDualControl(wipeDual)
 	if wipeDual {
 		log.Println("çift-kontrol WIPE: iki farklı ADMIN onayı ETKİN")
@@ -349,21 +349,21 @@ func run() error {
 	adminAPI.SetStream(liveBus)                                    // canlı SSE akışı
 	adminAPI.SetHealthCheck(backend.Ping)                          // /readyz depo sağlık kontrolü
 	adminAPI.SetLoginLimit(cfg.LoginMaxAttempts, cfg.LoginLockout) // kaba-kuvvet koruması
-	adminAPI.SetPrivacyNotice(os.Getenv("XDR_PRIVACY_NOTICE"))     // KVKK aydınlatma (boşsa varsayılan)
+	adminAPI.SetPrivacyNotice(os.Getenv("XEMS_PRIVACY_NOTICE"))    // KVKK aydınlatma (boşsa varsayılan)
 	adminAPI.SetAuditVerifier(backend.VerifyAuditChain)            // denetim izi hash-zincir doğrulama
-	// Prometheus /metrics — yalnız XDR_METRICS_TOKEN ayarlıysa açılır (statik Bearer
+	// Prometheus /metrics — yalnız XEMS_METRICS_TOKEN ayarlıysa açılır (statik Bearer
 	// token). Ayarlı değilse uç kapalıdır (toplu veriyi kimliksiz sızdırmama).
-	metrics.SetBuildVersion(os.Getenv("XDR_BUILD_VERSION"))
-	adminAPI.SetMetricsToken(os.Getenv("XDR_METRICS_TOKEN"))
+	metrics.SetBuildVersion(os.Getenv("XEMS_BUILD_VERSION"))
+	adminAPI.SetMetricsToken(os.Getenv("XEMS_METRICS_TOKEN"))
 	adminAPI.SetDetector(detector) // tespit kural kataloğu (ingest ile aynı motor)
 
-	// Tespit kuralları canlı hot-reload: XDR_DETECT_RELOAD_INTERVAL ayarlıysa (ör.
+	// Tespit kuralları canlı hot-reload: XEMS_DETECT_RELOAD_INTERVAL ayarlıysa (ör.
 	// 5m) ve özel kural dosyası varsa, dosya periyodik yeniden okunur ve motor
 	// SUNUCU YENİDEN BAŞLATILMADAN güncellenir (SOC kural ince ayarını anında
 	// dağıtır). Her iki tüketici de (ingest değerlendirmesi + konsol kataloğu)
 	// atomik güncellenir. Okuma hatasında eski motor korunur (best-effort).
-	if rf := os.Getenv("XDR_DETECT_RULES_FILE"); rf != "" {
-		if d, derr := time.ParseDuration(os.Getenv("XDR_DETECT_RELOAD_INTERVAL")); derr == nil && d > 0 {
+	if rf := os.Getenv("XEMS_DETECT_RULES_FILE"); rf != "" {
+		if d, derr := time.ParseDuration(os.Getenv("XEMS_DETECT_RELOAD_INTERVAL")); derr == nil && d > 0 {
 			startRules := len(detectRules)
 			go func() {
 				t := time.NewTicker(d)
@@ -393,10 +393,10 @@ func run() error {
 			log.Printf("tespit motoru: canlı yeniden yükleme her %s", d)
 		}
 	}
-	// Zafiyet eşleştirme (#5): XDR_VULN_FILE ayarlıysa CVE/KB veri kümesi yüklenir
+	// Zafiyet eşleştirme (#5): XEMS_VULN_FILE ayarlıysa CVE/KB veri kümesi yüklenir
 	// ve yazılım envanteriyle eşleştirilir (/api/vulnerabilities).
 	vulnCount := 0
-	if vp := os.Getenv("XDR_VULN_FILE"); vp != "" {
+	if vp := os.Getenv("XEMS_VULN_FILE"); vp != "" {
 		vs, err := vuln.LoadFile(vp)
 		if err != nil {
 			return fmt.Errorf("zafiyet veri kümesi yüklenemedi: %w", err)
@@ -410,10 +410,10 @@ func run() error {
 		"alerting_enabled":      alertingOn,
 		"siem_enabled":          siemOn,
 		"vuln_dataset_size":     vulnCount,
-		"alert_format":          getenv("XDR_ALERT_FORMAT", "json"),
+		"alert_format":          getenv("XEMS_ALERT_FORMAT", "json"),
 		"auto_response_enabled": autoRespOn,
 		"ioc_indicators":        iocCount,
-		"log_format":            getenv("XDR_LOG_FORMAT", "text"),
+		"log_format":            getenv("XEMS_LOG_FORMAT", "text"),
 		"persistence":           cfg.DatabaseURL != "",
 		"cluster_enabled":       clusterOn,
 		"wipe_dual_control":     wipeDual,

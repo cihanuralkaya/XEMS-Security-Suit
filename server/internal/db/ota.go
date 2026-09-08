@@ -7,13 +7,13 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	xdrv1 "xdr.corp/suite/gen/xdr/v1"
+	xemsv1 "xems.corp/suite/gen/xems/v1"
 )
 
 // LatestUpdate, platform için en güncel yayımlanmış sürümü döner. Ajanın
 // mevcut sürümüyle aynıysa "güncelleme yok" döner. Manifesto DB'de saklanan
 // İMZAYI taşır (imzalama offline yapılır, bkz. tools/otasign).
-func (s *Store) LatestUpdate(ctx context.Context, deviceID, currentVersion, platform string) (*xdrv1.UpdateManifest, error) {
+func (s *Store) LatestUpdate(ctx context.Context, deviceID, currentVersion, platform string) (*xemsv1.UpdateManifest, error) {
 	const q = `
 		SELECT version, download_url, sha256_hex, signature, mandatory, rollout_percent
 		  FROM ota_releases
@@ -34,9 +34,9 @@ func (s *Store) LatestUpdate(ctx context.Context, deviceID, currentVersion, plat
 		return nil, fmt.Errorf("db: güncelleme sorgusu: %w", err)
 	}
 	if version == currentVersion {
-		return &xdrv1.UpdateManifest{UpdateAvailable: false}, nil
+		return &xemsv1.UpdateManifest{UpdateAvailable: false}, nil
 	}
-	return &xdrv1.UpdateManifest{
+	return &xemsv1.UpdateManifest{
 		UpdateAvailable: true,
 		TargetVersion:   version,
 		DownloadUrl:     url,

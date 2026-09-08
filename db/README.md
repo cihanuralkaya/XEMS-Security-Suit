@@ -8,8 +8,8 @@
 ## Kurulum
 
 ```bash
-createdb xdr
-psql -U postgres -d xdr -f schema.sql
+createdb xems
+psql -U postgres -d xems -f schema.sql
 ```
 
 ## Notlar
@@ -35,8 +35,8 @@ psql -U postgres -d xdr -f schema.sql
 ## Setup
 
 ```bash
-createdb xdr
-psql -U postgres -d xdr -f schema.sql
+createdb xems
+psql -U postgres -d xems -f schema.sql
 ```
 
 ## Notes

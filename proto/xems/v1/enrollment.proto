@@ -1,8 +1,8 @@
 syntax = "proto3";
 
-package xdr.v1;
+package xems.v1;
 
-option go_package = "xdr.corp/suite/gen/xdr/v1;xdrv1";
+option go_package = "xems.corp/suite/gen/xems/v1;xemsv1";
 
 import "google/protobuf/timestamp.proto";
 

@@ -73,8 +73,8 @@ func TestVerifyTOTPWindow(t *testing.T) {
 }
 
 func TestOTPAuthURI(t *testing.T) {
-	uri := OTPAuthURI("XDR Konsol", "admin@corp", "ABCDEF")
-	for _, want := range []string{"otpauth://totp/", "secret=ABCDEF", "issuer=XDR", "digits=6", "period=30"} {
+	uri := OTPAuthURI("XEMS Konsol", "admin@corp", "ABCDEF")
+	for _, want := range []string{"otpauth://totp/", "secret=ABCDEF", "issuer=XEMS", "digits=6", "period=30"} {
 		if !contains(uri, want) {
 			t.Errorf("URI %q içermeliydi: %q", uri, want)
 		}

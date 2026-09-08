@@ -15,7 +15,7 @@ import (
 	"encoding/hex"
 	"errors"
 
-	"xdr.corp/suite/otawire"
+	"xems.corp/suite/otawire"
 )
 
 var (

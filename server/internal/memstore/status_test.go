@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"xdr.corp/suite/server/internal/enroll"
+	"xems.corp/suite/server/internal/enroll"
 )
 
 // enrollDevice, test için bir cihaz oluşturur ve id'sini döner.

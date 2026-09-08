@@ -12,7 +12,7 @@ import (
 	"crypto/ed25519"
 	"errors"
 
-	"xdr.corp/suite/scriptwire"
+	"xems.corp/suite/scriptwire"
 )
 
 // ErrBadSignature, script imzası doğrulanamadığında döner.

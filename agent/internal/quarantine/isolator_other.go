@@ -9,7 +9,7 @@ import (
 
 // iptIsolator, Linux'ta iptables ile izolasyon uygular.
 //
-// Yaklaşım: özel bir XDR-QUARANTINE zinciri oluşturulur — loopback ve C2'ye
+// Yaklaşım: özel bir XEMS-QUARANTINE zinciri oluşturulur — loopback ve C2'ye
 // ACCEPT, geri kalan her şeye DROP — ve OUTPUT zincirinin başına eklenir.
 // Release, atlamayı kaldırıp zinciri temizler.
 //
@@ -20,7 +20,7 @@ type iptIsolator struct{}
 // NewIsolator, mevcut platform için izolatör döner.
 func NewIsolator() Isolator { return iptIsolator{} }
 
-const chain = "XDR-QUARANTINE"
+const chain = "XEMS-QUARANTINE"
 
 func (iptIsolator) Isolate(allowC2 []string) error {
 	_ = ipt("-N", chain) // zincir varsa hata yok sayılır

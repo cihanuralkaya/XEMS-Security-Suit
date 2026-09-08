@@ -2,7 +2,7 @@
 // / kötü-amaçlı-medya görünürlüğü (DLP-bitişik). OS-özel sorgular exec/sysfs ile
 // yapılır; ayrıştırma platform-bağımsız ve test edilebilir tutulur (inventory/
 // resource ile aynı desen). Politika: denetle (varsayılan) veya engelle
-// (XDR_USB_POLICY; engelleme güvenli-mod KAPALIYKEN uygulanır).
+// (XEMS_USB_POLICY; engelleme güvenli-mod KAPALIYKEN uygulanır).
 package usbmon
 
 import (

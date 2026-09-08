@@ -19,7 +19,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
-	xdrv1 "xdr.corp/suite/gen/xdr/v1"
+	xemsv1 "xems.corp/suite/gen/xems/v1"
 )
 
 // GenerateKeyAndCSR, ajan için yeni bir EC anahtar çifti ve CSR üretir. Özel
@@ -53,7 +53,7 @@ type EnrollInfo struct {
 // Enroll, tek yönlü TLS ile EnrollmentService'e bağlanır ve tek kullanımlık
 // token + CSR ile imzalı istemci sertifikası alır. caPEM, sunucuyu doğrulamak
 // için kuruluma gömülü CA sertifikasıdır (güven çıpası).
-func Enroll(ctx context.Context, addr string, caPEM []byte, serverName, token string, csrPEM []byte, info EnrollInfo) (*xdrv1.EnrollResponse, error) {
+func Enroll(ctx context.Context, addr string, caPEM []byte, serverName, token string, csrPEM []byte, info EnrollInfo) (*xemsv1.EnrollResponse, error) {
 	pool := x509.NewCertPool()
 	if !pool.AppendCertsFromPEM(caPEM) {
 		return nil, errors.New("transport: gömülü CA PEM'i yüklenemedi")
@@ -70,8 +70,8 @@ func Enroll(ctx context.Context, addr string, caPEM []byte, serverName, token st
 	}
 	defer conn.Close()
 
-	cli := xdrv1.NewEnrollmentServiceClient(conn)
-	return cli.Enroll(ctx, &xdrv1.EnrollRequest{
+	cli := xemsv1.NewEnrollmentServiceClient(conn)
+	return cli.Enroll(ctx, &xemsv1.EnrollRequest{
 		EnrollmentToken: token,
 		CsrPem:          csrPEM,
 		Hostname:        info.Hostname,
@@ -128,7 +128,7 @@ func (h *CertHolder) tlsConfig(caPEM []byte, serverName string) (*tls.Config, er
 
 // DialAgent, mTLS ile AgentService'e bağlanır. İstemci sertifikası holder'dan
 // DİNAMİK okunur; yenileme sonrası yeni bağlantılar güncel sertifikayı kullanır.
-func DialAgent(addr string, holder *CertHolder, caPEM []byte, serverName string) (xdrv1.AgentServiceClient, *grpc.ClientConn, error) {
+func DialAgent(addr string, holder *CertHolder, caPEM []byte, serverName string) (xemsv1.AgentServiceClient, *grpc.ClientConn, error) {
 	cfg, err := holder.tlsConfig(caPEM, serverName)
 	if err != nil {
 		return nil, nil, err
@@ -137,7 +137,7 @@ func DialAgent(addr string, holder *CertHolder, caPEM []byte, serverName string)
 	if err != nil {
 		return nil, nil, fmt.Errorf("transport: agent bağlantısı: %w", err)
 	}
-	return xdrv1.NewAgentServiceClient(conn), conn, nil
+	return xemsv1.NewAgentServiceClient(conn), conn, nil
 }
 
 // Renew, mTLS ile enroll endpoint'ine bağlanıp mevcut sertifikayla (token'sız)
@@ -158,7 +158,7 @@ func Renew(ctx context.Context, enrollAddr string, holder *CertHolder, caPEM []b
 	}
 	defer conn.Close()
 
-	resp, err := xdrv1.NewEnrollmentServiceClient(conn).RenewCertificate(ctx, &xdrv1.RenewRequest{CsrPem: csrPEM})
+	resp, err := xemsv1.NewEnrollmentServiceClient(conn).RenewCertificate(ctx, &xemsv1.RenewRequest{CsrPem: csrPEM})
 	if err != nil {
 		return nil, nil, time.Time{}, fmt.Errorf("transport: RenewCertificate: %w", err)
 	}

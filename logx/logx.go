@@ -1,5 +1,5 @@
 // Package logx, sunucu için opsiyonel yapısal (JSON) loglama sağlar. Stdlib
-// log/slog kullanır (bağımlılıksız). XDR_LOG_FORMAT=json ayarlandığında standart
+// log/slog kullanır (bağımlılıksız). XEMS_LOG_FORMAT=json ayarlandığında standart
 // kütüphane log çıktısı (mevcut log.Printf çağrıları dahil) JSON satırlarına
 // yönlendirilir — log toplama/SIEM ingestion için. Varsayılan (text) davranışı
 // değiştirmez.

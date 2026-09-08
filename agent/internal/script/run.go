@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"xdr.corp/suite/scriptwire"
+	"xems.corp/suite/scriptwire"
 )
 
 // Result, sınırlı yürütmenin sonucudur.

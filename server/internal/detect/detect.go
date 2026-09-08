@@ -15,8 +15,8 @@ import (
 	"regexp"
 	"strings"
 
-	"xdr.corp/suite/server/internal/mitre"
-	"xdr.corp/suite/server/internal/model"
+	"xems.corp/suite/server/internal/mitre"
+	"xems.corp/suite/server/internal/model"
 )
 
 // Rule, bir tespit kuralıdır. Tüm belirtilen koşullar AND'lenir:
@@ -191,21 +191,21 @@ var (
 // kategorileri/mesajlarına dayanır.
 func DefaultRules() []Rule {
 	return []Rule{
-		{ID: "XDR-0001", Name: "Ajan kurcalama girişimi", Category: "SECURITY",
+		{ID: "XEMS-0001", Name: "Ajan kurcalama girişimi", Category: "SECURITY",
 			Contains: []string{"kurcalama"}, Severity: "CRITICAL", Technique: tImpairDefenses},
-		{ID: "XDR-0002", Name: "İmzasız/sahte script reddedildi", Category: "SECURITY",
+		{ID: "XEMS-0002", Name: "İmzasız/sahte script reddedildi", Category: "SECURITY",
 			Contains: []string{"script"}, Severity: "HIGH", Technique: tScripting},
-		{ID: "XDR-0003", Name: "Sahte/bozuk OTA güncelleme reddedildi", Category: "SECURITY",
+		{ID: "XEMS-0003", Name: "Sahte/bozuk OTA güncelleme reddedildi", Category: "SECURITY",
 			Contains: []string{"güncelleme"}, Severity: "HIGH", Technique: tSupplyChain},
-		{ID: "XDR-0004", Name: "Davranışsal anomali", Category: "SECURITY",
+		{ID: "XEMS-0004", Name: "Davranışsal anomali", Category: "SECURITY",
 			Contains: []string{"anomali"}, Severity: "HIGH", Technique: tProcInjection},
-		{ID: "XDR-0005", Name: "Yasaklı süreç yürütmesi", Category: "POLICY_VIOLATION",
+		{ID: "XEMS-0005", Name: "Yasaklı süreç yürütmesi", Category: "POLICY_VIOLATION",
 			Severity: "HIGH", Technique: tUserExecution},
-		{ID: "XDR-0006", Name: "Ağ hizmet keşfi", Category: "NETWORK_DISCOVERY",
+		{ID: "XEMS-0006", Name: "Ağ hizmet keşfi", Category: "NETWORK_DISCOVERY",
 			Severity: "LOW", Technique: tNetworkDiscov},
 		// v2: PROCESS telemetrisi üzerinde regex-tabanlı şüpheli-araç tespiti
 		// (saldırgan araçları / yaşam-alanı-dışı ikili kullanımı).
-		{ID: "XDR-0007", Name: "Şüpheli süreç/araç yürütmesi", Category: "PROCESS",
+		{ID: "XEMS-0007", Name: "Şüpheli süreç/araç yürütmesi", Category: "PROCESS",
 			MessageRegex: `mimikatz|psexec|\bnc\.exe|\bncat|powershell.*(-enc|-encodedcommand)|certutil.*-urlcache|rundll32.*javascript|regsvr32.*scrobj`,
 			Severity:     "HIGH", Technique: tScripting},
 	}

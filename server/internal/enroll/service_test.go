@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"xdr.corp/suite/server/internal/security"
+	"xems.corp/suite/server/internal/security"
 )
 
 // memStore, testler için bellek-içi Store implementasyonudur.
@@ -193,7 +193,7 @@ func newTestCA(t *testing.T) (*security.CA, []byte) {
 	}
 	tmpl := &x509.Certificate{
 		SerialNumber:          big.NewInt(1),
-		Subject:               pkix.Name{CommonName: "XDR Test CA"},
+		Subject:               pkix.Name{CommonName: "XEMS Test CA"},
 		NotBefore:             time.Now().Add(-time.Hour),
 		NotAfter:              time.Now().Add(24 * time.Hour),
 		IsCA:                  true,

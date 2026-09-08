@@ -18,7 +18,7 @@ type Manifest struct {
 	Mandatory     bool
 }
 
-const domainTag = "xdr-ota-manifest-v1"
+const domainTag = "xems-ota-manifest-v1"
 
 // CanonicalBytes, manifestonun imzalanacak deterministik bayt dizisini üretir.
 func CanonicalBytes(m Manifest) []byte {

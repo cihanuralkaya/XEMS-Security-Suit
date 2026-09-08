@@ -60,13 +60,13 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_USER: xdr
-          POSTGRES_PASSWORD: xdr
-          POSTGRES_DB: xdr
+          POSTGRES_USER: xems
+          POSTGRES_PASSWORD: xems
+          POSTGRES_DB: xems
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U xdr"
+          --health-cmd "pg_isready -U xems"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -87,11 +87,11 @@ jobs:
         run: make proto
       - name: psql istemcisi
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
-      # smoke-test.sh, XDR_DATABASE_URL görünce şemayı yükler, admin tohumlar ve
+      # smoke-test.sh, XEMS_DATABASE_URL görünce şemayı yükler, admin tohumlar ve
       # tüm zinciri GERÇEK PostgreSQL'e karşı çalıştırır (pgx yolu).
       - name: DB uçtan uca smoke test
         env:
-          XDR_DATABASE_URL: postgres://xdr:xdr@localhost:5432/xdr?sslmode=disable
+          XEMS_DATABASE_URL: postgres://xems:xems@localhost:5432/xems?sslmode=disable
         run: bash scripts/smoke-test.sh
 
   release:
@@ -117,6 +117,6 @@ jobs:
         run: bash scripts/build-release.sh "${GITHUB_REF_NAME}"
       - uses: actions/upload-artifact@v4
         with:
-          name: xdr-binaries
+          name: xems-binaries
           path: dist/
           if-no-files-found: error

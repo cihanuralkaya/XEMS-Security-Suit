@@ -7,7 +7,7 @@ import (
 	"context"
 	"fmt"
 
-	"xdr.corp/suite/server/internal/model"
+	"xems.corp/suite/server/internal/model"
 )
 
 // systemActor, otomatik müdahalenin denetim izindeki fail (adminID yerine sistem).

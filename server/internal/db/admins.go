@@ -8,7 +8,7 @@ import (
 	"context"
 	"fmt"
 
-	"xdr.corp/suite/server/internal/admin"
+	"xems.corp/suite/server/internal/admin"
 )
 
 // CreateAdmin, yeni bir yönetici ekler ve id'sini döner.

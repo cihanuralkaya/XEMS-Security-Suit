@@ -1,7 +1,7 @@
-# XDR / MDM — Kurumsal Uç Nokta Güvenliği ve Ajan Yönetim Sistemi
-# XDR / MDM — Corporate Endpoint Security & Agent Management System
+# XEMS Security Suite — Kurumsal Uç Nokta Güvenliği ve Ajan Yönetim Sistemi
+# XEMS Security Suite — Corporate Endpoint Security & Agent Management System
 
-[![CI](https://github.com/cihanuralkaya/xdr-suite/actions/workflows/ci.yml/badge.svg)](https://github.com/cihanuralkaya/xdr-suite/actions/workflows/ci.yml)
+[![CI](https://github.com/cihanuralkaya/XEMS-Security-Suit/actions/workflows/ci.yml/badge.svg)](https://github.com/cihanuralkaya/XEMS-Security-Suit/actions/workflows/ci.yml)
 
 **Türkçe** · [English](#english)
 
@@ -54,7 +54,7 @@ Tek dil: **Go**. Ajan ↔ C2 iletişimi **gRPC + mTLS** (TLS 1.3).
 | C2 sunucusu | `server/` | Log toplama, politika dağıtımı, OTA, enrollment/PKI |
 | Uç nokta ajanı | `agent/` | Politika uygulama, olay toplama, ağ keşfi |
 | Watchdog | `agent/cmd/watchdog` + `internal/watchdog` | Ajanı canlı tutar + OTA swap/rollback (ilk savunma) |
-| Proto sözleşmeleri | `proto/xdr/v1` | gRPC servis + mesaj tanımları |
+| Proto sözleşmeleri | `proto/xems/v1` | gRPC servis + mesaj tanımları |
 | Veritabanı | `db/` | Düzeltilmiş PostgreSQL şeması + migration'lar |
 | Dokümantasyon | `docs/` | Mimari, tehdit modeli, KVKK notları |
 
@@ -77,7 +77,7 @@ make tidy
 make build        # bin/c2, bin/agent, bin/watchdog
 
 # 4) Veritabanı şemasını kur
-psql -U postgres -d xdr -f db/schema.sql
+psql -U postgres -d xems -f db/schema.sql
 ```
 
 ## Kurulum ve dağıtım ✅
@@ -100,16 +100,16 @@ Tüm ayarlar ortam değişkenleriyle yapılır. Tam liste + açıklama:
 **[deploy/server/c2.env.example](deploy/server/c2.env.example)** (sunucu) ve
 **[deploy/agent.env.example](deploy/agent.env.example)** (ajan).
 
-- **Zorunlu (sunucu):** `XDR_MASTER_KEY` (32 bayt base64), TLS yolları
-  (`XDR_CA_CERT`/`XDR_CA_KEY`/`XDR_SERVER_CERT`/`XDR_SERVER_KEY`); üretim için
-  `XDR_DATABASE_URL` (boşsa `XDR_DEMO=1` ile bellek-içi demo).
-- **Opsiyonel korumalar (sunucu):** `XDR_ALERT_WEBHOOK_URL`/`XDR_ALERT_FORMAT`
-  (SOC uyarı, Slack/Teams), `XDR_AUTO_RESPONSE` (SOAR oto-karantina), `XDR_IOC_FILE`
-  (tehdit istihbaratı), `XDR_DETECT_RULES_FILE` (özel tespit kuralları),
-  `XDR_METRICS_TOKEN` (Prometheus), `XDR_LOG_FORMAT=json` (SIEM).
-- **Ajan:** bağlantı (`XDR_ENROLL_ADDR`/`XDR_AGENT_ADDR`/`XDR_SERVER_NAME`/`XDR_CA_PEM`),
-  `XDR_SERVER_SPKI_PIN` (pinning), `XDR_UPDATE_PUBKEY`/`XDR_SCRIPT_PUBKEY` (imza),
-  `XDR_ANOMALY_*`, `XDR_SAFE_MODE`, `XDR_LOG_FORMAT`.
+- **Zorunlu (sunucu):** `XEMS_MASTER_KEY` (32 bayt base64), TLS yolları
+  (`XEMS_CA_CERT`/`XEMS_CA_KEY`/`XEMS_SERVER_CERT`/`XEMS_SERVER_KEY`); üretim için
+  `XEMS_DATABASE_URL` (boşsa `XEMS_DEMO=1` ile bellek-içi demo).
+- **Opsiyonel korumalar (sunucu):** `XEMS_ALERT_WEBHOOK_URL`/`XEMS_ALERT_FORMAT`
+  (SOC uyarı, Slack/Teams), `XEMS_AUTO_RESPONSE` (SOAR oto-karantina), `XEMS_IOC_FILE`
+  (tehdit istihbaratı), `XEMS_DETECT_RULES_FILE` (özel tespit kuralları),
+  `XEMS_METRICS_TOKEN` (Prometheus), `XEMS_LOG_FORMAT=json` (SIEM).
+- **Ajan:** bağlantı (`XEMS_ENROLL_ADDR`/`XEMS_AGENT_ADDR`/`XEMS_SERVER_NAME`/`XEMS_CA_PEM`),
+  `XEMS_SERVER_SPKI_PIN` (pinning), `XEMS_UPDATE_PUBKEY`/`XEMS_SCRIPT_PUBKEY` (imza),
+  `XEMS_ANOMALY_*`, `XEMS_SAFE_MODE`, `XEMS_LOG_FORMAT`.
 
 Etkin korumaları konsoldan (Yönetim → **Koruma Katmanları**) veya `GET /api/features`
 ile görebilirsiniz.
@@ -162,7 +162,7 @@ Single language: **Go**. Agent ↔ C2 communication over **gRPC + mTLS** (TLS 1.
 | C2 server | `server/` | Log collection, policy distribution, OTA, enrollment/PKI |
 | Endpoint agent | `agent/` | Policy enforcement, event collection, network discovery |
 | Watchdog | `agent/cmd/watchdog` + `internal/watchdog` | Keeps the agent alive + OTA swap/rollback (first line of defense) |
-| Proto contracts | `proto/xdr/v1` | gRPC service + message definitions |
+| Proto contracts | `proto/xems/v1` | gRPC service + message definitions |
 | Database | `db/` | Corrected PostgreSQL schema + migrations |
 | Documentation | `docs/` | Architecture, threat model, data-protection notes |
 
@@ -185,7 +185,7 @@ make tidy
 make build        # bin/c2, bin/agent, bin/watchdog
 
 # 4) Install the database schema
-psql -U postgres -d xdr -f db/schema.sql
+psql -U postgres -d xems -f db/schema.sql
 ```
 
 ## Installation & deployment ✅
@@ -208,16 +208,16 @@ All settings are via environment variables. Full list + descriptions:
 **[deploy/server/c2.env.example](deploy/server/c2.env.example)** (server) and
 **[deploy/agent.env.example](deploy/agent.env.example)** (agent).
 
-- **Required (server):** `XDR_MASTER_KEY` (32-byte base64), TLS paths
-  (`XDR_CA_CERT`/`XDR_CA_KEY`/`XDR_SERVER_CERT`/`XDR_SERVER_KEY`); for production
-  `XDR_DATABASE_URL` (if empty, in-memory demo with `XDR_DEMO=1`).
-- **Optional protections (server):** `XDR_ALERT_WEBHOOK_URL`/`XDR_ALERT_FORMAT`
-  (SOC alerting, Slack/Teams), `XDR_AUTO_RESPONSE` (SOAR auto-quarantine),
-  `XDR_IOC_FILE` (threat intel), `XDR_DETECT_RULES_FILE` (custom detection rules),
-  `XDR_METRICS_TOKEN` (Prometheus), `XDR_LOG_FORMAT=json` (SIEM).
-- **Agent:** connection (`XDR_ENROLL_ADDR`/`XDR_AGENT_ADDR`/`XDR_SERVER_NAME`/`XDR_CA_PEM`),
-  `XDR_SERVER_SPKI_PIN` (pinning), `XDR_UPDATE_PUBKEY`/`XDR_SCRIPT_PUBKEY` (signing),
-  `XDR_ANOMALY_*`, `XDR_SAFE_MODE`, `XDR_LOG_FORMAT`.
+- **Required (server):** `XEMS_MASTER_KEY` (32-byte base64), TLS paths
+  (`XEMS_CA_CERT`/`XEMS_CA_KEY`/`XEMS_SERVER_CERT`/`XEMS_SERVER_KEY`); for production
+  `XEMS_DATABASE_URL` (if empty, in-memory demo with `XEMS_DEMO=1`).
+- **Optional protections (server):** `XEMS_ALERT_WEBHOOK_URL`/`XEMS_ALERT_FORMAT`
+  (SOC alerting, Slack/Teams), `XEMS_AUTO_RESPONSE` (SOAR auto-quarantine),
+  `XEMS_IOC_FILE` (threat intel), `XEMS_DETECT_RULES_FILE` (custom detection rules),
+  `XEMS_METRICS_TOKEN` (Prometheus), `XEMS_LOG_FORMAT=json` (SIEM).
+- **Agent:** connection (`XEMS_ENROLL_ADDR`/`XEMS_AGENT_ADDR`/`XEMS_SERVER_NAME`/`XEMS_CA_PEM`),
+  `XEMS_SERVER_SPKI_PIN` (pinning), `XEMS_UPDATE_PUBKEY`/`XEMS_SCRIPT_PUBKEY` (signing),
+  `XEMS_ANOMALY_*`, `XEMS_SAFE_MODE`, `XEMS_LOG_FORMAT`.
 
 You can see which protections are enabled from the console (Management → **Protection
 Layers**) or via `GET /api/features`.

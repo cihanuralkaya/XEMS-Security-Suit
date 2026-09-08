@@ -22,15 +22,15 @@ import (
 	"sync/atomic"
 	"time"
 
-	"xdr.corp/suite/server/internal/admin"
-	"xdr.corp/suite/server/internal/adminread"
-	"xdr.corp/suite/server/internal/detect"
-	"xdr.corp/suite/server/internal/eventbus"
-	"xdr.corp/suite/server/internal/metrics"
-	"xdr.corp/suite/server/internal/mitre"
-	"xdr.corp/suite/server/internal/model"
-	"xdr.corp/suite/server/internal/security"
-	"xdr.corp/suite/server/internal/vuln"
+	"xems.corp/suite/server/internal/admin"
+	"xems.corp/suite/server/internal/adminread"
+	"xems.corp/suite/server/internal/detect"
+	"xems.corp/suite/server/internal/eventbus"
+	"xems.corp/suite/server/internal/metrics"
+	"xems.corp/suite/server/internal/mitre"
+	"xems.corp/suite/server/internal/model"
+	"xems.corp/suite/server/internal/security"
+	"xems.corp/suite/server/internal/vuln"
 )
 
 //go:embed console.html

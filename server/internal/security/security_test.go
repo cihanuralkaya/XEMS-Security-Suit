@@ -130,7 +130,7 @@ func newTestCA(t *testing.T) *CA {
 	}
 	tmpl := &x509.Certificate{
 		SerialNumber:          big.NewInt(1),
-		Subject:               pkix.Name{CommonName: "XDR Test CA"},
+		Subject:               pkix.Name{CommonName: "XEMS Test CA"},
 		NotBefore:             time.Now().Add(-time.Hour),
 		NotAfter:              time.Now().Add(24 * time.Hour),
 		IsCA:                  true,

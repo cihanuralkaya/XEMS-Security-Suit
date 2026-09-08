@@ -9,9 +9,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"xdr.corp/suite/server/internal/admin"
-	"xdr.corp/suite/server/internal/adminapi"
-	"xdr.corp/suite/server/internal/security"
+	"xems.corp/suite/server/internal/admin"
+	"xems.corp/suite/server/internal/adminapi"
+	"xems.corp/suite/server/internal/security"
 )
 
 // Derleme-zamanı arayüz kontrolleri.

@@ -12,8 +12,8 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 
-	xdrv1 "xdr.corp/suite/gen/xdr/v1"
-	"xdr.corp/suite/server/internal/revocation"
+	xemsv1 "xems.corp/suite/gen/xems/v1"
+	"xems.corp/suite/server/internal/revocation"
 )
 
 // serverOptions, kaynak-tükenmesi (DoS) sınırlarını içeren temel gRPC seçenekleri
@@ -73,7 +73,7 @@ func NewAgentServer(m TLSMaterial, h *AgentHandler) (*grpc.Server, error) {
 		return nil, err
 	}
 	s := grpc.NewServer(serverOptions(tc)...)
-	xdrv1.RegisterAgentServiceServer(s, h)
+	xemsv1.RegisterAgentServiceServer(s, h)
 	return s, nil
 }
 
@@ -87,7 +87,7 @@ func NewEnrollServer(m TLSMaterial, h *EnrollmentHandler) (*grpc.Server, error) 
 		return nil, err
 	}
 	s := grpc.NewServer(serverOptions(tc)...)
-	xdrv1.RegisterEnrollmentServiceServer(s, h)
+	xemsv1.RegisterEnrollmentServiceServer(s, h)
 	return s, nil
 }
 

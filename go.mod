@@ -1,4 +1,4 @@
-module xdr.corp/suite
+module xems.corp/suite
 
 go 1.23.0
 

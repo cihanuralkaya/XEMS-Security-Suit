@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"xdr.corp/suite/server/internal/security"
+	"xems.corp/suite/server/internal/security"
 )
 
 // memStore, admin testleri için bellek-içi Store.

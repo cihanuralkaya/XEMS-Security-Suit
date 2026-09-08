@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>XDR Komuta Merkezi</title>
+<title>XEMS Komuta Merkezi</title>
 <style>
   /* Koyu güvenlik-operasyon teması (bilinçli tek tema; her renk açıkça boyanır). */
   :root {
@@ -297,7 +297,7 @@
 <!-- LOGIN -->
 <div id="login">
   <div class="login-card">
-    <div class="brand"><span class="logo">🛡️</span><span>XDR Komuta Merkezi<span class="sub">Endpoint Security · MDM</span></span></div>
+    <div class="brand"><span class="logo">🛡️</span><span>XEMS Komuta Merkezi<span class="sub">Endpoint Security · MDM</span></span></div>
     <h1>Yönetici Girişi</h1>
     <p class="hint">Kurumsal uç nokta güvenlik ve ajan yönetim konsolu.</p>
     <label for="l-email">E-posta</label>
@@ -320,7 +320,7 @@
 <!-- APP -->
 <div id="app">
   <header class="top">
-    <div class="brand"><span class="logo">🛡️</span> XDR Komuta Merkezi</div>
+    <div class="brand"><span class="logo">🛡️</span> XEMS Komuta Merkezi</div>
     <span id="page-title" class="page-title">Genel Bakış</span>
     <span class="sp"></span>
     <span id="live" class="live"><span class="dot"></span><span id="live-txt">bağlanıyor…</span></span>
@@ -693,7 +693,7 @@
             <span class="sp"></span><span class="mono" style="color:var(--faint);font-size:11px">envanter × CVE veri kümesi</span>
             <button class="btn ghost sm" id="vuln-refresh" title="Yenile">↻</button></div>
           <div class="body">
-            <p class="hint" style="margin:0 0 10px">Cihazların yüklü yazılımı bilinen zafiyet (CVE) veri kümesiyle eşleştirilir. Veri kümesi <span class="mono">XDR_VULN_FILE</span> ile yüklenir.</p>
+            <p class="hint" style="margin:0 0 10px">Cihazların yüklü yazılımı bilinen zafiyet (CVE) veri kümesiyle eşleştirilir. Veri kümesi <span class="mono">XEMS_VULN_FILE</span> ile yüklenir.</p>
             <div id="vuln-body"></div>
             <div id="vuln-empty" class="empty" style="padding:14px">Zafiyet verisi yok (veri kümesi yüklü değil veya eşleşme yok).</div>
           </div>
@@ -1803,7 +1803,7 @@
       $("vuln-count").textContent=devs.length;
       $("vuln-empty").style.display=devs.length?"none":"block";
       if(!devs.length){
-        $("vuln-empty").textContent=(r&&r.dataset_size)?("✓ "+r.dataset_size+" CVE tarandı — eşleşen zafiyet yok."):"Zafiyet veri kümesi yüklü değil (XDR_VULN_FILE).";
+        $("vuln-empty").textContent=(r&&r.dataset_size)?("✓ "+r.dataset_size+" CVE tarandı — eşleşen zafiyet yok."):"Zafiyet veri kümesi yüklü değil (XEMS_VULN_FILE).";
         return;
       }
       devs.forEach(function(d){

@@ -1,5 +1,5 @@
 {
-  "_comment": "XDR ajan anomali modeli — ÖRNEK/ŞABLON. Öznitelik sırası: [novelty, hour, connections, path_depth]. Bunu çevrimdışı eğitilmiş (lojistik/MLP) gerçek bir modelle değiştirin; ağırlıklar standartlaştırılmış özniteliklere uygulanır. XDR_ANOMALY_MODEL=/etc/xdr-agent/model.json ile ajana verilir.",
+  "_comment": "XEMS ajan anomali modeli — ÖRNEK/ŞABLON. Öznitelik sırası: [novelty, hour, connections, path_depth]. Bunu çevrimdışı eğitilmiş (lojistik/MLP) gerçek bir modelle değiştirin; ağırlıklar standartlaştırılmış özniteliklere uygulanır. XEMS_ANOMALY_MODEL=/etc/xems-agent/model.json ile ajana verilir.",
   "type": "logistic",
   "feature_mean": [0.15, 13, 8, 4],
   "feature_std": [0.2, 4, 15, 2],

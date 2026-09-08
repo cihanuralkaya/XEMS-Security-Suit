@@ -9,7 +9,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"xdr.corp/suite/server/internal/security"
+	"xems.corp/suite/server/internal/security"
 )
 
 // DeviceRow, DB'den okunan ham cihaz satırıdır (şifreli alanlar dahil).

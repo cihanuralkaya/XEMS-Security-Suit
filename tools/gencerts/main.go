@@ -6,7 +6,7 @@
 //
 // Kullanım:
 //
-//	go run ./tools/gencerts -out ./dev-certs -name xdr-c2
+//	go run ./tools/gencerts -out ./dev-certs -name xems-c2
 package main
 
 import (
@@ -29,7 +29,7 @@ import (
 
 func main() {
 	out := flag.String("out", "./dev-certs", "sertifikaların yazılacağı dizin")
-	name := flag.String("name", "xdr-c2", "sunucu adı (TLS SAN / doğrulama adı)")
+	name := flag.String("name", "xems-c2", "sunucu adı (TLS SAN / doğrulama adı)")
 	days := flag.Int("days", 825, "geçerlilik süresi (gün)")
 	flag.Parse()
 
@@ -51,7 +51,7 @@ func run(outDir, serverName string, days int) error {
 	}
 	caTmpl := &x509.Certificate{
 		SerialNumber:          bigSerial(),
-		Subject:               pkix.Name{CommonName: "XDR Dev CA", Organization: []string{"XDR"}},
+		Subject:               pkix.Name{CommonName: "XEMS Dev CA", Organization: []string{"XEMS"}},
 		NotBefore:             time.Now().Add(-time.Hour),
 		NotAfter:              notAfter,
 		IsCA:                  true,
@@ -113,7 +113,7 @@ func run(outDir, serverName string, days int) error {
 		}
 	}
 
-	// 32 baytlık rastgele ana anahtar (base64) — XDR_MASTER_KEY için öneri.
+	// 32 baytlık rastgele ana anahtar (base64) — XEMS_MASTER_KEY için öneri.
 	master := make([]byte, 32)
 	if _, err := rand.Read(master); err != nil {
 		return err
@@ -122,12 +122,12 @@ func run(outDir, serverName string, days int) error {
 	fmt.Printf("Sertifikalar yazıldı: %s\n", outDir)
 	fmt.Println("  ca.crt, ca.key, server.crt, server.key")
 	fmt.Printf("\nÖnerilen ortam değişkenleri (geliştirme):\n")
-	fmt.Printf("  export XDR_MASTER_KEY=%s\n", base64.StdEncoding.EncodeToString(master))
-	fmt.Printf("  export XDR_CA_CERT=%s\n", filepath.Join(outDir, "ca.crt"))
-	fmt.Printf("  export XDR_CA_KEY=%s\n", filepath.Join(outDir, "ca.key"))
-	fmt.Printf("  export XDR_SERVER_CERT=%s\n", filepath.Join(outDir, "server.crt"))
-	fmt.Printf("  export XDR_SERVER_KEY=%s\n", filepath.Join(outDir, "server.key"))
-	fmt.Printf("  # ajan tarafı: XDR_CA_PEM=%s  XDR_SERVER_NAME=%s\n",
+	fmt.Printf("  export XEMS_MASTER_KEY=%s\n", base64.StdEncoding.EncodeToString(master))
+	fmt.Printf("  export XEMS_CA_CERT=%s\n", filepath.Join(outDir, "ca.crt"))
+	fmt.Printf("  export XEMS_CA_KEY=%s\n", filepath.Join(outDir, "ca.key"))
+	fmt.Printf("  export XEMS_SERVER_CERT=%s\n", filepath.Join(outDir, "server.crt"))
+	fmt.Printf("  export XEMS_SERVER_KEY=%s\n", filepath.Join(outDir, "server.key"))
+	fmt.Printf("  # ajan tarafı: XEMS_CA_PEM=%s  XEMS_SERVER_NAME=%s\n",
 		filepath.Join(outDir, "ca.crt"), serverName)
 	return nil
 }

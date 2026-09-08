@@ -5,7 +5,7 @@ import (
 	"crypto/rand"
 	"testing"
 
-	"xdr.corp/suite/otawire"
+	"xems.corp/suite/otawire"
 )
 
 func TestSignAndVerify(t *testing.T) {
@@ -17,7 +17,7 @@ func TestSignAndVerify(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	payload := []byte("XDR agent v1.4.0 ikilisi")
+	payload := []byte("XEMS agent v1.4.0 ikilisi")
 	m := otawire.Manifest{
 		TargetVersion: "1.4.0",
 		SHA256Hex:     SHA256Hex(payload),

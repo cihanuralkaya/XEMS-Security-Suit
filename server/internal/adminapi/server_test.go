@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"xdr.corp/suite/server/internal/admin"
-	"xdr.corp/suite/server/internal/adminread"
-	"xdr.corp/suite/server/internal/eventbus"
-	"xdr.corp/suite/server/internal/security"
+	"xems.corp/suite/server/internal/admin"
+	"xems.corp/suite/server/internal/adminread"
+	"xems.corp/suite/server/internal/eventbus"
+	"xems.corp/suite/server/internal/security"
 )
 
 // memStore, hem admin.Store hem adminapi.AuthStore'u karşılar.
@@ -568,7 +568,7 @@ func TestServesConsole(t *testing.T) {
 	}
 	buf := make([]byte, 1024)
 	n, _ := resp.Body.Read(buf)
-	if !strings.Contains(string(buf[:n]), "XDR Komuta Merkezi") {
+	if !strings.Contains(string(buf[:n]), "XEMS Komuta Merkezi") {
 		t.Fatal("konsol içeriği beklenen başlığı taşımıyor")
 	}
 }
@@ -903,8 +903,8 @@ func TestDetectionTestEndpoint(t *testing.T) {
 		return resp.StatusCode, out.Matched, first
 	}
 
-	// "kurcalama" + SECURITY → XDR-0001 eşleşir.
-	if code, n, first := do("SECURITY", "ajan kurcalama girişimi tespit edildi"); code != http.StatusOK || n < 1 || first != "XDR-0001" {
+	// "kurcalama" + SECURITY → XEMS-0001 eşleşir.
+	if code, n, first := do("SECURITY", "ajan kurcalama girişimi tespit edildi"); code != http.StatusOK || n < 1 || first != "XEMS-0001" {
 		t.Fatalf("kurcalama eşleşmeliydi: code=%d matched=%d first=%q", code, n, first)
 	}
 

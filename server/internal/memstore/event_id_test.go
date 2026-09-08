@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"xdr.corp/suite/server/internal/model"
+	"xems.corp/suite/server/internal/model"
 )
 
 // Olay kimlikleri KARARLI olmalı: aynı olay, ardışık ListEvents çağrılarında

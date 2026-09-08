@@ -17,10 +17,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	xdrv1 "xdr.corp/suite/gen/xdr/v1"
-	"xdr.corp/suite/server/internal/enroll"
-	"xdr.corp/suite/server/internal/model"
-	"xdr.corp/suite/server/internal/security"
+	xemsv1 "xems.corp/suite/gen/xems/v1"
+	"xems.corp/suite/server/internal/enroll"
+	"xems.corp/suite/server/internal/model"
+	"xems.corp/suite/server/internal/security"
 )
 
 // Store, pgx havuzu üzerinden domain depolama arayüzlerini uygular.
@@ -208,7 +208,7 @@ func (s *Store) TouchHeartbeat(ctx context.Context, deviceID, agentVersion, osVe
 
 // PendingCommands, cihaz için bekleyen komutları döner ve teslim edildi olarak
 // işaretler (en-fazla-bir-kez teslim). Tek UPDATE...RETURNING ile atomiktir.
-func (s *Store) PendingCommands(ctx context.Context, deviceID string) ([]*xdrv1.Command, error) {
+func (s *Store) PendingCommands(ctx context.Context, deviceID string) ([]*xemsv1.Command, error) {
 	const q = `
 		UPDATE device_commands
 		   SET delivered_at = now()
@@ -224,13 +224,13 @@ func (s *Store) PendingCommands(ctx context.Context, deviceID string) ([]*xdrv1.
 	}
 	defer rows.Close()
 
-	var cmds []*xdrv1.Command
+	var cmds []*xemsv1.Command
 	for rows.Next() {
 		var id, typ, paramsJSON string
 		if err := rows.Scan(&id, &typ, &paramsJSON); err != nil {
 			return nil, fmt.Errorf("db: komut okuma: %w", err)
 		}
-		cmd := &xdrv1.Command{CommandId: id, Type: commandTypeToProto(typ)}
+		cmd := &xemsv1.Command{CommandId: id, Type: commandTypeToProto(typ)}
 		if paramsJSON != "" {
 			var m map[string]any
 			if json.Unmarshal([]byte(paramsJSON), &m) == nil {
@@ -264,28 +264,28 @@ func (s *Store) EnqueueCommandParams(ctx context.Context, deviceID, cmdType, iss
 	return nil
 }
 
-func commandTypeToProto(t string) xdrv1.Command_CommandType {
+func commandTypeToProto(t string) xemsv1.Command_CommandType {
 	switch t {
 	case "QUARANTINE":
-		return xdrv1.Command_COMMAND_TYPE_QUARANTINE
+		return xemsv1.Command_COMMAND_TYPE_QUARANTINE
 	case "UNQUARANTINE":
-		return xdrv1.Command_COMMAND_TYPE_UNQUARANTINE
+		return xemsv1.Command_COMMAND_TYPE_UNQUARANTINE
 	case "RUN_SIGNED_SCRIPT":
-		return xdrv1.Command_COMMAND_TYPE_RUN_SIGNED_SCRIPT
+		return xemsv1.Command_COMMAND_TYPE_RUN_SIGNED_SCRIPT
 	case "UNINSTALL":
-		return xdrv1.Command_COMMAND_TYPE_UNINSTALL
+		return xemsv1.Command_COMMAND_TYPE_UNINSTALL
 	case "COLLECT_DIAGNOSTICS":
-		return xdrv1.Command_COMMAND_TYPE_COLLECT_DIAGNOSTICS
+		return xemsv1.Command_COMMAND_TYPE_COLLECT_DIAGNOSTICS
 	case "COLLECT_FILE":
-		return xdrv1.Command_COMMAND_TYPE_COLLECT_FILE
+		return xemsv1.Command_COMMAND_TYPE_COLLECT_FILE
 	case "LOCK":
-		return xdrv1.Command_COMMAND_TYPE_LOCK
+		return xemsv1.Command_COMMAND_TYPE_LOCK
 	case "RESTART":
-		return xdrv1.Command_COMMAND_TYPE_RESTART
+		return xemsv1.Command_COMMAND_TYPE_RESTART
 	case "WIPE":
-		return xdrv1.Command_COMMAND_TYPE_WIPE
+		return xemsv1.Command_COMMAND_TYPE_WIPE
 	default:
-		return xdrv1.Command_COMMAND_TYPE_UNSPECIFIED
+		return xemsv1.Command_COMMAND_TYPE_UNSPECIFIED
 	}
 }
 

@@ -31,29 +31,29 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"xdr.corp/suite/agent/internal/agentclock"
-	"xdr.corp/suite/agent/internal/anomaly"
-	"xdr.corp/suite/agent/internal/certrenew"
-	"xdr.corp/suite/agent/internal/collector"
-	"xdr.corp/suite/agent/internal/compliance"
-	"xdr.corp/suite/agent/internal/deviceaction"
-	"xdr.corp/suite/agent/internal/discovery"
-	"xdr.corp/suite/agent/internal/enforce"
-	"xdr.corp/suite/agent/internal/inventory"
-	"xdr.corp/suite/agent/internal/liveness"
-	"xdr.corp/suite/agent/internal/netconn"
-	"xdr.corp/suite/agent/internal/osinfo"
-	"xdr.corp/suite/agent/internal/policy"
-	"xdr.corp/suite/agent/internal/quarantine"
-	"xdr.corp/suite/agent/internal/resource"
-	"xdr.corp/suite/agent/internal/script"
-	"xdr.corp/suite/agent/internal/transport"
-	"xdr.corp/suite/agent/internal/update"
-	"xdr.corp/suite/agent/internal/usbmon"
-	xdrv1 "xdr.corp/suite/gen/xdr/v1"
-	"xdr.corp/suite/logx"
-	"xdr.corp/suite/otawire"
-	"xdr.corp/suite/scriptwire"
+	"xems.corp/suite/agent/internal/agentclock"
+	"xems.corp/suite/agent/internal/anomaly"
+	"xems.corp/suite/agent/internal/certrenew"
+	"xems.corp/suite/agent/internal/collector"
+	"xems.corp/suite/agent/internal/compliance"
+	"xems.corp/suite/agent/internal/deviceaction"
+	"xems.corp/suite/agent/internal/discovery"
+	"xems.corp/suite/agent/internal/enforce"
+	"xems.corp/suite/agent/internal/inventory"
+	"xems.corp/suite/agent/internal/liveness"
+	"xems.corp/suite/agent/internal/netconn"
+	"xems.corp/suite/agent/internal/osinfo"
+	"xems.corp/suite/agent/internal/policy"
+	"xems.corp/suite/agent/internal/quarantine"
+	"xems.corp/suite/agent/internal/resource"
+	"xems.corp/suite/agent/internal/script"
+	"xems.corp/suite/agent/internal/transport"
+	"xems.corp/suite/agent/internal/update"
+	"xems.corp/suite/agent/internal/usbmon"
+	xemsv1 "xems.corp/suite/gen/xems/v1"
+	"xems.corp/suite/logx"
+	"xems.corp/suite/otawire"
+	"xems.corp/suite/scriptwire"
 )
 
 type envConfig struct {
@@ -72,17 +72,17 @@ type envConfig struct {
 
 func loadEnv() envConfig {
 	return envConfig{
-		enrollAddr:   getenv("XDR_ENROLL_ADDR", "localhost:8444"),
-		agentAddr:    getenv("XDR_AGENT_ADDR", "localhost:8443"),
-		serverName:   getenv("XDR_SERVER_NAME", "xdr-c2"),
-		caPath:       os.Getenv("XDR_CA_PEM"),
-		token:        os.Getenv("XDR_ENROLL_TOKEN"),
-		dataDir:      getenv("XDR_AGENT_DATA", "./agent-data"),
-		updatePubKey: os.Getenv("XDR_UPDATE_PUBKEY"),
-		scriptPubKey: os.Getenv("XDR_SCRIPT_PUBKEY"),
-		authMACs:     splitCSV(os.Getenv("XDR_AUTHORIZED_MACS")),
-		watchdogBin:  os.Getenv("XDR_WATCHDOG_BIN"),
-		interval:     getdur("XDR_HEARTBEAT_INTERVAL", 30*time.Second),
+		enrollAddr:   getenv("XEMS_ENROLL_ADDR", "localhost:8444"),
+		agentAddr:    getenv("XEMS_AGENT_ADDR", "localhost:8443"),
+		serverName:   getenv("XEMS_SERVER_NAME", "xems-c2"),
+		caPath:       os.Getenv("XEMS_CA_PEM"),
+		token:        os.Getenv("XEMS_ENROLL_TOKEN"),
+		dataDir:      getenv("XEMS_AGENT_DATA", "./agent-data"),
+		updatePubKey: os.Getenv("XEMS_UPDATE_PUBKEY"),
+		scriptPubKey: os.Getenv("XEMS_SCRIPT_PUBKEY"),
+		authMACs:     splitCSV(os.Getenv("XEMS_AUTHORIZED_MACS")),
+		watchdogBin:  os.Getenv("XEMS_WATCHDOG_BIN"),
+		interval:     getdur("XEMS_HEARTBEAT_INTERVAL", 30*time.Second),
 	}
 }
 
@@ -100,8 +100,8 @@ func splitCSV(s string) []string {
 }
 
 func main() {
-	// XDR_LOG_FORMAT=json → yapısal JSON loglama (SIEM); aksi halde "[agent] " metin.
-	logx.Setup(os.Getenv("XDR_LOG_FORMAT"), "[agent] ")
+	// XEMS_LOG_FORMAT=json → yapısal JSON loglama (SIEM); aksi halde "[agent] " metin.
+	logx.Setup(os.Getenv("XEMS_LOG_FORMAT"), "[agent] ")
 	if err := run(); err != nil {
 		log.Fatalf("hata: %v", err)
 	}
@@ -114,10 +114,10 @@ func run() error {
 
 	cfg := loadEnv()
 
-	// Sunucu SPKI pinning (savunma derinliği): XDR_SERVER_SPKI_PIN ayarlıysa (virgülle
+	// Sunucu SPKI pinning (savunma derinliği): XEMS_SERVER_SPKI_PIN ayarlıysa (virgülle
 	// ayrılmış base64 SHA-256 pinleri) sunucu sertifikası CA'ya EK OLARAK pin'e karşı
 	// doğrulanır. Ayarlı değilse pinning devre dışıdır (yalnız CA doğrulaması).
-	if pins := splitCSV(os.Getenv("XDR_SERVER_SPKI_PIN")); len(pins) > 0 {
+	if pins := splitCSV(os.Getenv("XEMS_SERVER_SPKI_PIN")); len(pins) > 0 {
 		transport.SetServerPins(pins)
 		log.Printf("mTLS: sunucu SPKI pinning etkin (%d pin)", len(pins))
 	}
@@ -150,21 +150,21 @@ func run() error {
 	var engine atomic.Pointer[policy.Engine]
 	engine.Store(policy.New(policy.Bundle{}))
 	monitor := enforce.NewMonitor(enforce.NewProcessController(), clock, buf, uint32(os.Getpid()))
-	// Davranışsal anomali tespiti (varsayılan AÇIK; XDR_ANOMALY_DISABLE ile kapatılır).
-	// XDR_ANOMALY_MODEL verilirse eğitilmiş JSON model (ModelScorer) yüklenir;
+	// Davranışsal anomali tespiti (varsayılan AÇIK; XEMS_ANOMALY_DISABLE ile kapatılır).
+	// XEMS_ANOMALY_MODEL verilirse eğitilmiş JSON model (ModelScorer) yüklenir;
 	// aksi halde saf-Go çevrimiçi istatistiksel scorer kullanılır. Muhafazakâr
 	// eşik (0.85): yalnız güçlü aykırı değerler SECURITY olayı üretir.
-	if os.Getenv("XDR_ANOMALY_DISABLE") == "" {
+	if os.Getenv("XEMS_ANOMALY_DISABLE") == "" {
 		var scorer anomaly.Scorer
-		if mp := os.Getenv("XDR_ANOMALY_MODEL"); mp != "" {
+		if mp := os.Getenv("XEMS_ANOMALY_MODEL"); mp != "" {
 			// SEC C-7: model YALNIZ Ed25519 imzası doğrulanınca yüklenir. İmzasız
 			// ya da doğrulanamayan model YÜKLENMEZ (fail-closed) — tespiti sıfırlayan
 			// kurcalamayı önler; istatistiksel scorer'a düşülür.
-			pubB64 := os.Getenv("XDR_ANOMALY_PUBKEY")
+			pubB64 := os.Getenv("XEMS_ANOMALY_PUBKEY")
 			if pubB64 == "" {
-				log.Printf("anomali modeli verildi ama XDR_ANOMALY_PUBKEY yok — imzasız model YÜKLENMEZ; istatistiksel scorer")
+				log.Printf("anomali modeli verildi ama XEMS_ANOMALY_PUBKEY yok — imzasız model YÜKLENMEZ; istatistiksel scorer")
 			} else if pub, err := base64.StdEncoding.DecodeString(pubB64); err != nil {
-				log.Printf("XDR_ANOMALY_PUBKEY geçersiz (%v) — istatistiksel scorer", err)
+				log.Printf("XEMS_ANOMALY_PUBKEY geçersiz (%v) — istatistiksel scorer", err)
 			} else if m, err := anomaly.LoadModelSigned(mp, ed25519.PublicKey(pub)); err != nil {
 				log.Printf("imzalı anomali modeli reddedildi (%v) — istatistiksel scorer", err)
 			} else {
@@ -175,30 +175,30 @@ func run() error {
 		monitor.SetAnomalyDetector(anomaly.NewDetector(0.85, scorer))
 	}
 	// Süreç-yürütme telemetrisi (EDR görünürlüğü; varsayılan AÇIK,
-	// XDR_PROCESS_TELEMETRY_DISABLE ile kapatılır). İlk tur taban çizgisidir;
+	// XEMS_PROCESS_TELEMETRY_DISABLE ile kapatılır). İlk tur taban çizgisidir;
 	// sonraki turlarda yeni süreçler PROCESS olayı olarak yayınlanır.
-	if os.Getenv("XDR_PROCESS_TELEMETRY_DISABLE") == "" {
+	if os.Getenv("XEMS_PROCESS_TELEMETRY_DISABLE") == "" {
 		monitor.SetProcessTelemetry(true)
 	}
 	neighbors := discovery.NewNeighborSource()
 	netTracker := discovery.NewTracker(cfg.authMACs)
-	// Giden bağlantı telemetrisi (EDR/IoC; varsayılan AÇIK, XDR_NETCONN_DISABLE
+	// Giden bağlantı telemetrisi (EDR/IoC; varsayılan AÇIK, XEMS_NETCONN_DISABLE
 	// ile kapatılır). İlk tarama taban çizgisi; sonra yeni bağlantılar yayınlanır.
 	var connTr *connTracker
-	if os.Getenv("XDR_NETCONN_DISABLE") == "" {
+	if os.Getenv("XEMS_NETCONN_DISABLE") == "" {
 		connTr = &connTracker{}
 	}
-	// Çıkarılabilir medya (USB) izleme (DLP-bitişik). XDR_USB_POLICY: audit
+	// Çıkarılabilir medya (USB) izleme (DLP-bitişik). XEMS_USB_POLICY: audit
 	// (varsayılan) | block | off. off dışında yeni takılan medya olay üretir.
 	var usbTr *usbTracker
-	if usbPolicy := getenv("XDR_USB_POLICY", "audit"); usbPolicy != "off" {
+	if usbPolicy := getenv("XEMS_USB_POLICY", "audit"); usbPolicy != "off" {
 		usbTr = &usbTracker{policy: usbPolicy}
 	}
 
 	// Karantina yöneticisi: izolasyonda yalnız C2'ye izin verilir.
-	// SAFE MODE (XDR_SAFE_MODE): gerçek firewall'a dokunmaz — demo/test için.
+	// SAFE MODE (XEMS_SAFE_MODE): gerçek firewall'a dokunmaz — demo/test için.
 	c2Host, _, _ := net.SplitHostPort(cfg.agentAddr)
-	safeMode := os.Getenv("XDR_SAFE_MODE") != ""
+	safeMode := os.Getenv("XEMS_SAFE_MODE") != ""
 	var isolator quarantine.Isolator = quarantine.NewIsolator()
 	if safeMode {
 		isolator = quarantine.NoopIsolator{}
@@ -283,8 +283,8 @@ func run() error {
 	beat := func() {
 		hbCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 		defer cancel()
-		resp, err := cli.Heartbeat(hbCtx, &xdrv1.HeartbeatRequest{
-			Identity: &xdrv1.AgentIdentity{
+		resp, err := cli.Heartbeat(hbCtx, &xemsv1.HeartbeatRequest{
+			Identity: &xemsv1.AgentIdentity{
 				DeviceId:     ident.deviceID,
 				AgentVersion: agentVersion,
 				OsPlatform:   runtime.GOOS,
@@ -340,7 +340,7 @@ func run() error {
 
 // flushEvents, tamponlanmış olayları gönderir ve yalnız sunucunun onayladığı
 // sıraya kadar tampondan siler (store-and-forward, inceleme #9).
-func flushEvents(ctx context.Context, cli xdrv1.AgentServiceClient, ident *identity, buf *collector.Buffer) {
+func flushEvents(ctx context.Context, cli xemsv1.AgentServiceClient, ident *identity, buf *collector.Buffer) {
 	pending := buf.Pending(500)
 	if len(pending) == 0 {
 		return
@@ -350,9 +350,9 @@ func flushEvents(ctx context.Context, cli xdrv1.AgentServiceClient, ident *ident
 		log.Printf("olay akışı açılamadı: %v", err)
 		return
 	}
-	protoEvents := make([]*xdrv1.Event, 0, len(pending))
+	protoEvents := make([]*xemsv1.Event, 0, len(pending))
 	for _, e := range pending {
-		pe := &xdrv1.Event{
+		pe := &xemsv1.Event{
 			Sequence:   e.Seq,
 			Category:   protoCategory(e.Category),
 			Severity:   protoSeverity(e.Severity),
@@ -368,8 +368,8 @@ func flushEvents(ctx context.Context, cli xdrv1.AgentServiceClient, ident *ident
 		}
 		protoEvents = append(protoEvents, pe)
 	}
-	if err := stream.Send(&xdrv1.EventBatch{
-		Identity: &xdrv1.AgentIdentity{DeviceId: ident.deviceID, AgentVersion: agentVersion, OsPlatform: runtime.GOOS},
+	if err := stream.Send(&xemsv1.EventBatch{
+		Identity: &xemsv1.AgentIdentity{DeviceId: ident.deviceID, AgentVersion: agentVersion, OsPlatform: runtime.GOOS},
 		Events:   protoEvents,
 	}); err != nil {
 		log.Printf("olay gönderilemedi: %v", err)
@@ -386,10 +386,10 @@ func flushEvents(ctx context.Context, cli xdrv1.AgentServiceClient, ident *ident
 
 // runPolicyStream, sunucuya KALICI bir politika aboneliği açar ve gelen her
 // paketle motoru sıcak değiştirir. Akış koparsa yeniden bağlanır (ctx bitene dek).
-func runPolicyStream(ctx context.Context, cli xdrv1.AgentServiceClient, ident *identity, engine *atomic.Pointer[policy.Engine]) {
+func runPolicyStream(ctx context.Context, cli xemsv1.AgentServiceClient, ident *identity, engine *atomic.Pointer[policy.Engine]) {
 	for ctx.Err() == nil {
-		stream, err := cli.StreamPolicies(ctx, &xdrv1.PolicySubscribeRequest{
-			Identity:             &xdrv1.AgentIdentity{DeviceId: ident.deviceID, AgentVersion: agentVersion, OsPlatform: runtime.GOOS},
+		stream, err := cli.StreamPolicies(ctx, &xemsv1.PolicySubscribeRequest{
+			Identity:             &xemsv1.AgentIdentity{DeviceId: ident.deviceID, AgentVersion: agentVersion, OsPlatform: runtime.GOOS},
 			CurrentPolicyVersion: engine.Load().Version(),
 		})
 		if err == nil {
@@ -414,9 +414,9 @@ func runPolicyStream(ctx context.Context, cli xdrv1.AgentServiceClient, ident *i
 // checkUpdate, sunucudan güncelleme manifestosu ister; imzayı doğrular, paketi
 // indirir, SHA-256'yı doğrular ve staging'e yazar (gerçek swap watchdog'un işi).
 // İmza/hash geçersizse güncellemeyi REDDEDER ve SECURITY/CRITICAL olayı üretir.
-func checkUpdate(ctx context.Context, cli xdrv1.AgentServiceClient, ident *identity, v *update.Verifier, dl update.Downloader, stageDir string, buf *collector.Buffer) {
-	resp, err := cli.CheckUpdate(ctx, &xdrv1.UpdateCheckRequest{
-		Identity: &xdrv1.AgentIdentity{DeviceId: ident.deviceID, AgentVersion: agentVersion, OsPlatform: runtime.GOOS},
+func checkUpdate(ctx context.Context, cli xemsv1.AgentServiceClient, ident *identity, v *update.Verifier, dl update.Downloader, stageDir string, buf *collector.Buffer) {
+	resp, err := cli.CheckUpdate(ctx, &xemsv1.UpdateCheckRequest{
+		Identity: &xemsv1.AgentIdentity{DeviceId: ident.deviceID, AgentVersion: agentVersion, OsPlatform: runtime.GOOS},
 	})
 	if err != nil || !resp.GetUpdateAvailable() {
 		return
@@ -457,34 +457,34 @@ func checkUpdate(ctx context.Context, cli xdrv1.AgentServiceClient, ident *ident
 
 // handleCommands, sunucudan gelen anlık komutları uygular (karantina, imzalı
 // script, adli dosya toplama).
-func handleCommands(ctx context.Context, cmds []*xdrv1.Command, quar *quarantine.Manager, sv *script.Verifier, buf *collector.Buffer, cli xdrv1.AgentServiceClient, safeMode bool) {
+func handleCommands(ctx context.Context, cmds []*xemsv1.Command, quar *quarantine.Manager, sv *script.Verifier, buf *collector.Buffer, cli xemsv1.AgentServiceClient, safeMode bool) {
 	for _, c := range cmds {
 		switch c.GetType() {
-		case xdrv1.Command_COMMAND_TYPE_QUARANTINE:
+		case xemsv1.Command_COMMAND_TYPE_QUARANTINE:
 			if err := quar.Apply(); err != nil {
 				log.Printf("karantina uygulanamadı: %v", err)
 			} else {
 				log.Println("karantina uygulandı")
 			}
-		case xdrv1.Command_COMMAND_TYPE_UNQUARANTINE:
+		case xemsv1.Command_COMMAND_TYPE_UNQUARANTINE:
 			if err := quar.Release(); err != nil {
 				log.Printf("karantina kaldırılamadı: %v", err)
 			} else {
 				log.Println("karantina kaldırıldı")
 			}
-		case xdrv1.Command_COMMAND_TYPE_RUN_SIGNED_SCRIPT:
+		case xemsv1.Command_COMMAND_TYPE_RUN_SIGNED_SCRIPT:
 			// Uzun sürebilir; heartbeat döngüsünü bloklamamak için arka planda.
 			go runSignedScript(ctx, c, sv, buf)
-		case xdrv1.Command_COMMAND_TYPE_COLLECT_FILE:
+		case xemsv1.Command_COMMAND_TYPE_COLLECT_FILE:
 			// Dosya okuma/yükleme bloklamasın; arka planda.
 			go collectFile(ctx, c, buf, cli)
-		case xdrv1.Command_COMMAND_TYPE_LOCK:
+		case xemsv1.Command_COMMAND_TYPE_LOCK:
 			doDeviceAction(buf, safeMode, "LOCK", "ekran kilitleme", deviceaction.Lock)
-		case xdrv1.Command_COMMAND_TYPE_RESTART:
+		case xemsv1.Command_COMMAND_TYPE_RESTART:
 			doDeviceAction(buf, safeMode, "RESTART", "yeniden başlatma", deviceaction.Restart)
-		case xdrv1.Command_COMMAND_TYPE_WIPE:
+		case xemsv1.Command_COMMAND_TYPE_WIPE:
 			// WIPE geri döndürülemez kripto-silme yapar. ÜÇÜNCÜ güvenlik katmanı:
-			// gerçek silme yalnız ajan AÇIKÇA ARM'lıysa (XDR_ALLOW_WIPE=1) çağrılır;
+			// gerçek silme yalnız ajan AÇIKÇA ARM'lıysa (XEMS_ALLOW_WIPE=1) çağrılır;
 			// aksi halde yalnız olay üretilir, VERİ SİLİNMEZ. (Diğer iki katman: sunucu
 			// RBAC=ADMIN ve doDeviceAction'daki güvenli-mod denetimi.)
 			doDeviceAction(buf, safeMode, "WIPE", "veri silme", selectWipeFn(deviceaction.WipeArmed()))
@@ -534,7 +534,7 @@ const maxCollectBytes = 3 << 20 // 3 MiB
 // collectFile, COLLECT_FILE komutunun hedef dosyasını (boyut-sınırlı) okur,
 // SHA-256'sını hesaplar ve UploadArtifact ile sunucuya yükler. Başarı/başarısızlık
 // bir SYSTEM olayı olarak da bildirilir (konsol görünürlüğü).
-func collectFile(ctx context.Context, c *xdrv1.Command, buf *collector.Buffer, cli xdrv1.AgentServiceClient) {
+func collectFile(ctx context.Context, c *xemsv1.Command, buf *collector.Buffer, cli xemsv1.AgentServiceClient) {
 	path := c.GetParams().GetFields()["path"].GetStringValue()
 	if path == "" {
 		return
@@ -560,7 +560,7 @@ func collectFile(ctx context.Context, c *xdrv1.Command, buf *collector.Buffer, c
 		return
 	}
 	sum := sha256.Sum256(content)
-	_, err = cli.UploadArtifact(ctx, &xdrv1.UploadArtifactRequest{
+	_, err = cli.UploadArtifact(ctx, &xemsv1.UploadArtifactRequest{
 		CommandId: c.GetCommandId(), Path: path, Sha256: hex.EncodeToString(sum[:]), Content: content,
 	})
 	if err != nil {
@@ -575,7 +575,7 @@ func collectFile(ctx context.Context, c *xdrv1.Command, buf *collector.Buffer, c
 // runSignedScript, komut parametrelerinden scripti çıkarır, İMZASINI gömülü
 // public key ile doğrular ve YALNIZ geçerliyse sınırlı biçimde çalıştırır.
 // İmza geçersizse SECURITY/CRITICAL olayı üretir ve çalıştırmaz.
-func runSignedScript(ctx context.Context, c *xdrv1.Command, sv *script.Verifier, buf *collector.Buffer) {
+func runSignedScript(ctx context.Context, c *xemsv1.Command, sv *script.Verifier, buf *collector.Buffer) {
 	if sv == nil {
 		log.Println("imzalı script alındı ama script public key ayarlı değil; atlanıyor")
 		return
@@ -877,18 +877,18 @@ func scanNetwork(src discovery.NeighborSource, tr *discovery.Tracker, buf *colle
 //	-ldflags "-X main.agentVersion=1.0.0"
 var agentVersion = "0.1.0-dev"
 
-func protoCategory(s string) xdrv1.EventCategory {
-	if v, ok := xdrv1.EventCategory_value["EVENT_CATEGORY_"+s]; ok {
-		return xdrv1.EventCategory(v)
+func protoCategory(s string) xemsv1.EventCategory {
+	if v, ok := xemsv1.EventCategory_value["EVENT_CATEGORY_"+s]; ok {
+		return xemsv1.EventCategory(v)
 	}
-	return xdrv1.EventCategory_EVENT_CATEGORY_SYSTEM
+	return xemsv1.EventCategory_EVENT_CATEGORY_SYSTEM
 }
 
-func protoSeverity(s string) xdrv1.Severity {
-	if v, ok := xdrv1.Severity_value["SEVERITY_"+s]; ok {
-		return xdrv1.Severity(v)
+func protoSeverity(s string) xemsv1.Severity {
+	if v, ok := xemsv1.Severity_value["SEVERITY_"+s]; ok {
+		return xemsv1.Severity(v)
 	}
-	return xdrv1.Severity_SEVERITY_INFO
+	return xemsv1.Severity_SEVERITY_INFO
 }
 
 func getenv(k, def string) string {

@@ -94,7 +94,7 @@ func VerifyTOTP(secret, code string, now time.Time) bool {
 }
 
 // OTPAuthURI, authenticator uygulamalarının QR olarak okuduğu otpauth:// URI'sini
-// üretir. issuer ve account etiketleme içindir (ör. "XDR Konsol", admin e-postası).
+// üretir. issuer ve account etiketleme içindir (ör. "XEMS Konsol", admin e-postası).
 func OTPAuthURI(issuer, account, secret string) string {
 	label := url.PathEscape(issuer + ":" + account)
 	q := url.Values{}

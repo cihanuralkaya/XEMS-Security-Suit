@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"xdr.corp/suite/agent/internal/collector"
+	"xems.corp/suite/agent/internal/collector"
 )
 
 type fakeIso struct {

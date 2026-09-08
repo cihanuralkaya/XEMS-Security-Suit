@@ -16,15 +16,15 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	xdrv1 "xdr.corp/suite/gen/xdr/v1"
-	"xdr.corp/suite/server/internal/detect"
-	"xdr.corp/suite/server/internal/ioc"
-	"xdr.corp/suite/server/internal/metrics"
-	"xdr.corp/suite/server/internal/mitre"
-	"xdr.corp/suite/server/internal/model"
-	"xdr.corp/suite/server/internal/notify"
-	"xdr.corp/suite/server/internal/response"
-	"xdr.corp/suite/server/internal/rollout"
+	xemsv1 "xems.corp/suite/gen/xems/v1"
+	"xems.corp/suite/server/internal/detect"
+	"xems.corp/suite/server/internal/ioc"
+	"xems.corp/suite/server/internal/metrics"
+	"xems.corp/suite/server/internal/mitre"
+	"xems.corp/suite/server/internal/model"
+	"xems.corp/suite/server/internal/notify"
+	"xems.corp/suite/server/internal/response"
+	"xems.corp/suite/server/internal/rollout"
 )
 
 // DeviceRegistry, cihaz durumu ve politika sürümü için sunucu-tarafı depolamadır.
@@ -33,7 +33,7 @@ type DeviceRegistry interface {
 	// geçerli politika sürümünü döner.
 	TouchHeartbeat(ctx context.Context, deviceID, agentVersion, osVersion string, at time.Time) (currentPolicyVersion string, err error)
 	// PendingCommands, cihaz için bekleyen komutları döner (karantina vb.).
-	PendingCommands(ctx context.Context, deviceID string) ([]*xdrv1.Command, error)
+	PendingCommands(ctx context.Context, deviceID string) ([]*xemsv1.Command, error)
 }
 
 // EventSink, gelen olayları kalıcılaştırır ve kabul edilen son sırayı döner.
@@ -45,14 +45,14 @@ type EventSink interface {
 type PolicyProvider interface {
 	// CurrentPolicy, cihazın geçerli politika paketini döner. Cihaza politika
 	// atanmamışsa (nil, nil) döner.
-	CurrentPolicy(ctx context.Context, deviceID string) (*xdrv1.PolicyBundle, error)
+	CurrentPolicy(ctx context.Context, deviceID string) (*xemsv1.PolicyBundle, error)
 }
 
 // UpdateProvider, cihaz için geçerli OTA güncelleme manifestosunu döner.
 type UpdateProvider interface {
 	// LatestUpdate, platforma uygun en güncel sürümü döner. Güncelleme yoksa
 	// (nil, nil). Dönen manifesto İMZALIDIR (imza DB'de saklanır).
-	LatestUpdate(ctx context.Context, deviceID, currentAgentVersion, platform string) (*xdrv1.UpdateManifest, error)
+	LatestUpdate(ctx context.Context, deviceID, currentAgentVersion, platform string) (*xemsv1.UpdateManifest, error)
 }
 
 // PolicyNotifier, açık politika akışlarını politika değişince uyandırır.
@@ -99,7 +99,7 @@ func (noopResponder) AutoQuarantine(context.Context, string, string) error { ret
 
 // AgentHandler, AgentService gRPC sunucusunu uygular.
 type AgentHandler struct {
-	xdrv1.UnimplementedAgentServiceServer
+	xemsv1.UnimplementedAgentServiceServer
 	devices   DeviceRegistry
 	events    EventSink
 	policies  PolicyProvider
@@ -140,7 +140,7 @@ const maxArtifactBytes = 3 << 20 // 3 MiB
 
 // UploadArtifact, ajanın COLLECT_FILE komutuyla topladığı dosyayı saklar. Kimlik
 // istemci sertifikasından; boyut ve SHA-256 doğrulanır.
-func (h *AgentHandler) UploadArtifact(ctx context.Context, req *xdrv1.UploadArtifactRequest) (*xdrv1.UploadArtifactResponse, error) {
+func (h *AgentHandler) UploadArtifact(ctx context.Context, req *xemsv1.UploadArtifactRequest) (*xemsv1.UploadArtifactResponse, error) {
 	deviceID, err := DeviceIDFromContext(ctx)
 	if err != nil {
 		return nil, status.Error(codes.Unauthenticated, "kimlik doğrulanamadı")
@@ -159,7 +159,7 @@ func (h *AgentHandler) UploadArtifact(ctx context.Context, req *xdrv1.UploadArti
 	if _, err := h.artifacts.SaveArtifact(ctx, deviceID, req.GetCommandId(), req.GetPath(), hex.EncodeToString(sum[:]), content); err != nil {
 		return nil, status.Error(codes.Internal, "artefakt kaydedilemedi")
 	}
-	return &xdrv1.UploadArtifactResponse{Ok: true}, nil
+	return &xemsv1.UploadArtifactResponse{Ok: true}, nil
 }
 
 // SetIoCSet, tehdit istihbaratı (IoC) eşleştirmesini etkinleştirir/günceller. nil
@@ -216,7 +216,7 @@ func NewAgentHandler(devices DeviceRegistry, events EventSink, policies PolicyPr
 
 // Heartbeat, yaşam sinyalini işler. Yanıt SUNUCU SAATİNİ taşır — ajan, politika
 // zaman pencerelerini bu çıpaya göre değerlendirir (inceleme #3).
-func (h *AgentHandler) Heartbeat(ctx context.Context, req *xdrv1.HeartbeatRequest) (*xdrv1.HeartbeatResponse, error) {
+func (h *AgentHandler) Heartbeat(ctx context.Context, req *xemsv1.HeartbeatRequest) (*xemsv1.HeartbeatResponse, error) {
 	deviceID, err := DeviceIDFromContext(ctx)
 	if err != nil {
 		return nil, status.Error(codes.Unauthenticated, "kimlik doğrulanamadı")
@@ -239,7 +239,7 @@ func (h *AgentHandler) Heartbeat(ctx context.Context, req *xdrv1.HeartbeatReques
 		return nil, status.Error(codes.Internal, "komutlar alınamadı")
 	}
 
-	return &xdrv1.HeartbeatResponse{
+	return &xemsv1.HeartbeatResponse{
 		ServerTime:            timestamppb.New(now),
 		PolicyUpdateAvailable: serverPolicyVersion != "" && serverPolicyVersion != req.GetCurrentPolicyVersion(),
 		PendingCommands:       cmds,
@@ -248,7 +248,7 @@ func (h *AgentHandler) Heartbeat(ctx context.Context, req *xdrv1.HeartbeatReques
 
 // ReportEvents, olay akışını alır (store-and-forward), kalıcılaştırır ve kabul
 // edilen son sıra numarasını döner; ajan yalnız onaylananları tamponundan siler.
-func (h *AgentHandler) ReportEvents(stream xdrv1.AgentService_ReportEventsServer) error {
+func (h *AgentHandler) ReportEvents(stream xemsv1.AgentService_ReportEventsServer) error {
 	deviceID, err := DeviceIDFromContext(stream.Context())
 	if err != nil {
 		return status.Error(codes.Unauthenticated, "kimlik doğrulanamadı")
@@ -259,7 +259,7 @@ func (h *AgentHandler) ReportEvents(stream xdrv1.AgentService_ReportEventsServer
 	for {
 		batch, err := stream.Recv()
 		if err == io.EOF {
-			return stream.SendAndClose(&xdrv1.EventAck{LastAcceptedSequence: lastAccepted})
+			return stream.SendAndClose(&xemsv1.EventAck{LastAcceptedSequence: lastAccepted})
 		}
 		if err != nil {
 			return err
@@ -374,7 +374,7 @@ func detailsJSON(d *structpb.Struct) string {
 
 // dbCategory, proto enum'unu DB event_category ENUM'una eşler
 // ("EVENT_CATEGORY_SECURITY" -> "SECURITY"). Belirsiz değer SYSTEM'e düşer.
-func dbCategory(c xdrv1.EventCategory) string {
+func dbCategory(c xemsv1.EventCategory) string {
 	s := strings.TrimPrefix(c.String(), "EVENT_CATEGORY_")
 	if s == "" || s == "UNSPECIFIED" {
 		return "SYSTEM"
@@ -383,7 +383,7 @@ func dbCategory(c xdrv1.EventCategory) string {
 }
 
 // dbSeverity, proto enum'unu DB severity ENUM'una eşler. Belirsiz değer INFO'ya düşer.
-func dbSeverity(v xdrv1.Severity) string {
+func dbSeverity(v xemsv1.Severity) string {
 	s := strings.TrimPrefix(v.String(), "SEVERITY_")
 	if s == "" || s == "UNSPECIFIED" {
 		return "INFO"
@@ -395,7 +395,7 @@ func dbSeverity(v xdrv1.Severity) string {
 // farklıysa güncel paketi gönderir, sonra açık kalıp politika değiştikçe (admin
 // atama → Publish) yeni paketleri ANINDA iter. İstemci akışı kapatınca (ctx
 // iptal) döngü sonlanır.
-func (h *AgentHandler) StreamPolicies(req *xdrv1.PolicySubscribeRequest, stream xdrv1.AgentService_StreamPoliciesServer) error {
+func (h *AgentHandler) StreamPolicies(req *xemsv1.PolicySubscribeRequest, stream xemsv1.AgentService_StreamPoliciesServer) error {
 	deviceID, err := DeviceIDFromContext(stream.Context())
 	if err != nil {
 		return status.Error(codes.Unauthenticated, "kimlik doğrulanamadı")
@@ -409,7 +409,7 @@ func (h *AgentHandler) StreamPolicies(req *xdrv1.PolicySubscribeRequest, stream 
 // streamPolicyLoop, transport'tan bağımsız push döngüsüdür (test edilebilir):
 // güncel paketi (sürüm değiştiyse) gönderir, sonra her bildirimde tekrar dener.
 func streamPolicyLoop(ctx context.Context, deviceID, currentVersion string,
-	provider PolicyProvider, notify <-chan struct{}, send func(*xdrv1.PolicyBundle) error) error {
+	provider PolicyProvider, notify <-chan struct{}, send func(*xemsv1.PolicyBundle) error) error {
 
 	lastVer := currentVersion
 	sendIfNewer := func() error {
@@ -444,7 +444,7 @@ func streamPolicyLoop(ctx context.Context, deviceID, currentVersion string,
 
 // CheckUpdate, OTA güncelleme manifestosunu döner. Manifesto İMZALIDIR; ajan
 // indirmeden önce imzayı gömülü public key ile doğrular (inceleme #4).
-func (h *AgentHandler) CheckUpdate(ctx context.Context, req *xdrv1.UpdateCheckRequest) (*xdrv1.UpdateManifest, error) {
+func (h *AgentHandler) CheckUpdate(ctx context.Context, req *xemsv1.UpdateCheckRequest) (*xemsv1.UpdateManifest, error) {
 	deviceID, err := DeviceIDFromContext(ctx)
 	if err != nil {
 		return nil, status.Error(codes.Unauthenticated, "kimlik doğrulanamadı")
@@ -455,11 +455,11 @@ func (h *AgentHandler) CheckUpdate(ctx context.Context, req *xdrv1.UpdateCheckRe
 		return nil, status.Error(codes.Internal, "güncelleme sorgulanamadı")
 	}
 	if m == nil || !m.GetUpdateAvailable() {
-		return &xdrv1.UpdateManifest{UpdateAvailable: false}, nil
+		return &xemsv1.UpdateManifest{UpdateAvailable: false}, nil
 	}
 	// Kademeli dağıtım: cihaz bu sürümün rollout kohortunda değilse henüz sunma.
 	if !rollout.InCohort(deviceID, m.GetTargetVersion(), int(m.GetRolloutPercent())) {
-		return &xdrv1.UpdateManifest{UpdateAvailable: false}, nil
+		return &xemsv1.UpdateManifest{UpdateAvailable: false}, nil
 	}
 	return m, nil
 }

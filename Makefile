@@ -1,4 +1,4 @@
-# XDR/MDM — geliştirme görevleri
+# XEMS Security Suite — geliştirme görevleri
 # Not: Go, buf ve protoc-gen eklentileri kurulu olmalı (bkz. README).
 
 .PHONY: proto tidy build build-server build-agent build-watchdog test e2e dev-certs release smoke clean fmt fmt-check vet check check-all
@@ -62,7 +62,7 @@ smoke:
 
 ## dev-certs: GELİŞTİRME CA + sunucu sertifikası üretir (./dev-certs).
 dev-certs:
-	go run ./tools/gencerts -out ./dev-certs -name xdr-c2
+	go run ./tools/gencerts -out ./dev-certs -name xems-c2
 
 ## release: tüm ikilileri Windows+Linux için çapraz derler (dist/).
 ##          Kullanım: make release VERSION=1.0.0

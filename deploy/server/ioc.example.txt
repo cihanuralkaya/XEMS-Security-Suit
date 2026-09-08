@@ -1,4 +1,4 @@
-# XDR Tehdit İstihbaratı (IoC) listesi — örnek.
+# XEMS Tehdit İstihbaratı (IoC) listesi — örnek.
 # Biçim: <gösterge> [etiket...]
 #  - İlk boşlukla-ayrılmış belirteç göstergedir (IP / MAC / alan adı / hash / süreç adı).
 #  - Kalanı isteğe bağlı etikettir (uyarıda gösterilir).
@@ -6,7 +6,7 @@
 # Eşleştirme küçük/büyük harf duyarsızdır ve olayın yapısal Details alanı
 # (ip/mac/process) + mesajı ile karşılaştırılır.
 #
-# XDR_IOC_FILE=/etc/xdr/ioc.txt ile yüklenir.
+# XEMS_IOC_FILE=/etc/xdr/ioc.txt ile yüklenir.
 
 # --- Örnek göstergeler (kendi feed'inizle değiştirin) ---
 10.13.37.5            bilinen-c2-sunucusu

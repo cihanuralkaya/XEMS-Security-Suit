@@ -15,7 +15,7 @@ type Script struct {
 	Args        []string
 }
 
-const domainTag = "xdr-signed-script-v1"
+const domainTag = "xems-signed-script-v1"
 
 // CanonicalBytes, scriptin imzalanacak deterministik baytlarını üretir.
 func CanonicalBytes(s Script) []byte {

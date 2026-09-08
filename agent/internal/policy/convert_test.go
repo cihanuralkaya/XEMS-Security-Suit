@@ -4,16 +4,16 @@ import (
 	"testing"
 	"time"
 
-	xdrv1 "xdr.corp/suite/gen/xdr/v1"
+	xemsv1 "xems.corp/suite/gen/xems/v1"
 )
 
 func TestFromProtoMapsRules(t *testing.T) {
-	pb := &xdrv1.PolicyBundle{
+	pb := &xemsv1.PolicyBundle{
 		PolicyVersion: "v42",
-		Rules: []*xdrv1.PolicyRule{
+		Rules: []*xemsv1.PolicyRule{
 			{
 				RuleId:      "r1",
-				Type:        xdrv1.PolicyRule_RULE_TYPE_APP_TIME_BLOCK,
+				Type:        xemsv1.PolicyRule_RULE_TYPE_APP_TIME_BLOCK,
 				TargetValue: "game.exe",
 				StartTime:   "18:00",
 				EndTime:     "08:00",
@@ -21,7 +21,7 @@ func TestFromProtoMapsRules(t *testing.T) {
 			},
 			{
 				RuleId:      "r2",
-				Type:        xdrv1.PolicyRule_RULE_TYPE_APP_BLOCK_ALWAYS,
+				Type:        xemsv1.PolicyRule_RULE_TYPE_APP_BLOCK_ALWAYS,
 				TargetValue: "torrent.exe",
 			},
 		},

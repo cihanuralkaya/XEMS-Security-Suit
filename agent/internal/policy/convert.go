@@ -1,11 +1,11 @@
 package policy
 
-import xdrv1 "xdr.corp/suite/gen/xdr/v1"
+import xemsv1 "xems.corp/suite/gen/xems/v1"
 
 // FromProto, sunucudan gelen proto PolicyBundle'ı motor domain Bundle'ına
 // çevirir. Bu dosya, engine.go'yu proto'dan bağımsız tutmak için ayrıdır:
 // dönüşüm burada, değerlendirme mantığı orada.
-func FromProto(pb *xdrv1.PolicyBundle) Bundle {
+func FromProto(pb *xemsv1.PolicyBundle) Bundle {
 	if pb == nil {
 		return Bundle{}
 	}
@@ -32,13 +32,13 @@ func FromProto(pb *xdrv1.PolicyBundle) Bundle {
 	return b
 }
 
-func ruleTypeFromProto(t xdrv1.PolicyRule_RuleType) RuleType {
+func ruleTypeFromProto(t xemsv1.PolicyRule_RuleType) RuleType {
 	switch t {
-	case xdrv1.PolicyRule_RULE_TYPE_APP_TIME_BLOCK:
+	case xemsv1.PolicyRule_RULE_TYPE_APP_TIME_BLOCK:
 		return RuleAppTimeBlock
-	case xdrv1.PolicyRule_RULE_TYPE_APP_BLOCK_ALWAYS:
+	case xemsv1.PolicyRule_RULE_TYPE_APP_BLOCK_ALWAYS:
 		return RuleAppBlockAlways
-	case xdrv1.PolicyRule_RULE_TYPE_NETWORK_RULE:
+	case xemsv1.PolicyRule_RULE_TYPE_NETWORK_RULE:
 		return RuleNetwork
 	default:
 		return RuleUnspecified

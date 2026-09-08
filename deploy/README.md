@@ -1,5 +1,5 @@
-# XDR/MDM — Dağıtım ve Kurulum
-# XDR/MDM — Deployment & Installation
+# XEMS Security Suite — Dağıtım ve Kurulum
+# XEMS Security Suite — Deployment & Installation
 
 **Türkçe** · [English](#english)
 
@@ -24,18 +24,18 @@ yönetici parolası üretir, yapılandırmayı yazar, servisi kurar ve başlatı
 
 **Linux (systemd):**
 ```bash
-sudo deploy/server/install-linux.sh xdr-c2      # arg: sertifika SAN adı
+sudo deploy/server/install-linux.sh xems-c2      # arg: sertifika SAN adı
 ```
 
 **Windows (zamanlanmış görev, SYSTEM):**
 ```powershell
-.\deploy\server\install-windows.ps1 -ServerName xdr-c2
+.\deploy\server\install-windows.ps1 -ServerName xems-c2
 ```
 
 Kurulum sonunda konsol girişi (admin@local / üretilen parola) ekrana yazılır.
 Yönetim konsolu: `https://<sunucu>:8445/`
 
-> Üretim: `XDR_DATABASE_URL` ayarlayıp PostgreSQL'e geçin ve yöneticiyi
+> Üretim: `XEMS_DATABASE_URL` ayarlayıp PostgreSQL'e geçin ve yöneticiyi
 > `tools/adminseed` ile ekleyin (bkz. `db/schema.sql`). Boş bırakılırsa
 > **bellek-içi demo modu** (kalıcılık yok) çalışır.
 
@@ -54,18 +54,18 @@ Ajan ikilisi `-agent` ile verilirse base64 **gömülür** (gerçek tek dosya).
 **Windows (benzersiz, ajan gömülü):**
 ```bash
 mkclient -os windows -server c2.sirket.local \
-  -ca /etc/xdr/pki/ca.crt -agent dist/windows-amd64/agent.exe \
-  -token ABC123... -out xdr-agent-setup.ps1
+  -ca /etc/xems/pki/ca.crt -agent dist/windows-amd64/agent.exe \
+  -token ABC123... -out xems-agent-setup.ps1
 ```
-Hedefte (Yönetici): `.\xdr-agent-setup.ps1`
+Hedefte (Yönetici): `.\xems-agent-setup.ps1`
 
 **Linux (paylaşımlı, kod girişli):**
 ```bash
 mkclient -os linux -server c2.sirket.local \
-  -ca /etc/xdr/pki/ca.crt -agent dist/linux-amd64/agent \
-  -out xdr-agent-setup.sh
+  -ca /etc/xems/pki/ca.crt -agent dist/linux-amd64/agent \
+  -out xems-agent-setup.sh
 ```
-Hedefte (root): `sudo ./xdr-agent-setup.sh` → kayıt kodunu girin.
+Hedefte (root): `sudo ./xems-agent-setup.sh` → kayıt kodunu girin.
 
 Tüm ajan ortam değişkenleri: `deploy/agent.env.example`.
 
@@ -77,12 +77,12 @@ başlangıcı için güvenli).
 Tek düğüm yükü kaldırmaya yetmezse birden çok C2 düğümü bir yük dengeleyici
 arkasında koşabilir. Gereksinimler ve davranış:
 
-- **Paylaşılan PostgreSQL zorunlu.** Tüm düğümler aynı `XDR_DATABASE_URL`'i
+- **Paylaşılan PostgreSQL zorunlu.** Tüm düğümler aynı `XEMS_DATABASE_URL`'i
   kullanır (bellek-içi demo modu çok-düğümde çalışmaz). Şema tek sefer yüklenir.
-- **`XDR_CLUSTER=1`** ile canlı konsol akışı (SSE) düğümler arası **Postgres
+- **`XEMS_CLUSTER=1`** ile canlı konsol akışı (SSE) düğümler arası **Postgres
   LISTEN/NOTIFY** ile fan-out edilir: bir ajanın olayı hangi düğüme gelirse
   gelsin, tüm düğümlerdeki admin konsolları anında görür. Kanal adı
-  `XDR_CLUSTER_CHANNEL` (varsayılan `xdr_notice`).
+  `XEMS_CLUSTER_CHANNEL` (varsayılan `xems_notice`).
 - **Ajan/enroll trafiği durumsuzdur** — herhangi bir düğüme dengelenebilir (mTLS
   kimliği ve komut kuyruğu DB'dedir). Sertifika iptali her düğümde DB'den
   periyodik tazelenir.
@@ -96,15 +96,15 @@ arkasında koşabilir. Gereksinimler ve davranış:
 
 | | Sunucu | Ajan |
 |---|---|---|
-| Linux ikili | `/opt/xdr/c2` | `/opt/xdr-agent/agent` |
-| Linux yapılandırma | `/etc/xdr/` | `/etc/xdr-agent/` |
-| Linux servis | `xdr-c2.service` | `xdr-agent.service` |
-| Windows ikili | `%ProgramFiles%\XDR Server\` | `%ProgramFiles%\XDR Agent\` |
-| Windows servis | Görev: `XDR C2 Server` | Görev: `XDR Agent` |
+| Linux ikili | `/opt/xems/c2` | `/opt/xems-agent/agent` |
+| Linux yapılandırma | `/etc/xems/` | `/etc/xems-agent/` |
+| Linux servis | `xems-c2.service` | `xems-agent.service` |
+| Windows ikili | `%ProgramFiles%\XEMS Server\` | `%ProgramFiles%\XEMS Agent\` |
+| Windows servis | Görev: `XEMS C2 Server` | Görev: `XEMS Agent` |
 
 ## Güvenlik notları
 
-- Ana anahtar (`XDR_MASTER_KEY`) ve CA özel anahtarı yalnız sunucuda kalır;
+- Ana anahtar (`XEMS_MASTER_KEY`) ve CA özel anahtarı yalnız sunucuda kalır;
   yapılandırma dosyaları `600` izinlidir.
 - Ajan setup'ı CA sertifikasını (genel) ve tek-kullanımlık enrollment token'ı
   taşır — özel anahtar taşımaz. Token kaydolunca tüketilir.
@@ -136,18 +136,18 @@ admin password, writes the configuration, and installs and starts the service.
 
 **Linux (systemd):**
 ```bash
-sudo deploy/server/install-linux.sh xdr-c2      # arg: certificate SAN name
+sudo deploy/server/install-linux.sh xems-c2      # arg: certificate SAN name
 ```
 
 **Windows (scheduled task, SYSTEM):**
 ```powershell
-.\deploy\server\install-windows.ps1 -ServerName xdr-c2
+.\deploy\server\install-windows.ps1 -ServerName xems-c2
 ```
 
 At the end of installation the console login (admin@local / generated password) is
 printed to the screen. Admin console: `https://<server>:8445/`
 
-> Production: set `XDR_DATABASE_URL` to switch to PostgreSQL and add the admin with
+> Production: set `XEMS_DATABASE_URL` to switch to PostgreSQL and add the admin with
 > `tools/adminseed` (see `db/schema.sql`). If left empty, an **in-memory demo mode**
 > (no persistence) runs.
 
@@ -167,18 +167,18 @@ single file).
 **Windows (unique, agent embedded):**
 ```bash
 mkclient -os windows -server c2.company.local \
-  -ca /etc/xdr/pki/ca.crt -agent dist/windows-amd64/agent.exe \
-  -token ABC123... -out xdr-agent-setup.ps1
+  -ca /etc/xems/pki/ca.crt -agent dist/windows-amd64/agent.exe \
+  -token ABC123... -out xems-agent-setup.ps1
 ```
-On the target (Administrator): `.\xdr-agent-setup.ps1`
+On the target (Administrator): `.\xems-agent-setup.ps1`
 
 **Linux (shared, code-entry):**
 ```bash
 mkclient -os linux -server c2.company.local \
-  -ca /etc/xdr/pki/ca.crt -agent dist/linux-amd64/agent \
-  -out xdr-agent-setup.sh
+  -ca /etc/xems/pki/ca.crt -agent dist/linux-amd64/agent \
+  -out xems-agent-setup.sh
 ```
-On the target (root): `sudo ./xdr-agent-setup.sh` -> enter the enrollment code.
+On the target (root): `sudo ./xems-agent-setup.sh` -> enter the enrollment code.
 
 All agent environment variables: `deploy/agent.env.example`.
 
@@ -190,12 +190,12 @@ testing / the start of a rollout).
 When one node is not enough, multiple C2 nodes can run behind a load balancer.
 Requirements and behavior:
 
-- **Shared PostgreSQL is mandatory.** All nodes use the same `XDR_DATABASE_URL`
+- **Shared PostgreSQL is mandatory.** All nodes use the same `XEMS_DATABASE_URL`
   (the in-memory demo mode does not work multi-node). Load the schema once.
-- **`XDR_CLUSTER=1`** fans out the live console stream (SSE) across nodes via
+- **`XEMS_CLUSTER=1`** fans out the live console stream (SSE) across nodes via
   **Postgres LISTEN/NOTIFY**: whichever node an agent's event lands on, every
-  node's admin console sees it instantly. Channel name via `XDR_CLUSTER_CHANNEL`
-  (default `xdr_notice`).
+  node's admin console sees it instantly. Channel name via `XEMS_CLUSTER_CHANNEL`
+  (default `xems_notice`).
 - **Agent/enroll traffic is stateless** — it can be balanced to any node (mTLS
   identity and the command queue live in the DB). Certificate revocation is
   refreshed from the DB on each node periodically.
@@ -209,15 +209,15 @@ Requirements and behavior:
 
 | | Server | Agent |
 |---|---|---|
-| Linux binary | `/opt/xdr/c2` | `/opt/xdr-agent/agent` |
-| Linux config | `/etc/xdr/` | `/etc/xdr-agent/` |
-| Linux service | `xdr-c2.service` | `xdr-agent.service` |
-| Windows binary | `%ProgramFiles%\XDR Server\` | `%ProgramFiles%\XDR Agent\` |
-| Windows service | Task: `XDR C2 Server` | Task: `XDR Agent` |
+| Linux binary | `/opt/xems/c2` | `/opt/xems-agent/agent` |
+| Linux config | `/etc/xems/` | `/etc/xems-agent/` |
+| Linux service | `xems-c2.service` | `xems-agent.service` |
+| Windows binary | `%ProgramFiles%\XEMS Server\` | `%ProgramFiles%\XEMS Agent\` |
+| Windows service | Task: `XEMS C2 Server` | Task: `XEMS Agent` |
 
 ## Security notes
 
-- The master key (`XDR_MASTER_KEY`) and the CA private key stay on the server only;
+- The master key (`XEMS_MASTER_KEY`) and the CA private key stay on the server only;
   configuration files have `600` permissions.
 - The agent setup carries the CA certificate (public) and a single-use enrollment
   token - it carries no private key. The token is consumed once enrollment succeeds.

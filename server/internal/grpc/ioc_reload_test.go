@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"xdr.corp/suite/server/internal/detect"
-	"xdr.corp/suite/server/internal/ioc"
+	"xems.corp/suite/server/internal/detect"
+	"xems.corp/suite/server/internal/ioc"
 )
 
 func loadIoC(t *testing.T, s string) *ioc.Set {

@@ -8,9 +8,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	xdrv1 "xdr.corp/suite/gen/xdr/v1"
-	"xdr.corp/suite/server/internal/admin"
-	"xdr.corp/suite/server/internal/adminread"
+	xemsv1 "xems.corp/suite/gen/xems/v1"
+	"xems.corp/suite/server/internal/admin"
+	"xems.corp/suite/server/internal/adminread"
 )
 
 // ListPolicies, tüm politikaları kural + atanmış cihaz sayımlarıyla, ada göre
@@ -42,7 +42,7 @@ func (s *Store) ListPolicies(ctx context.Context, limit int) ([]adminread.Policy
 
 // CurrentPolicy, cihaza atanmış aktif politikayı proto PolicyBundle olarak kurar.
 // Atanmış politika yoksa (nil, nil) döner.
-func (s *Store) CurrentPolicy(ctx context.Context, deviceID string) (*xdrv1.PolicyBundle, error) {
+func (s *Store) CurrentPolicy(ctx context.Context, deviceID string) (*xemsv1.PolicyBundle, error) {
 	const pq = `
 		SELECT p.id::text, p.version
 		  FROM device_policies dp
@@ -73,7 +73,7 @@ func (s *Store) CurrentPolicy(ctx context.Context, deviceID string) (*xdrv1.Poli
 	}
 	defer rows.Close()
 
-	var rules []*xdrv1.PolicyRule
+	var rules []*xemsv1.PolicyRule
 	for rows.Next() {
 		var id, typ, target, st, et string
 		var days []int32
@@ -86,7 +86,7 @@ func (s *Store) CurrentPolicy(ctx context.Context, deviceID string) (*xdrv1.Poli
 				ad = append(ad, uint32(d))
 			}
 		}
-		rules = append(rules, &xdrv1.PolicyRule{
+		rules = append(rules, &xemsv1.PolicyRule{
 			RuleId:      id,
 			Type:        ruleTypeToProto(typ),
 			TargetValue: target,
@@ -99,7 +99,7 @@ func (s *Store) CurrentPolicy(ctx context.Context, deviceID string) (*xdrv1.Poli
 		return nil, fmt.Errorf("db: kural iterasyonu: %w", err)
 	}
 
-	return &xdrv1.PolicyBundle{
+	return &xemsv1.PolicyBundle{
 		PolicyVersion: version,
 		Rules:         rules,
 		IssuedAt:      timestamppb.Now(),
@@ -190,15 +190,15 @@ func (s *Store) ListPolicyRules(ctx context.Context, policyID string) ([]admin.R
 	return out, rows.Err()
 }
 
-func ruleTypeToProto(t string) xdrv1.PolicyRule_RuleType {
+func ruleTypeToProto(t string) xemsv1.PolicyRule_RuleType {
 	switch t {
 	case "APP_TIME_BLOCK":
-		return xdrv1.PolicyRule_RULE_TYPE_APP_TIME_BLOCK
+		return xemsv1.PolicyRule_RULE_TYPE_APP_TIME_BLOCK
 	case "APP_BLOCK_ALWAYS":
-		return xdrv1.PolicyRule_RULE_TYPE_APP_BLOCK_ALWAYS
+		return xemsv1.PolicyRule_RULE_TYPE_APP_BLOCK_ALWAYS
 	case "NETWORK_RULE":
-		return xdrv1.PolicyRule_RULE_TYPE_NETWORK_RULE
+		return xemsv1.PolicyRule_RULE_TYPE_NETWORK_RULE
 	default:
-		return xdrv1.PolicyRule_RULE_TYPE_UNSPECIFIED
+		return xemsv1.PolicyRule_RULE_TYPE_UNSPECIFIED
 	}
 }

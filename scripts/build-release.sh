@@ -16,7 +16,7 @@ rm -rf "$OUT"
 # Hedefler: server yalnız sunucu OS'ları; agent+watchdog tüm uç OS'ları.
 PLATFORMS=("windows/amd64" "linux/amd64")
 
-echo "XDR release derleme — sürüm ${VERSION}"
+echo "XEMS release derleme — sürüm ${VERSION}"
 for p in "${PLATFORMS[@]}"; do
   GOOS="${p%/*}"; GOARCH="${p#*/}"
   ext=""; [ "$GOOS" = "windows" ] && ext=".exe"

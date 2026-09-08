@@ -11,14 +11,14 @@ import (
 	"sync"
 	"time"
 
-	"xdr.corp/suite/agent/internal/collector"
+	"xems.corp/suite/agent/internal/collector"
 )
 
 // Isolator, OS'e özgü ağ izolasyonunu uygular.
 type Isolator interface {
 	// Isolate, tüm ağ iletişimini keser; yalnız allowC2 adreslerine izin verir.
 	Isolate(allowC2 []string) error
-	// Release, izolasyonu kaldırır (XDR kurallarını siler).
+	// Release, izolasyonu kaldırır (XEMS kurallarını siler).
 	Release() error
 }
 

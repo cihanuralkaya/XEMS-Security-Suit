@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"time"
 
-	"xdr.corp/suite/server/internal/security"
+	"xems.corp/suite/server/internal/security"
 )
 
 // ErrInvalidToken, token geçersiz/kullanılmış/süresi geçmiş olduğunda döner.

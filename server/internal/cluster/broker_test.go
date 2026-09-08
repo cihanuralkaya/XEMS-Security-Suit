@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"xdr.corp/suite/server/internal/eventbus"
+	"xems.corp/suite/server/internal/eventbus"
 )
 
 // fakeBus, tek süreçte NOTIFY→LISTEN döngüsünü taklit eder: NotifyChannel'a gelen
@@ -103,8 +103,8 @@ func TestBrokerCrossNodeFanout(t *testing.T) {
 	bus := &fakeBus{} // paylaşılan kanal (tek Postgres)
 
 	colA, colB := &collector{}, &collector{}
-	bA := New(ctx, bus, colA, "xdr_notice", nil) // A düğümü
-	bB := New(ctx, bus, colB, "xdr_notice", nil) // B düğümü
+	bA := New(ctx, bus, colA, "xems_notice", nil) // A düğümü
+	bB := New(ctx, bus, colB, "xems_notice", nil) // B düğümü
 	go bA.Run(ctx)
 	go bB.Run(ctx)
 

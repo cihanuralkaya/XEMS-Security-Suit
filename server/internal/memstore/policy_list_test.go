@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"xdr.corp/suite/server/internal/admin"
-	"xdr.corp/suite/server/internal/enroll"
+	"xems.corp/suite/server/internal/admin"
+	"xems.corp/suite/server/internal/enroll"
 )
 
 // ListPolicies, kural ve atanmış cihaz sayımlarını doğru raporlamalı ve

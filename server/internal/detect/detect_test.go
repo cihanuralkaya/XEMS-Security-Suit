@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"xdr.corp/suite/server/internal/model"
+	"xems.corp/suite/server/internal/model"
 )
 
 func TestEvaluateDefaultRules(t *testing.T) {
@@ -16,12 +16,12 @@ func TestEvaluateDefaultRules(t *testing.T) {
 		wantSev    string
 		wantTechID string
 	}{
-		{"SECURITY", "watchdog kurcalama tespit edildi", "XDR-0001", "CRITICAL", "T1562"},
-		{"SECURITY", "imzasız/sahte script reddedildi: cmd-9", "XDR-0002", "HIGH", "T1059"},
-		{"SECURITY", "sahte/bozuk güncelleme reddedildi", "XDR-0003", "HIGH", "T1195"},
-		{"SECURITY", "anomali: olağandışı süreç davranışı", "XDR-0004", "HIGH", "T1055"},
-		{"POLICY_VIOLATION", "yasaklı süreç sonlandırıldı: game.exe", "XDR-0005", "HIGH", "T1204"},
-		{"NETWORK_DISCOVERY", "10 komşu bulundu", "XDR-0006", "LOW", "T1046"},
+		{"SECURITY", "watchdog kurcalama tespit edildi", "XEMS-0001", "CRITICAL", "T1562"},
+		{"SECURITY", "imzasız/sahte script reddedildi: cmd-9", "XEMS-0002", "HIGH", "T1059"},
+		{"SECURITY", "sahte/bozuk güncelleme reddedildi", "XEMS-0003", "HIGH", "T1195"},
+		{"SECURITY", "anomali: olağandışı süreç davranışı", "XEMS-0004", "HIGH", "T1055"},
+		{"POLICY_VIOLATION", "yasaklı süreç sonlandırıldı: game.exe", "XEMS-0005", "HIGH", "T1204"},
+		{"NETWORK_DISCOVERY", "10 komşu bulundu", "XEMS-0006", "LOW", "T1046"},
 	}
 	for _, c := range cases {
 		dets := e.Evaluate(model.Event{Category: c.cat, Message: c.msg})
@@ -166,11 +166,11 @@ func TestLoadRulesRejectsInvalidV2(t *testing.T) {
 	}
 }
 
-// XDR-0007 varsayılan kuralı: şüpheli PROCESS regex'i.
+// XEMS-0007 varsayılan kuralı: şüpheli PROCESS regex'i.
 func TestDefaultSuspiciousProcessRule(t *testing.T) {
 	e := NewEngine(nil)
 	d := e.Evaluate(model.Event{Category: "PROCESS", Message: "süreç başlatıldı: powershell.exe -EncodedCommand ZQBjAGgAbw=="})
-	if len(d) == 0 || d[0].RuleID != "XDR-0007" {
-		t.Fatalf("XDR-0007 powershell -EncodedCommand eşleşmeliydi: %+v", d)
+	if len(d) == 0 || d[0].RuleID != "XEMS-0007" {
+		t.Fatalf("XEMS-0007 powershell -EncodedCommand eşleşmeliydi: %+v", d)
 	}
 }

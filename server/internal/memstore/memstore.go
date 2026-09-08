@@ -20,12 +20,12 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	xdrv1 "xdr.corp/suite/gen/xdr/v1"
-	"xdr.corp/suite/server/internal/admin"
-	"xdr.corp/suite/server/internal/adminread"
-	"xdr.corp/suite/server/internal/enroll"
-	"xdr.corp/suite/server/internal/model"
-	"xdr.corp/suite/server/internal/security"
+	xemsv1 "xems.corp/suite/gen/xems/v1"
+	"xems.corp/suite/server/internal/admin"
+	"xems.corp/suite/server/internal/adminread"
+	"xems.corp/suite/server/internal/enroll"
+	"xems.corp/suite/server/internal/model"
+	"xems.corp/suite/server/internal/security"
 )
 
 type device struct {
@@ -114,20 +114,20 @@ type auditRec struct {
 // Store, tüm C2 depolama arayüzlerini bellek-içi karşılar.
 type Store struct {
 	mu         sync.Mutex
-	devices    map[string]*device          // deviceID -> device
-	tokens     map[string]*tokenInfo       // tokenIndex(hex) -> token
-	certs      []certRec                   // sertifikalar (iptal takibi)
-	commands   map[string][]*xdrv1.Command // deviceID -> bekleyen komutlar
-	cmdHistory []cmdRec                    // komut geçmişi (teslimde temizlenmez)
-	policies   map[string]*policyRec       // policyID -> politika
-	events     []eventRec                  // olay logları
-	admins     map[string]*adminRec        // email -> admin
-	adminsByID map[string]*adminRec        // id -> admin
-	audit      []auditRec                  // denetim izi (en eskiden yeniye eklenir)
-	auditSeq   int64                       // audit_log identity taklidi
-	eventAcks  map[string]eventAckRec      // eventID -> triyaj durumu (alarm yaşam-döngüsü)
-	artifacts  []artifactRec               // toplanan dosya artefaktları (adli/IR)
-	pendWipes  map[string]pendingWipeRec   // deviceID -> bekleyen WIPE talebi (çift-kontrol)
+	devices    map[string]*device           // deviceID -> device
+	tokens     map[string]*tokenInfo        // tokenIndex(hex) -> token
+	certs      []certRec                    // sertifikalar (iptal takibi)
+	commands   map[string][]*xemsv1.Command // deviceID -> bekleyen komutlar
+	cmdHistory []cmdRec                     // komut geçmişi (teslimde temizlenmez)
+	policies   map[string]*policyRec        // policyID -> politika
+	events     []eventRec                   // olay logları
+	admins     map[string]*adminRec         // email -> admin
+	adminsByID map[string]*adminRec         // id -> admin
+	audit      []auditRec                   // denetim izi (en eskiden yeniye eklenir)
+	auditSeq   int64                        // audit_log identity taklidi
+	eventAcks  map[string]eventAckRec       // eventID -> triyaj durumu (alarm yaşam-döngüsü)
+	artifacts  []artifactRec                // toplanan dosya artefaktları (adli/IR)
+	pendWipes  map[string]pendingWipeRec    // deviceID -> bekleyen WIPE talebi (çift-kontrol)
 	seq        int
 }
 
@@ -159,7 +159,7 @@ func New() *Store {
 	return &Store{
 		devices:    map[string]*device{},
 		tokens:     map[string]*tokenInfo{},
-		commands:   map[string][]*xdrv1.Command{},
+		commands:   map[string][]*xemsv1.Command{},
 		policies:   map[string]*policyRec{},
 		admins:     map[string]*adminRec{},
 		adminsByID: map[string]*adminRec{},
@@ -196,7 +196,7 @@ func (s *Store) SeedDemoPolicy() (id, version string) {
 	s.policies[id] = &policyRec{
 		id: id, name: "Demo Politika", version: version,
 		rules: []policyRule{{
-			id: "r1", typ: "APP_BLOCK_ALWAYS", target: "xdr-demo-blocked.exe",
+			id: "r1", typ: "APP_BLOCK_ALWAYS", target: "xems-demo-blocked.exe",
 		}},
 	}
 	return id, version
@@ -310,7 +310,7 @@ func (s *Store) SetDeviceStatus(_ context.Context, deviceID, status string) erro
 	return nil
 }
 
-func (s *Store) PendingCommands(_ context.Context, deviceID string) ([]*xdrv1.Command, error) {
+func (s *Store) PendingCommands(_ context.Context, deviceID string) ([]*xemsv1.Command, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := s.commands[deviceID]
@@ -356,7 +356,7 @@ func (s *Store) SaveEvents(_ context.Context, deviceID string, evs []model.Event
 
 // --- PolicyProvider ---
 
-func (s *Store) CurrentPolicy(_ context.Context, deviceID string) (*xdrv1.PolicyBundle, error) {
+func (s *Store) CurrentPolicy(_ context.Context, deviceID string) (*xemsv1.PolicyBundle, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	d, ok := s.devices[deviceID]
@@ -367,19 +367,19 @@ func (s *Store) CurrentPolicy(_ context.Context, deviceID string) (*xdrv1.Policy
 	if !ok {
 		return nil, nil
 	}
-	var rules []*xdrv1.PolicyRule
+	var rules []*xemsv1.PolicyRule
 	for _, r := range p.rules {
-		rules = append(rules, &xdrv1.PolicyRule{
+		rules = append(rules, &xemsv1.PolicyRule{
 			RuleId: r.id, Type: ruleTypeToProto(r.typ), TargetValue: r.target,
 			StartTime: r.start, EndTime: r.end, ActiveDays: r.activeDays,
 		})
 	}
-	return &xdrv1.PolicyBundle{PolicyVersion: p.version, Rules: rules, IssuedAt: timestamppb.Now()}, nil
+	return &xemsv1.PolicyBundle{PolicyVersion: p.version, Rules: rules, IssuedAt: timestamppb.Now()}, nil
 }
 
 // --- UpdateProvider ---
 
-func (s *Store) LatestUpdate(_ context.Context, _, _, _ string) (*xdrv1.UpdateManifest, error) {
+func (s *Store) LatestUpdate(_ context.Context, _, _, _ string) (*xemsv1.UpdateManifest, error) {
 	return nil, nil // demo: OTA sürümü yok
 }
 
@@ -420,7 +420,7 @@ func (s *Store) RevokeEnrollmentToken(_ context.Context, tokenID string) error {
 func (s *Store) EnqueueCommand(_ context.Context, deviceID, cmdType, issuedBy string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.commands[deviceID] = append(s.commands[deviceID], &xdrv1.Command{
+	s.commands[deviceID] = append(s.commands[deviceID], &xemsv1.Command{
 		CommandId: randID("cmd-"), Type: commandTypeToProto(cmdType),
 	})
 	// Geçmişe de ekle (bekleyen kuyruk teslimde temizlense de geçmiş kalır).
@@ -442,7 +442,7 @@ func (s *Store) EnqueueCommandParams(_ context.Context, deviceID, cmdType, issue
 		}
 		pb, _ = structpb.NewStruct(m)
 	}
-	s.commands[deviceID] = append(s.commands[deviceID], &xdrv1.Command{
+	s.commands[deviceID] = append(s.commands[deviceID], &xemsv1.Command{
 		CommandId: randID("cmd-"), Type: commandTypeToProto(cmdType), Params: pb,
 	})
 	s.cmdHistory = append(s.cmdHistory, cmdRec{
@@ -1229,40 +1229,40 @@ func (s *Store) LookupAdmin(_ context.Context, email string) (string, string, er
 	return "", "", nil
 }
 
-func ruleTypeToProto(t string) xdrv1.PolicyRule_RuleType {
+func ruleTypeToProto(t string) xemsv1.PolicyRule_RuleType {
 	switch t {
 	case "APP_TIME_BLOCK":
-		return xdrv1.PolicyRule_RULE_TYPE_APP_TIME_BLOCK
+		return xemsv1.PolicyRule_RULE_TYPE_APP_TIME_BLOCK
 	case "APP_BLOCK_ALWAYS":
-		return xdrv1.PolicyRule_RULE_TYPE_APP_BLOCK_ALWAYS
+		return xemsv1.PolicyRule_RULE_TYPE_APP_BLOCK_ALWAYS
 	case "NETWORK_RULE":
-		return xdrv1.PolicyRule_RULE_TYPE_NETWORK_RULE
+		return xemsv1.PolicyRule_RULE_TYPE_NETWORK_RULE
 	default:
-		return xdrv1.PolicyRule_RULE_TYPE_UNSPECIFIED
+		return xemsv1.PolicyRule_RULE_TYPE_UNSPECIFIED
 	}
 }
 
-func commandTypeToProto(t string) xdrv1.Command_CommandType {
+func commandTypeToProto(t string) xemsv1.Command_CommandType {
 	switch t {
 	case "QUARANTINE":
-		return xdrv1.Command_COMMAND_TYPE_QUARANTINE
+		return xemsv1.Command_COMMAND_TYPE_QUARANTINE
 	case "UNQUARANTINE":
-		return xdrv1.Command_COMMAND_TYPE_UNQUARANTINE
+		return xemsv1.Command_COMMAND_TYPE_UNQUARANTINE
 	case "RUN_SIGNED_SCRIPT":
-		return xdrv1.Command_COMMAND_TYPE_RUN_SIGNED_SCRIPT
+		return xemsv1.Command_COMMAND_TYPE_RUN_SIGNED_SCRIPT
 	case "UNINSTALL":
-		return xdrv1.Command_COMMAND_TYPE_UNINSTALL
+		return xemsv1.Command_COMMAND_TYPE_UNINSTALL
 	case "COLLECT_DIAGNOSTICS":
-		return xdrv1.Command_COMMAND_TYPE_COLLECT_DIAGNOSTICS
+		return xemsv1.Command_COMMAND_TYPE_COLLECT_DIAGNOSTICS
 	case "COLLECT_FILE":
-		return xdrv1.Command_COMMAND_TYPE_COLLECT_FILE
+		return xemsv1.Command_COMMAND_TYPE_COLLECT_FILE
 	case "LOCK":
-		return xdrv1.Command_COMMAND_TYPE_LOCK
+		return xemsv1.Command_COMMAND_TYPE_LOCK
 	case "RESTART":
-		return xdrv1.Command_COMMAND_TYPE_RESTART
+		return xemsv1.Command_COMMAND_TYPE_RESTART
 	case "WIPE":
-		return xdrv1.Command_COMMAND_TYPE_WIPE
+		return xemsv1.Command_COMMAND_TYPE_WIPE
 	default:
-		return xdrv1.Command_COMMAND_TYPE_UNSPECIFIED
+		return xemsv1.Command_COMMAND_TYPE_UNSPECIFIED
 	}
 }

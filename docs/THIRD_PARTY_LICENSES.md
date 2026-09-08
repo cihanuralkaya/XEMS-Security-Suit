@@ -1,5 +1,5 @@
-# Üçüncü Taraf Lisansları — XDR/MDM
-# Third-Party Licenses — XDR/MDM
+# Üçüncü Taraf Lisansları — XEMS Security Suite
+# Third-Party Licenses — XEMS Security Suite
 
 **Türkçe** · [English](#english)
 

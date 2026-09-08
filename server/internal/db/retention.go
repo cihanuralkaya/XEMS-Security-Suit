@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"xdr.corp/suite/server/internal/retention"
+	"xems.corp/suite/server/internal/retention"
 )
 
 // Derleme-zamanı arayüz kontrolü.

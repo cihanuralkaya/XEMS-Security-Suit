@@ -1,5 +1,5 @@
 -- =============================================================================
--- XDR/MDM — PostgreSQL Şeması (düzeltilmiş)
+-- XEMS Security Suite — PostgreSQL Şeması (düzeltilmiş)
 -- =============================================================================
 -- İnceleme bulgularına göre orijinal taslaktan farklar:
 --   #1  Eksik `policies` tablosu eklendi; kırık FK düzeltildi.
@@ -298,7 +298,7 @@ CREATE INDEX idx_audit_target ON audit_log (target_type, target_id);
 -- ---------------------------------------------------------------------------
 -- ÇİFT-KONTROL (DÖRT-GÖZ) BEKLEYEN WIPE TALEPLERİ
 -- ---------------------------------------------------------------------------
--- WIPE geri döndürülemez olduğundan, XDR_WIPE_DUAL_CONTROL=1 iken bir ADMIN talep
+-- WIPE geri döndürülemez olduğundan, XEMS_WIPE_DUAL_CONTROL=1 iken bir ADMIN talep
 -- eder ve FARKLI bir ADMIN onaylayana dek komut kuyruğa GİRMEZ. Tek ele geçirilmiş/
 -- kötü-niyetli ADMIN filoyu silemez.
 CREATE TABLE pending_wipes (

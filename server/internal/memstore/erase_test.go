@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"xdr.corp/suite/server/internal/enroll"
-	"xdr.corp/suite/server/internal/model"
+	"xems.corp/suite/server/internal/enroll"
+	"xems.corp/suite/server/internal/model"
 )
 
 // EraseDeviceData: cihazın olay + komut verisini siler, sertifikalarını iptal

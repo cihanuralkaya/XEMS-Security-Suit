@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"xdr.corp/suite/server/internal/model"
+	"xems.corp/suite/server/internal/model"
 )
 
 // fakeStore, response.Store'u kaydederek uygular.

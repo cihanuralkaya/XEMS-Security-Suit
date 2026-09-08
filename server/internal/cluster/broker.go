@@ -18,7 +18,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"xdr.corp/suite/server/internal/eventbus"
+	"xems.corp/suite/server/internal/eventbus"
 )
 
 // NotifyBus, Postgres LISTEN/NOTIFY ilkelini soyutlar (db.Store karşılar).
@@ -51,10 +51,10 @@ type Broker struct {
 	onFallback  func()
 }
 
-// New oluşturur. channel boşsa "xdr_notice" kullanılır; log nil ise sessizdir.
+// New oluşturur. channel boşsa "xems_notice" kullanılır; log nil ise sessizdir.
 func New(appCtx context.Context, bus NotifyBus, local LocalDeliverer, channel string, log func(string)) *Broker {
 	if channel == "" {
-		channel = "xdr_notice"
+		channel = "xems_notice"
 	}
 	if log == nil {
 		log = func(string) {}

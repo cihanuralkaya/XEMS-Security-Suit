@@ -30,18 +30,18 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	xdrv1 "xdr.corp/suite/gen/xdr/v1"
-	"xdr.corp/suite/otawire"
-	"xdr.corp/suite/server/internal/enroll"
-	xgrpc "xdr.corp/suite/server/internal/grpc"
-	"xdr.corp/suite/server/internal/model"
-	"xdr.corp/suite/server/internal/ota"
-	"xdr.corp/suite/server/internal/policypush"
-	"xdr.corp/suite/server/internal/revocation"
-	"xdr.corp/suite/server/internal/security"
+	xemsv1 "xems.corp/suite/gen/xems/v1"
+	"xems.corp/suite/otawire"
+	"xems.corp/suite/server/internal/enroll"
+	xgrpc "xems.corp/suite/server/internal/grpc"
+	"xems.corp/suite/server/internal/model"
+	"xems.corp/suite/server/internal/ota"
+	"xems.corp/suite/server/internal/policypush"
+	"xems.corp/suite/server/internal/revocation"
+	"xems.corp/suite/server/internal/security"
 )
 
-const serverName = "xdr-c2"
+const serverName = "xems-c2"
 
 func TestEndToEnd(t *testing.T) {
 	caCertPEM, caKeyPEM := makeCA(t)
@@ -106,7 +106,7 @@ func TestEndToEnd(t *testing.T) {
 	// --- 1.5) SERTİFİKA YENİLEME (mTLS ile, token'sız) ---
 	renewCli, renewConn := dialEnrollMTLS(t, enrollLis.Addr().String(), enrollResp.GetClientCertPem(), agentKeyPEM, caCertPEM)
 	_, renewCSR := genKeyCSR(t)
-	renewResp, err := renewCli.RenewCertificate(ctx, &xdrv1.RenewRequest{CsrPem: renewCSR})
+	renewResp, err := renewCli.RenewCertificate(ctx, &xemsv1.RenewRequest{CsrPem: renewCSR})
 	renewConn.Close()
 	if err != nil {
 		t.Fatalf("yenileme başarısız: %v", err)
@@ -130,7 +130,7 @@ func TestEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = xdrv1.NewEnrollmentServiceClient(noCertConn).RenewCertificate(ctx, &xdrv1.RenewRequest{CsrPem: renewCSR})
+	_, err = xemsv1.NewEnrollmentServiceClient(noCertConn).RenewCertificate(ctx, &xemsv1.RenewRequest{CsrPem: renewCSR})
 	noCertConn.Close()
 	if err == nil {
 		t.Fatal("istemci sertifikası olmadan yenileme reddedilmeliydi")
@@ -141,8 +141,8 @@ func TestEndToEnd(t *testing.T) {
 	cli, conn := dialAgent(t, agentLis.Addr().String(), enrollResp.GetClientCertPem(), agentKeyPEM, caCertPEM)
 	defer conn.Close()
 
-	hb, err := cli.Heartbeat(ctx, &xdrv1.HeartbeatRequest{
-		Identity:             &xdrv1.AgentIdentity{DeviceId: enrollResp.GetDeviceId(), AgentVersion: "test", OsPlatform: "test"},
+	hb, err := cli.Heartbeat(ctx, &xemsv1.HeartbeatRequest{
+		Identity:             &xemsv1.AgentIdentity{DeviceId: enrollResp.GetDeviceId(), AgentVersion: "test", OsPlatform: "test"},
 		CurrentPolicyVersion: "",
 	})
 	if err != nil {
@@ -158,12 +158,12 @@ func TestEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := stream.Send(&xdrv1.EventBatch{
-		Identity: &xdrv1.AgentIdentity{DeviceId: enrollResp.GetDeviceId()},
-		Events: []*xdrv1.Event{{
+	if err := stream.Send(&xemsv1.EventBatch{
+		Identity: &xemsv1.AgentIdentity{DeviceId: enrollResp.GetDeviceId()},
+		Events: []*xemsv1.Event{{
 			Sequence:   1,
-			Category:   xdrv1.EventCategory_EVENT_CATEGORY_SECURITY,
-			Severity:   xdrv1.Severity_SEVERITY_HIGH,
+			Category:   xemsv1.EventCategory_EVENT_CATEGORY_SECURITY,
+			Severity:   xemsv1.Severity_SEVERITY_HIGH,
 			Message:    "e2e test olayı",
 			OccurredAt: timestamppb.New(time.Now()),
 		}},
@@ -187,11 +187,11 @@ func TestEndToEnd(t *testing.T) {
 	t.Logf("olay OK: ack=%d, store'da kayıtlı", ack.GetLastAcceptedSequence())
 
 	// --- 3.5) POLİTİKA DAĞITIMI (StreamPolicies) ---
-	store.setPolicy(&xdrv1.PolicyBundle{
+	store.setPolicy(&xemsv1.PolicyBundle{
 		PolicyVersion: "v1",
-		Rules: []*xdrv1.PolicyRule{{
+		Rules: []*xemsv1.PolicyRule{{
 			RuleId:      "r1",
-			Type:        xdrv1.PolicyRule_RULE_TYPE_APP_TIME_BLOCK,
+			Type:        xemsv1.PolicyRule_RULE_TYPE_APP_TIME_BLOCK,
 			TargetValue: "game.exe",
 			StartTime:   "18:00",
 			EndTime:     "08:00",
@@ -201,8 +201,8 @@ func TestEndToEnd(t *testing.T) {
 	// Uzun-ömürlü akış: kendi iptal edilebilir context'i.
 	psCtx, psCancel := context.WithCancel(ctx)
 	defer psCancel()
-	ps, err := cli.StreamPolicies(psCtx, &xdrv1.PolicySubscribeRequest{
-		Identity: &xdrv1.AgentIdentity{DeviceId: enrollResp.GetDeviceId()}, CurrentPolicyVersion: "",
+	ps, err := cli.StreamPolicies(psCtx, &xemsv1.PolicySubscribeRequest{
+		Identity: &xemsv1.AgentIdentity{DeviceId: enrollResp.GetDeviceId()}, CurrentPolicyVersion: "",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -218,7 +218,7 @@ func TestEndToEnd(t *testing.T) {
 
 	// ANLIK PUSH: politika v2'ye güncellenip Publish edilince akış hemen almalı.
 	// (İlk paketi aldığımıza göre sunucu tarafı abonelik aktif.)
-	store.setPolicy(&xdrv1.PolicyBundle{PolicyVersion: "v2"})
+	store.setPolicy(&xemsv1.PolicyBundle{PolicyVersion: "v2"})
 	notifier.Publish(enrollResp.GetDeviceId())
 	pushed, err := ps.Recv()
 	if err != nil {
@@ -239,14 +239,14 @@ func TestEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	payload := []byte("XDR agent 1.4.0 ikilisi")
+	payload := []byte("XEMS agent 1.4.0 ikilisi")
 	man := otawire.Manifest{
 		TargetVersion: "1.4.0",
 		SHA256Hex:     ota.SHA256Hex(payload),
 		DownloadURL:   "https://c2/updates/1.4.0",
 		Mandatory:     false,
 	}
-	store.setUpdate(&xdrv1.UpdateManifest{
+	store.setUpdate(&xemsv1.UpdateManifest{
 		UpdateAvailable: true,
 		TargetVersion:   man.TargetVersion,
 		DownloadUrl:     man.DownloadURL,
@@ -255,8 +255,8 @@ func TestEndToEnd(t *testing.T) {
 		Mandatory:       man.Mandatory,
 		RolloutPercent:  100, // tam dağıtım
 	})
-	upd, err := cli.CheckUpdate(ctx, &xdrv1.UpdateCheckRequest{
-		Identity: &xdrv1.AgentIdentity{DeviceId: enrollResp.GetDeviceId(), AgentVersion: "0.1.0-dev", OsPlatform: "test"},
+	upd, err := cli.CheckUpdate(ctx, &xemsv1.UpdateCheckRequest{
+		Identity: &xemsv1.AgentIdentity{DeviceId: enrollResp.GetDeviceId(), AgentVersion: "0.1.0-dev", OsPlatform: "test"},
 	})
 	if err != nil || !upd.GetUpdateAvailable() {
 		t.Fatalf("güncelleme dönmedi: %v", err)
@@ -274,12 +274,12 @@ func TestEndToEnd(t *testing.T) {
 	t.Logf("OTA OK: imzalı manifesto doğrulandı (sürüm=%s), değiştirilmiş reddedildi", upd.GetTargetVersion())
 
 	// Kademeli dağıtım kapısı: rollout %0 iken bu cihaza güncelleme SUNULMAMALI.
-	store.setUpdate(&xdrv1.UpdateManifest{
+	store.setUpdate(&xemsv1.UpdateManifest{
 		UpdateAvailable: true, TargetVersion: "1.4.0", DownloadUrl: man.DownloadURL,
 		Sha256Hex: man.SHA256Hex, Signature: signer.Sign(man), RolloutPercent: 0,
 	})
-	gated, err := cli.CheckUpdate(ctx, &xdrv1.UpdateCheckRequest{
-		Identity: &xdrv1.AgentIdentity{DeviceId: enrollResp.GetDeviceId(), OsPlatform: "test"},
+	gated, err := cli.CheckUpdate(ctx, &xemsv1.UpdateCheckRequest{
+		Identity: &xemsv1.AgentIdentity{DeviceId: enrollResp.GetDeviceId(), OsPlatform: "test"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -290,18 +290,18 @@ func TestEndToEnd(t *testing.T) {
 	t.Log("rollout OK: %0 dağıtımda güncelleme sunulmadı")
 
 	// --- 3.7) KOMUT TESLİMİ (karantina) — heartbeat üzerinden, en-fazla-bir-kez ---
-	store.enqueueCmd(&xdrv1.Command{CommandId: "c1", Type: xdrv1.Command_COMMAND_TYPE_QUARANTINE})
-	hb2, err := cli.Heartbeat(ctx, &xdrv1.HeartbeatRequest{
-		Identity: &xdrv1.AgentIdentity{DeviceId: enrollResp.GetDeviceId()},
+	store.enqueueCmd(&xemsv1.Command{CommandId: "c1", Type: xemsv1.Command_COMMAND_TYPE_QUARANTINE})
+	hb2, err := cli.Heartbeat(ctx, &xemsv1.HeartbeatRequest{
+		Identity: &xemsv1.AgentIdentity{DeviceId: enrollResp.GetDeviceId()},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(hb2.GetPendingCommands()) != 1 || hb2.GetPendingCommands()[0].GetType() != xdrv1.Command_COMMAND_TYPE_QUARANTINE {
+	if len(hb2.GetPendingCommands()) != 1 || hb2.GetPendingCommands()[0].GetType() != xemsv1.Command_COMMAND_TYPE_QUARANTINE {
 		t.Fatalf("QUARANTINE komutu teslim edilmeliydi: %+v", hb2.GetPendingCommands())
 	}
 	// Aynı komut ikinci heartbeat'te TEKRAR gelmemeli (en-fazla-bir-kez).
-	hb3, err := cli.Heartbeat(ctx, &xdrv1.HeartbeatRequest{Identity: &xdrv1.AgentIdentity{DeviceId: enrollResp.GetDeviceId()}})
+	hb3, err := cli.Heartbeat(ctx, &xemsv1.HeartbeatRequest{Identity: &xemsv1.AgentIdentity{DeviceId: enrollResp.GetDeviceId()}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -326,8 +326,8 @@ func TestEndToEnd(t *testing.T) {
 	defer revokedConn.Close()
 	rctx, rcancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer rcancel()
-	if _, err := revokedCli.Heartbeat(rctx, &xdrv1.HeartbeatRequest{
-		Identity: &xdrv1.AgentIdentity{DeviceId: enrollResp.GetDeviceId()},
+	if _, err := revokedCli.Heartbeat(rctx, &xemsv1.HeartbeatRequest{
+		Identity: &xemsv1.AgentIdentity{DeviceId: enrollResp.GetDeviceId()},
 	}); err == nil {
 		t.Fatal("iptal edilmiş sertifikayla bağlantı reddedilmeliydi")
 	}
@@ -342,9 +342,9 @@ type memStore struct {
 	used     map[string]bool
 	devices  map[string]bool
 	events   map[string]int
-	policy   *xdrv1.PolicyBundle
-	update   *xdrv1.UpdateManifest
-	pendCmds []*xdrv1.Command
+	policy   *xemsv1.PolicyBundle
+	update   *xemsv1.UpdateManifest
+	pendCmds []*xemsv1.Command
 	seq      int
 }
 
@@ -390,13 +390,13 @@ func (m *memStore) TouchHeartbeat(_ context.Context, deviceID, _, _ string, _ ti
 	return "", nil
 }
 
-func (m *memStore) enqueueCmd(c *xdrv1.Command) {
+func (m *memStore) enqueueCmd(c *xemsv1.Command) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.pendCmds = append(m.pendCmds, c)
 }
 
-func (m *memStore) PendingCommands(_ context.Context, _ string) ([]*xdrv1.Command, error) {
+func (m *memStore) PendingCommands(_ context.Context, _ string) ([]*xemsv1.Command, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	out := m.pendCmds
@@ -404,25 +404,25 @@ func (m *memStore) PendingCommands(_ context.Context, _ string) ([]*xdrv1.Comman
 	return out, nil
 }
 
-func (m *memStore) setPolicy(b *xdrv1.PolicyBundle) {
+func (m *memStore) setPolicy(b *xemsv1.PolicyBundle) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.policy = b
 }
 
-func (m *memStore) CurrentPolicy(_ context.Context, _ string) (*xdrv1.PolicyBundle, error) {
+func (m *memStore) CurrentPolicy(_ context.Context, _ string) (*xemsv1.PolicyBundle, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.policy, nil
 }
 
-func (m *memStore) setUpdate(u *xdrv1.UpdateManifest) {
+func (m *memStore) setUpdate(u *xemsv1.UpdateManifest) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.update = u
 }
 
-func (m *memStore) LatestUpdate(_ context.Context, _, _, _ string) (*xdrv1.UpdateManifest, error) {
+func (m *memStore) LatestUpdate(_ context.Context, _, _, _ string) (*xemsv1.UpdateManifest, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.update, nil
@@ -468,7 +468,7 @@ var (
 
 // --- İstemci-tarafı yardımcılar (satır içi; gerçek transport internal olduğu için) ---
 
-func doEnroll(t *testing.T, ctx context.Context, addr string, caPEM []byte, token string, csrPEM []byte) *xdrv1.EnrollResponse {
+func doEnroll(t *testing.T, ctx context.Context, addr string, caPEM []byte, token string, csrPEM []byte) *xemsv1.EnrollResponse {
 	t.Helper()
 	resp, err := doEnrollErr(ctx, addr, caPEM, token, csrPEM)
 	if err != nil {
@@ -477,7 +477,7 @@ func doEnroll(t *testing.T, ctx context.Context, addr string, caPEM []byte, toke
 	return resp
 }
 
-func doEnrollErr(ctx context.Context, addr string, caPEM []byte, token string, csrPEM []byte) (*xdrv1.EnrollResponse, error) {
+func doEnrollErr(ctx context.Context, addr string, caPEM []byte, token string, csrPEM []byte) (*xemsv1.EnrollResponse, error) {
 	pool := x509.NewCertPool()
 	pool.AppendCertsFromPEM(caPEM)
 	creds := credentials.NewTLS(&tls.Config{RootCAs: pool, ServerName: serverName, MinVersion: tls.VersionTLS13})
@@ -486,12 +486,12 @@ func doEnrollErr(ctx context.Context, addr string, caPEM []byte, token string, c
 		return nil, err
 	}
 	defer conn.Close()
-	return xdrv1.NewEnrollmentServiceClient(conn).Enroll(ctx, &xdrv1.EnrollRequest{
+	return xemsv1.NewEnrollmentServiceClient(conn).Enroll(ctx, &xemsv1.EnrollRequest{
 		EnrollmentToken: token, CsrPem: csrPEM, Hostname: "test-host", MacAddress: "aa:bb:cc:dd:ee:ff", OsInfo: "test",
 	})
 }
 
-func dialAgent(t *testing.T, addr string, clientCertPEM, clientKeyPEM, caPEM []byte) (xdrv1.AgentServiceClient, *grpc.ClientConn) {
+func dialAgent(t *testing.T, addr string, clientCertPEM, clientKeyPEM, caPEM []byte) (xemsv1.AgentServiceClient, *grpc.ClientConn) {
 	t.Helper()
 	cert, err := tls.X509KeyPair(clientCertPEM, clientKeyPEM)
 	if err != nil {
@@ -506,10 +506,10 @@ func dialAgent(t *testing.T, addr string, clientCertPEM, clientKeyPEM, caPEM []b
 	if err != nil {
 		t.Fatal(err)
 	}
-	return xdrv1.NewAgentServiceClient(conn), conn
+	return xemsv1.NewAgentServiceClient(conn), conn
 }
 
-func dialEnrollMTLS(t *testing.T, addr string, clientCertPEM, clientKeyPEM, caPEM []byte) (xdrv1.EnrollmentServiceClient, *grpc.ClientConn) {
+func dialEnrollMTLS(t *testing.T, addr string, clientCertPEM, clientKeyPEM, caPEM []byte) (xemsv1.EnrollmentServiceClient, *grpc.ClientConn) {
 	t.Helper()
 	cert, err := tls.X509KeyPair(clientCertPEM, clientKeyPEM)
 	if err != nil {
@@ -524,7 +524,7 @@ func dialEnrollMTLS(t *testing.T, addr string, clientCertPEM, clientKeyPEM, caPE
 	if err != nil {
 		t.Fatal(err)
 	}
-	return xdrv1.NewEnrollmentServiceClient(conn), conn
+	return xemsv1.NewEnrollmentServiceClient(conn), conn
 }
 
 func genKeyCSR(t *testing.T) (keyPEM, csrPEM []byte) {

@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"xdr.corp/suite/agent/internal/agentclock"
-	"xdr.corp/suite/agent/internal/anomaly"
-	"xdr.corp/suite/agent/internal/collector"
-	"xdr.corp/suite/agent/internal/policy"
+	"xems.corp/suite/agent/internal/agentclock"
+	"xems.corp/suite/agent/internal/anomaly"
+	"xems.corp/suite/agent/internal/collector"
+	"xems.corp/suite/agent/internal/policy"
 )
 
 func TestMonitorEmitsAnomalyEvent(t *testing.T) {

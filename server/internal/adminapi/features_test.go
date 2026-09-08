@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"xdr.corp/suite/server/internal/admin"
-	"xdr.corp/suite/server/internal/adminread"
+	"xems.corp/suite/server/internal/admin"
+	"xems.corp/suite/server/internal/adminread"
 )
 
 func authedGET(t *testing.T, url, token string) (*http.Response, error) {
@@ -337,7 +337,7 @@ func TestMetricsEndpointTokenGated(t *testing.T) {
 		t.Fatalf("doğru token 200 dönmeliydi, %d %v", r.StatusCode, err)
 	}
 	body, _ := io.ReadAll(r.Body)
-	if !strings.Contains(string(body), "xdr_build_info") || !strings.Contains(string(body), "xdr_devices{") {
+	if !strings.Contains(string(body), "xems_build_info") || !strings.Contains(string(body), "xems_devices{") {
 		t.Fatalf("exposition beklenen metrikleri içermiyor:\n%s", body)
 	}
 }

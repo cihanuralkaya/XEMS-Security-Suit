@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"xdr.corp/suite/otawire"
+	"xems.corp/suite/otawire"
 )
 
 // Downloader, güncelleme paketini indirir (test edilebilirlik için arayüz).

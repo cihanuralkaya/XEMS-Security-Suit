@@ -1,5 +1,5 @@
-# Durum Raporu — XDR/MDM
-# Status Report — XDR/MDM
+# Durum Raporu — XEMS Security Suite
+# Status Report — XEMS Security Suite
 
 **Türkçe** · [English](#english)
 
@@ -17,7 +17,7 @@ olarak kapsam dışıdır (bkz. aşağıda).
 - ~15 000 satır üretim Go + kapsamlı test.
 - **277 test fonksiyonu / 47 test paketi**, tümü geçiyor (`go test ./...`).
 - Cross-compile doğrulandı: Windows (native), Linux, macOS.
-- **Bellek-içi demo modu** canlı çalıştırıldı (`XDR_DATABASE_URL` boş): gerçek
+- **Bellek-içi demo modu** canlı çalıştırıldı (`XEMS_DATABASE_URL` boş): gerçek
   enrollment, gerçek ağ keşfi, tüm admin/konsol akışları uçtan uca denendi.
 
 ## Uçtan uca kanıtlanan zincir (e2e)
@@ -167,7 +167,7 @@ make proto && go mod tidy && go test ./...   # üret + test
 make dev-certs                                # geliştirme sertifikaları + env önerisi
 go run ./tools/otasign -genkey -out ./ota-keys
 go run ./tools/adminseed -email a@x -password '...' -role ADMIN
-# db/schema.sql yükle, XDR_* env ayarla, bin/c2 ve bin/agent çalıştır
+# db/schema.sql yükle, XEMS_* env ayarla, bin/c2 ve bin/agent çalıştır
 # yönetim konsolu: https://localhost:8445/
 ```
 
@@ -211,7 +211,7 @@ protection is deliberately out of scope (see below).
 - ~15,000 lines of production Go + comprehensive tests.
 - **277 test functions / 47 test packages**, all passing (`go test ./...`).
 - Cross-compilation verified: Windows (native), Linux, macOS.
-- **In-memory demo mode** run live (`XDR_DATABASE_URL` empty): real enrollment, real
+- **In-memory demo mode** run live (`XEMS_DATABASE_URL` empty): real enrollment, real
   network discovery, all admin/console flows exercised end-to-end.
 
 ## End-to-end proven chain (e2e)
@@ -347,7 +347,7 @@ make proto && go mod tidy && go test ./...   # generate + test
 make dev-certs                                # dev certificates + env suggestion
 go run ./tools/otasign -genkey -out ./ota-keys
 go run ./tools/adminseed -email a@x -password '...' -role ADMIN
-# load db/schema.sql, set XDR_* env, run bin/c2 and bin/agent
+# load db/schema.sql, set XEMS_* env, run bin/c2 and bin/agent
 # admin console: https://localhost:8445/
 ```
 

@@ -4,10 +4,10 @@ import (
 	"errors"
 	"testing"
 
-	"xdr.corp/suite/agent/internal/collector"
-	"xdr.corp/suite/agent/internal/deviceaction"
-	"xdr.corp/suite/agent/internal/netconn"
-	"xdr.corp/suite/agent/internal/usbmon"
+	"xems.corp/suite/agent/internal/collector"
+	"xems.corp/suite/agent/internal/deviceaction"
+	"xems.corp/suite/agent/internal/netconn"
+	"xems.corp/suite/agent/internal/usbmon"
 )
 
 // Güvenli-mod AÇIKKEN yıkıcı MDM eylemi (LOCK/RESTART/WIPE) gerçek OS fonksiyonunu

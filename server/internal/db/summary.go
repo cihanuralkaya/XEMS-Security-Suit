@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"xdr.corp/suite/server/internal/adminread"
+	"xems.corp/suite/server/internal/adminread"
 )
 
 // DeviceStatusCounts, cihazları durumuna göre gruplayıp (status -> adet) döner.

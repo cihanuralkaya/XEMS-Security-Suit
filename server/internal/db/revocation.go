@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"xdr.corp/suite/server/internal/revocation"
+	"xems.corp/suite/server/internal/revocation"
 )
 
 // Derleme-zamanı arayüz kontrolü.

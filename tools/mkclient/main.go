@@ -43,13 +43,13 @@ func main() {
 	server := flag.String("server", "", "C2 sunucu adresi/host (zorunlu)")
 	enrollPort := flag.Int("enroll-port", 8444, "enrollment portu")
 	agentPort := flag.Int("agent-port", 8443, "agent (mTLS) portu")
-	name := flag.String("name", "xdr-c2", "sunucu TLS adı (SAN)")
+	name := flag.String("name", "xems-c2", "sunucu TLS adı (SAN)")
 	caPath := flag.String("ca", "", "CA sertifikası (PEM) yolu (zorunlu)")
 	agentPath := flag.String("agent", "", "ajan ikilisi (gömülecek); boşsa betik yanındaki dosyayı bekler")
 	token := flag.String("token", "", "kayıt token'ı; verilirse gömülür (benzersiz setup), boşsa kod girişi istenir")
 	heartbeat := flag.String("heartbeat", "30s", "heartbeat aralığı")
-	safeMode := flag.Bool("safe-mode", false, "XDR_SAFE_MODE=1 (karantina gerçek ağ değişikliği yapmaz)")
-	out := flag.String("out", "", "çıktı betiği yolu (varsayılan: xdr-agent-setup.ps1/.sh)")
+	safeMode := flag.Bool("safe-mode", false, "XEMS_SAFE_MODE=1 (karantina gerçek ağ değişikliği yapmaz)")
+	out := flag.String("out", "", "çıktı betiği yolu (varsayılan: xems-agent-setup.ps1/.sh)")
 	flag.Parse()
 
 	if *osFlag != "windows" && *osFlag != "linux" {
@@ -86,10 +86,10 @@ func main() {
 	}
 
 	tmpl := winTemplate
-	outPath := "xdr-agent-setup.ps1"
+	outPath := "xems-agent-setup.ps1"
 	if *osFlag == "linux" {
 		tmpl = linuxTemplate
-		outPath = "xdr-agent-setup.sh"
+		outPath = "xems-agent-setup.sh"
 	}
 	if *out != "" {
 		outPath = *out
@@ -127,7 +127,7 @@ func fatal(f string, a ...any) {
 
 // --- Windows PowerShell şablonu ---
 const winTemplate = `#Requires -RunAsAdministrator
-# XDR Agent kurulum betiği (otomatik üretildi — mkclient).
+# XEMS Agent kurulum betiği (otomatik üretildi — mkclient).
 $ErrorActionPreference = "Stop"
 
 $EnrollAddr = "{{.EnrollAddr}}"
@@ -136,7 +136,7 @@ $ServerName = "{{.ServerName}}"
 $Heartbeat  = "{{.Heartbeat}}"
 $SafeMode   = "{{.SafeMode}}"
 $Token      = "{{.Token}}"
-$InstallDir = "$env:ProgramFiles\XDR Agent"
+$InstallDir = "$env:ProgramFiles\XEMS Agent"
 $DataDir    = "$InstallDir\data"
 
 if ([string]::IsNullOrEmpty($Token)) {
@@ -163,14 +163,14 @@ Copy-Item -Path (Join-Path $PSScriptRoot "agent.exe") -Destination "$InstallDir\
 # Ajanı çalıştıran ortam sarmalayıcı (.cmd)
 $Wrapper = @"
 @echo off
-set XDR_ENROLL_ADDR=$EnrollAddr
-set XDR_AGENT_ADDR=$AgentAddr
-set XDR_SERVER_NAME=$ServerName
-set XDR_CA_PEM=$InstallDir\ca.pem
-set XDR_AGENT_DATA=$DataDir
-set XDR_HEARTBEAT_INTERVAL=$Heartbeat
-set XDR_SAFE_MODE=$SafeMode
-set XDR_ENROLL_TOKEN=$Token
+set XEMS_ENROLL_ADDR=$EnrollAddr
+set XEMS_AGENT_ADDR=$AgentAddr
+set XEMS_SERVER_NAME=$ServerName
+set XEMS_CA_PEM=$InstallDir\ca.pem
+set XEMS_AGENT_DATA=$DataDir
+set XEMS_HEARTBEAT_INTERVAL=$Heartbeat
+set XEMS_SAFE_MODE=$SafeMode
+set XEMS_ENROLL_TOKEN=$Token
 "$InstallDir\agent.exe"
 "@
 Set-Content -Path "$InstallDir\run-agent.cmd" -Value $Wrapper -Encoding ascii
@@ -179,15 +179,15 @@ Set-Content -Path "$InstallDir\run-agent.cmd" -Value $Wrapper -Encoding ascii
 $Action    = New-ScheduledTaskAction -Execute "$InstallDir\run-agent.cmd"
 $Trigger   = New-ScheduledTaskTrigger -AtStartup
 $Principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-Register-ScheduledTask -TaskName "XDR Agent" -Action $Action -Trigger $Trigger -Principal $Principal -Force | Out-Null
-Start-ScheduledTask -TaskName "XDR Agent"
+Register-ScheduledTask -TaskName "XEMS Agent" -Action $Action -Trigger $Trigger -Principal $Principal -Force | Out-Null
+Start-ScheduledTask -TaskName "XEMS Agent"
 
-Write-Host "XDR Agent kuruldu ve başlatıldı ($InstallDir)."
+Write-Host "XEMS Agent kuruldu ve başlatıldı ($InstallDir)."
 `
 
 // --- Linux bash şablonu ---
 const linuxTemplate = `#!/usr/bin/env bash
-# XDR Agent kurulum betiği (otomatik üretildi — mkclient).
+# XEMS Agent kurulum betiği (otomatik üretildi — mkclient).
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "root olarak çalıştırın (sudo)." >&2; exit 1; }
 
@@ -197,9 +197,9 @@ SERVER_NAME="{{.ServerName}}"
 HEARTBEAT="{{.Heartbeat}}"
 SAFE_MODE="{{.SafeMode}}"
 TOKEN="{{.Token}}"
-INSTALL_DIR="/opt/xdr-agent"
-DATA_DIR="/var/lib/xdr-agent"
-CONF_DIR="/etc/xdr-agent"
+INSTALL_DIR="/opt/xems-agent"
+DATA_DIR="/var/lib/xems-agent"
+CONF_DIR="/etc/xems-agent"
 
 if [ -z "$TOKEN" ]; then
   read -r -p "Kayıt kodunu (enrollment token) girin: " TOKEN
@@ -221,20 +221,20 @@ chmod +x "$INSTALL_DIR/agent"
 install -m 0755 "$(dirname "$0")/agent" "$INSTALL_DIR/agent"
 {{end}}
 cat > "$CONF_DIR/agent.env" <<ENVEOF
-XDR_ENROLL_ADDR=$ENROLL_ADDR
-XDR_AGENT_ADDR=$AGENT_ADDR
-XDR_SERVER_NAME=$SERVER_NAME
-XDR_CA_PEM=$CONF_DIR/ca.pem
-XDR_AGENT_DATA=$DATA_DIR
-XDR_HEARTBEAT_INTERVAL=$HEARTBEAT
-XDR_SAFE_MODE=$SAFE_MODE
-XDR_ENROLL_TOKEN=$TOKEN
+XEMS_ENROLL_ADDR=$ENROLL_ADDR
+XEMS_AGENT_ADDR=$AGENT_ADDR
+XEMS_SERVER_NAME=$SERVER_NAME
+XEMS_CA_PEM=$CONF_DIR/ca.pem
+XEMS_AGENT_DATA=$DATA_DIR
+XEMS_HEARTBEAT_INTERVAL=$HEARTBEAT
+XEMS_SAFE_MODE=$SAFE_MODE
+XEMS_ENROLL_TOKEN=$TOKEN
 ENVEOF
 chmod 600 "$CONF_DIR/agent.env"
 
-cat > /etc/systemd/system/xdr-agent.service <<UNITEOF
+cat > /etc/systemd/system/xems-agent.service <<UNITEOF
 [Unit]
-Description=XDR Agent
+Description=XEMS Agent
 After=network-online.target
 Wants=network-online.target
 
@@ -250,6 +250,6 @@ WantedBy=multi-user.target
 UNITEOF
 
 systemctl daemon-reload
-systemctl enable --now xdr-agent.service
-echo "XDR Agent kuruldu ve başlatıldı (systemctl status xdr-agent)."
+systemctl enable --now xems-agent.service
+echo "XEMS Agent kuruldu ve başlatıldı (systemctl status xems-agent)."
 `

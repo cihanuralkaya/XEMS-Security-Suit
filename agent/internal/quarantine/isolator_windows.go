@@ -21,7 +21,7 @@ type winIsolator struct{}
 // NewIsolator, mevcut platform için izolatör döner.
 func NewIsolator() Isolator { return winIsolator{} }
 
-const allowRulePrefix = "XDR-Quarantine-Allow-C2"
+const allowRulePrefix = "XEMS-Quarantine-Allow-C2"
 
 func (winIsolator) Isolate(allowC2 []string) error {
 	// Varsayılan politikayı blok yap.
@@ -50,7 +50,7 @@ func (winIsolator) Release() error {
 	if err := netsh("advfirewall", "set", "allprofiles", "firewallpolicy", "blockinbound,allowoutbound"); err != nil {
 		return err
 	}
-	// XDR allow kurallarını temizle (indeksli; makul bir üst sınıra kadar).
+	// XEMS allow kurallarını temizle (indeksli; makul bir üst sınıra kadar).
 	for i := 0; i < 32; i++ {
 		_ = netsh("advfirewall", "firewall", "delete", "rule", "name="+fmt.Sprintf("%s-out-%d", allowRulePrefix, i))
 		_ = netsh("advfirewall", "firewall", "delete", "rule", "name="+fmt.Sprintf("%s-in-%d", allowRulePrefix, i))

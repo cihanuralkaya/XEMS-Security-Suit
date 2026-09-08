@@ -11,13 +11,13 @@ func Lock() error {
 
 // Restart, cihazı 60 sn gecikmeyle yeniden başlatır (kullanıcıya uyarı penceresi).
 func Restart() error {
-	return exec.Command("shutdown", "/r", "/t", "60", "/c", "XDR uzaktan yeniden baslatma").Run()
+	return exec.Command("shutdown", "/r", "/t", "60", "/c", "XEMS uzaktan yeniden baslatma").Run()
 }
 
 // Wipe, sistem sürücüsünü (C:) KRİPTO-SİLME ile geri döndürülemez kılar: BitLocker
 // anahtar koruyucularını (kurtarma anahtarı dahil) siler ve zorla kurtarma moduna
 // alır. Anahtar yok + kurtarma anahtarı yok → şifreli veri kurtarılamaz. GERİ
-// DÖNÜŞÜ YOKTUR. Yalnız ARM'lı (XDR_ALLOW_WIPE=1) ve güvenli-mod KAPALI iken
+// DÖNÜŞÜ YOKTUR. Yalnız ARM'lı (XEMS_ALLOW_WIPE=1) ve güvenli-mod KAPALI iken
 // çağrılır — çağıran (agent) bu katmanları denetler. BitLocker etkin değilse
 // koruyucu-silme etkisizdir; bu sürüm şifrelenmemiş diskte gerçek veri imhası
 // yapmaz (kripto-silme şifreleme gerektirir) — zorla kurtarma yine de erişimi kilitler.
