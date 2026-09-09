@@ -16,6 +16,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -128,6 +130,41 @@ func openBackend(ctx context.Context, cfg *config.Config) (Backend, error) {
 func getenv(k, def string) string {
 	if v := os.Getenv(k); v != "" {
 		return v
+	}
+	return def
+}
+
+// splitCSVEnv, virgülle ayrılmış bir ortam değişkenini boşlukları kırpılmış,
+// boşları atlanmış dilime çevirir.
+func splitCSVEnv(k string) []string {
+	raw := os.Getenv(k)
+	if raw == "" {
+		return nil
+	}
+	var out []string
+	for _, p := range strings.Split(raw, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// atoiEnv, bir ortam değişkenini pozitif tamsayı olarak okur (yoksa/geçersizse 0).
+func atoiEnv(k string) int {
+	n, err := strconv.Atoi(strings.TrimSpace(os.Getenv(k)))
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
+}
+
+// getdurEnv, süre biçimli bir ortam değişkenini okur (yoksa/geçersizse def).
+func getdurEnv(k string, def time.Duration) time.Duration {
+	if v := os.Getenv(k); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return d
+		}
 	}
 	return def
 }
@@ -265,9 +302,19 @@ func run() error {
 		if err != nil {
 			return err
 		}
-		notifiers = append(notifiers, alerter)
+		// Yönlendirme (#15): XEMS_ALERT_CATEGORIES / XEMS_ALERT_TECHNIQUES ayarlıysa
+		// webhook'a YALNIZ eşleşen uyarılar gider (kategori/ATT&CK tekniği süzgeci).
+		cats := splitCSVEnv("XEMS_ALERT_CATEGORIES")
+		techs := splitCSVEnv("XEMS_ALERT_TECHNIQUES")
+		if len(cats) > 0 || len(techs) > 0 {
+			notifiers = append(notifiers, notify.NewRouter(
+				notify.NewRoute("webhook", getenv("XEMS_ALERT_MIN_SEVERITY", "HIGH"), cats, techs, alerter)))
+			log.Printf("dış uyarı: webhook + yönlendirme etkin (kategori=%v teknik=%v)", cats, techs)
+		} else {
+			notifiers = append(notifiers, alerter)
+			log.Println("dış uyarı: webhook etkin (yüksek önem düzeyli olaylar)")
+		}
 		alertingOn = true
-		log.Println("dış uyarı: webhook etkin (yüksek önem düzeyli olaylar)")
 	}
 	// SIEM iletici (#8): XEMS_SIEM_ADDR ayarlıysa olaylar syslog+CEF/LEEF olarak
 	// bir SIEM'e (ArcSight/QRadar/Splunk) iletilir. proto XEMS_SIEM_PROTO (udp|tcp),
@@ -283,7 +330,16 @@ func run() error {
 		log.Printf("SIEM iletici etkin: %s (%s/%s)", siemAddr, getenv("XEMS_SIEM_PROTO", "udp"), getenv("XEMS_SIEM_FORMAT", "cef"))
 	}
 	if len(notifiers) > 0 {
-		agentHandler.SetAlerter(notify.NewMulti(notifiers...))
+		var alerter notify.Notifier = notify.NewMulti(notifiers...)
+		// Yükseltme (#15): XEMS_ALERT_ESCALATE_COUNT>0 ise aynı cihaz|kategori için
+		// XEMS_ALERT_ESCALATE_WINDOW (varsayılan 10m) içinde bu kadar yüksek-önem
+		// uyarı birikince bir kez CRITICAL "ESCALATED" uyarısı üretilir (on-call).
+		if cnt := atoiEnv("XEMS_ALERT_ESCALATE_COUNT"); cnt > 0 {
+			win := getdurEnv("XEMS_ALERT_ESCALATE_WINDOW", 10*time.Minute)
+			alerter = notify.NewEscalator(alerter, getenv("XEMS_ALERT_ESCALATE_MIN_SEVERITY", "HIGH"), cnt, win, nil)
+			log.Printf("uyarı yükseltme etkin: %d uyarı/%s → CRITICAL", cnt, win)
+		}
+		agentHandler.SetAlerter(alerter)
 	}
 
 	// Tehdit istihbaratı (IoC): XEMS_IOC_FILE ayarlıysa bilinen-kötü göstergeler
