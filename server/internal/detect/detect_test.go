@@ -174,3 +174,46 @@ func TestDefaultSuspiciousProcessRule(t *testing.T) {
 		t.Fatalf("XEMS-0007 powershell -EncodedCommand eşleşmeliydi: %+v", d)
 	}
 }
+
+func TestRuleLifecycleActive(t *testing.T) {
+	cases := map[string]bool{"": true, "active": true, "ACTIVE": true, "draft": false, "retired": false}
+	for status, want := range cases {
+		if got := (Rule{Status: status}).Active(); got != want {
+			t.Errorf("Rule{Status:%q}.Active()=%v beklenen %v", status, got, want)
+		}
+	}
+}
+
+func TestEngineSkipsInactiveRules(t *testing.T) {
+	ev := model.Event{Category: "SECURITY", Severity: "HIGH", Message: "kurcalama tespit edildi"}
+	active := NewEngine([]Rule{
+		{ID: "a", Name: "aktif", Severity: "HIGH", Contains: []string{"kurcalama"}, Status: "active"},
+	})
+	if len(active.Evaluate(ev)) != 1 {
+		t.Fatal("aktif kural eşleşmeli")
+	}
+	retired := NewEngine([]Rule{
+		{ID: "r", Name: "emekli", Severity: "HIGH", Contains: []string{"kurcalama"}, Status: "retired"},
+	})
+	if len(retired.Evaluate(ev)) != 0 {
+		t.Fatal("emekli kural değerlendirilmemeli")
+	}
+	// Emekli kural yine de katalogda görünmeli.
+	if len(retired.Rules()) != 1 {
+		t.Fatal("emekli kural katalogda kalmalı")
+	}
+}
+
+func TestLoadRulesValidatesStatus(t *testing.T) {
+	_, err := LoadRules(strings.NewReader(`[{"id":"a","name":"n","severity":"HIGH","status":"bogus"}]`))
+	if err == nil {
+		t.Fatal("geçersiz status reddedilmeli")
+	}
+	rs, err := LoadRules(strings.NewReader(`[{"id":"a","name":"n","severity":"HIGH","status":"draft","author":"soc","version":"1.0.0","references":["https://x"]}]`))
+	if err != nil {
+		t.Fatalf("geçerli yaşam-döngüsü meta verisi kabul edilmeli: %v", err)
+	}
+	if rs[0].Author != "soc" || rs[0].Version != "1.0.0" || len(rs[0].References) != 1 {
+		t.Fatalf("meta veri korunmalı: %+v", rs[0])
+	}
+}

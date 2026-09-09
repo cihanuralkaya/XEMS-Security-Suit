@@ -36,6 +36,18 @@ type Rule struct {
 	MinSeverity  string            `json:"min_severity,omitempty"`
 	Severity     string            `json:"severity"` // kuralın atadığı normalize önem düzeyi
 	Technique    mitre.Technique   `json:"technique"`
+	// Detection-as-Code yaşam-döngüsü + köken meta verisi (opsiyonel):
+	Status     string   `json:"status,omitempty"`     // draft | active | retired ("" = active)
+	Author     string   `json:"author,omitempty"`     // kuralı yazan
+	Version    string   `json:"version,omitempty"`    // kural sürümü (ör. "1.2.0")
+	References []string `json:"references,omitempty"` // kaynak/analiz bağlantıları
+}
+
+// Active, kuralın değerlendirmeye dahil olup olmadığını döner. Boş ya da "active"
+// → etkin; "draft"/"retired" → yalnız katalogda görünür, olay-alımında değerlendirilmez.
+func (r Rule) Active() bool {
+	s := strings.ToLower(strings.TrimSpace(r.Status))
+	return s == "" || s == "active"
 }
 
 // Detection, eşleşen bir kuralın ürettiği tespittir.
@@ -116,10 +128,15 @@ func NewEngine(rules []Rule) *Engine {
 	return &Engine{rules: cr}
 }
 
-// Evaluate, olaya uyan tüm tespitleri (sıralı) döner. Eşleşme yoksa nil.
+// Evaluate, olaya uyan tüm tespitleri (sıralı) döner. Eşleşme yoksa nil. YALNIZ
+// etkin (active) kurallar değerlendirilir; draft/retired kurallar atlanır (yaşam-
+// döngüsü — katalogda görünür ama üretimde tetiklenmez).
 func (e *Engine) Evaluate(ev model.Event) []Detection {
 	var out []Detection
 	for _, c := range e.rules {
+		if !c.rule.Active() {
+			continue
+		}
 		if c.matches(ev) {
 			r := c.rule
 			out = append(out, Detection{RuleID: r.ID, RuleName: r.Name, Severity: r.Severity, Technique: r.Technique})
@@ -156,6 +173,9 @@ func LoadRules(r io.Reader) ([]Rule, error) {
 		}
 		if rr.MinSeverity != "" && sevRank[rr.MinSeverity] == 0 {
 			return nil, fmt.Errorf("detect: kural[%d] (%s) geçersiz min_severity %q", i, rr.ID, rr.MinSeverity)
+		}
+		if st := strings.ToLower(strings.TrimSpace(rr.Status)); st != "" && st != "active" && st != "draft" && st != "retired" {
+			return nil, fmt.Errorf("detect: kural[%d] (%s) geçersiz status %q (draft|active|retired)", i, rr.ID, rr.Status)
 		}
 	}
 	return rules, nil

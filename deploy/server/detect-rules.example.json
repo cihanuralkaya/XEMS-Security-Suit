@@ -5,7 +5,11 @@
     "category": "POLICY_VIOLATION",
     "contains": ["xmrig"],
     "severity": "CRITICAL",
-    "technique": { "id": "T1496", "name": "Resource Hijacking", "tactic": "Impact" }
+    "technique": { "id": "T1496", "name": "Resource Hijacking", "tactic": "Impact" },
+    "status": "active",
+    "author": "SOC",
+    "version": "1.0.0",
+    "references": ["https://attack.mitre.org/techniques/T1496/"]
   },
   {
     "id": "ORG-0002",
