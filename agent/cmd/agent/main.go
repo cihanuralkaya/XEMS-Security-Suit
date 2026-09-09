@@ -851,34 +851,59 @@ func (p *persistenceTracker) emit(buf *collector.Buffer, added []persistence.Ent
 // complianceInterval, uyum durumunun periyodik yeniden-kontrol aralığıdır.
 const complianceInterval = 6 * time.Hour
 
-// reportCompliance, disk şifreleme uyum durumunu bir olay olarak yayınlar. Şifreleme
-// kapalıysa SECURITY/MEDIUM (uyum ihlali), aksi halde SYSTEM/INFO. Details, konsol
-// detay panelinde ve sunucu event_logs'ta durumu taşır.
+// reportCompliance, CIS-tarzı güvenlik-tabanı (baseline) değerlendirmesini bir
+// olay olarak yayınlar. HIGH/MEDIUM önemli herhangi bir kontrol başarısızsa
+// güvenlik-duruşu ihlali (SECURITY/MEDIUM); aksi halde bilgi amaçlı (SYSTEM/INFO).
+// Details, tam kontrol listesini + uyum skorunu taşır (konsol detay paneli +
+// sunucu event_logs). Ham sinyaller de geriye-uyumluluk için Details'te tutulur.
 func reportCompliance(buf *collector.Buffer, chk compliance.Checker) {
-	enc := chk.DiskEncryption()
-	fw := chk.Firewall()
-	// Herhangi bir kontrol KAPALIYSA güvenlik-duruşu ihlali (SECURITY/MEDIUM);
-	// aksi halde bilgi amaçlı (SYSTEM/INFO). Details her iki durumu da taşır.
+	rep := compliance.Evaluate(chk)
+
+	// Kontrolleri Details için serileştirilebilir dilimlere çevir. structpb.NewStruct
+	// yalnız []any kabul eder ([]map[string]any DEĞİL) — aksi halde tüm Details sessizce
+	// düşer; bu yüzden dilim tipi []any olmalıdır.
+	checks := make([]any, 0, len(rep.Checks))
+	for _, c := range rep.Checks {
+		checks = append(checks, map[string]any{
+			"id": c.ID, "title": c.Title, "severity": c.Severity,
+			"status": string(c.Status), "detail": c.Detail,
+		})
+	}
+
 	cat, sev := "SYSTEM", "INFO"
-	msg := "uyum: disk şifreleme " + enc + ", güvenlik duvarı " + fw
-	var viol []string
-	if enc == compliance.EncOff {
-		viol = append(viol, "disk şifreleme KAPALI")
-	}
-	if fw == compliance.FwOff {
-		viol = append(viol, "güvenlik duvarı KAPALI")
-	}
-	if len(viol) > 0 {
+	msg := fmt.Sprintf("uyum tabanı: skor %%%d (%d geçti, %d kaldı, %d bilinmiyor)",
+		rep.ScorePct(), rep.Passed, rep.Failed, rep.Unknown)
+	if rep.HasFailure() {
 		cat, sev = "SECURITY", "MEDIUM"
-		msg = "uyum ihlali: " + strings.Join(viol, ", ")
+		msg = "uyum ihlali (skor %" + fmt.Sprint(rep.ScorePct()) + "): " +
+			strings.Join(rep.FailedTitles(), ", ")
 	}
 	buf.Add(collector.Event{
 		Category:   cat,
 		Severity:   sev,
 		Message:    msg,
 		OccurredAt: time.Now(),
-		Details:    map[string]any{"disk_encryption": enc, "firewall": fw},
+		Details: map[string]any{
+			"compliance_score": rep.ScorePct(),
+			"passed":           rep.Passed,
+			"failed":           rep.Failed,
+			"unknown":          rep.Unknown,
+			"checks":           checks,
+			// Geriye-uyumluluk: ham sinyaller (mevcut konsol/sorgular bunlara bakabilir).
+			"disk_encryption": chkDetail(rep, "CIS-1.1"),
+			"firewall":        chkDetail(rep, "CIS-9.1"),
+		},
 	})
+}
+
+// chkDetail, rapordaki verilen ID'li kontrolün ham sinyalini döner (yoksa "unknown").
+func chkDetail(rep compliance.Report, id string) string {
+	for _, c := range rep.Checks {
+		if c.ID == id {
+			return c.Detail
+		}
+	}
+	return "unknown"
 }
 
 // reportResource, uç noktanın kaynak kullanımı anlık görüntüsünü (bellek/disk
