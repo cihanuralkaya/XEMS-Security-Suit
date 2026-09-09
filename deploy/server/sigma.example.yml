@@ -1,0 +1,35 @@
+# Örnek Sigma kuralı — XEMS içe aktarma (server/cmd/sigmaimport) ile desteklenen
+# alt küme. Çok-belgeli dosya için kuralları "---" ile ayırın.
+#
+# Dönüştürme:
+#   go run ./server/cmd/sigmaimport -in deploy/server/sigma.example.yml \
+#     > detect-rules.json
+# Ardından C2'ye ver: XEMS_DETECT_RULES_FILE=detect-rules.json
+#
+# DESTEKLENEN: tek seçim ya da "and"/"all of them" ile birleşen seçimler (AND),
+# skaler alan değerleri (opsiyonel |contains/|startswith/|endswith → alt-dize).
+# DESTEKLENMEYEN (güvenle atlanır): OR / liste değerleri, "not"/filtre, "1 of",
+# regex/|re. Alan adı "message"/"keywords" ise mesaj alt-dizesine eşlenir; diğer
+# alanlar olay Details JSON alanına eşlenir.
+
+title: Kodlanmış PowerShell komutu
+id: xems-example-0001
+level: high
+tags:
+  - attack.t1059.001
+detection:
+  selection:
+    CommandLine|contains: '-enc'
+  condition: selection
+---
+title: Şüpheli hizmet oluşturma (AND örneği)
+id: xems-example-0002
+level: medium
+tags:
+  - attack.t1543
+detection:
+  img:
+    Image|endswith: '\sc.exe'
+  args:
+    CommandLine|contains: 'create'
+  condition: img and args
