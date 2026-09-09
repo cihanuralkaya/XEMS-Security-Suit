@@ -86,7 +86,13 @@ jobs:
       - name: Proto üret
         run: make proto
       - name: psql istemcisi
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+        # apt ayna hıçkırıklarına karşı dayanıklı: 3 kez dene (geçici CI infra hatası).
+        run: |
+          for i in 1 2 3; do
+            sudo apt-get update && sudo apt-get install -y postgresql-client && exit 0
+            echo "apt denemesi $i başarısız, yeniden deneniyor..."; sleep 10
+          done
+          echo "postgresql-client kurulamadı (apt)"; exit 1
       # smoke-test.sh, XEMS_DATABASE_URL görünce şemayı yükler, admin tohumlar ve
       # tüm zinciri GERÇEK PostgreSQL'e karşı çalıştırır (pgx yolu).
       - name: DB uçtan uca smoke test
