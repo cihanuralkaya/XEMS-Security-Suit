@@ -171,6 +171,10 @@ curl -sk "$B/api/events?limit=50" -H "Authorization: Bearer $TOK" | grep -q '"ac
   && pass "olay vaka ataması (assignee) kalıcı + okundu" || fail "olay vaka ataması görünmedi"
 curl -sk "$B/api/audit?limit=20" -H "Authorization: Bearer $TOK" | grep -q "EVENT_CASE" \
   && pass "vaka ataması denetim izine yazıldı" || fail "vaka denetim izinde yok"
+# Kurcalama-kanıtlı denetim dışa aktarımı (#16): hash-zincirli JSONL üretilir.
+exp="$(curl -sk "$B/api/audit/export" -H "Authorization: Bearer $TOK")"
+echo "$exp" | grep -q '"hash"' \
+  && pass "/api/audit/export hash-zinciri üretti" || fail "/api/audit/export başarısız"
 curl -sk "$B/api/summary" -H "Authorization: Bearer $TOK" | grep -q "devices_total" \
   && pass "özet uç yanıt verdi" || fail "özet uç başarısız"
 curl -sk "$B/api/policies" -H "Authorization: Bearer $TOK" | grep -q "policies" \

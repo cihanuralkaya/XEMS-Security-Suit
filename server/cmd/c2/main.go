@@ -8,7 +8,9 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -431,6 +433,17 @@ func run() error {
 	adminAPI.SetLoginLimit(cfg.LoginMaxAttempts, cfg.LoginLockout) // kaba-kuvvet koruması
 	adminAPI.SetPrivacyNotice(os.Getenv("XEMS_PRIVACY_NOTICE"))    // KVKK aydınlatma (boşsa varsayılan)
 	adminAPI.SetAuditVerifier(backend.VerifyAuditChain)            // denetim izi hash-zincir doğrulama
+	// İmzalı denetim dışa aktarımı (#16): XEMS_AUDIT_EXPORT_KEY (base64 Ed25519 özel
+	// anahtar) ayarlıysa /api/audit/export imzalı manifest üretir; aksi halde imzasız
+	// (yalnız hash zinciri). Anahtar geçersizse başlatma durur (yanlış yapılandırma).
+	if kb := os.Getenv("XEMS_AUDIT_EXPORT_KEY"); kb != "" {
+		raw, err := base64.StdEncoding.DecodeString(kb)
+		if err != nil || len(raw) != ed25519.PrivateKeySize {
+			return fmt.Errorf("XEMS_AUDIT_EXPORT_KEY geçersiz Ed25519 özel anahtar")
+		}
+		adminAPI.SetAuditExportKey(ed25519.PrivateKey(raw))
+		log.Println("denetim dışa aktarımı: imzalı manifest etkin")
+	}
 	// Prometheus /metrics — yalnız XEMS_METRICS_TOKEN ayarlıysa açılır (statik Bearer
 	// token). Ayarlı değilse uç kapalıdır (toplu veriyi kimliksiz sızdırmama).
 	metrics.SetBuildVersion(os.Getenv("XEMS_BUILD_VERSION"))

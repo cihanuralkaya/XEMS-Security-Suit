@@ -8,6 +8,7 @@ package adminapi
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/subtle"
 	_ "embed"
@@ -24,6 +25,7 @@ import (
 
 	"xems.corp/suite/server/internal/admin"
 	"xems.corp/suite/server/internal/adminread"
+	"xems.corp/suite/server/internal/auditexport"
 	"xems.corp/suite/server/internal/detect"
 	"xems.corp/suite/server/internal/eventbus"
 	"xems.corp/suite/server/internal/metrics"
@@ -57,6 +59,7 @@ type Server struct {
 	dummyHash    string // SEC-004: bilinmeyen e-postada sabit-zaman için sahte Argon2 hash
 	sseConns     int64  // SEC-007: aktif SSE bağlantı sayısı (atomik)
 	auditVerify  func(context.Context) error
+	auditExpKey  ed25519.PrivateKey            // ayarlıysa /api/audit/export imzalı manifest üretir (#16)
 	metricsToken string                        // ayarlıysa /metrics bu Bearer token ile açılır; boşsa uç kapalı
 	detector     atomic.Pointer[detect.Engine] // tespit kural kataloğu (görünürlük ucu; canlı hot-reload için atomik)
 	vulnSet      *vuln.Set                     // zafiyet veri kümesi (nil = kapalı); envanterle eşleşir
@@ -142,6 +145,10 @@ func (s *Server) SetHealthCheck(fn func(context.Context) error) { s.health = fn 
 // doğrulayıcıyı bağlar (ör. backend.VerifyAuditChain).
 func (s *Server) SetAuditVerifier(fn func(context.Context) error) { s.auditVerify = fn }
 
+// SetAuditExportKey, GET /api/audit/export imzalı dışa aktarım için Ed25519 özel
+// anahtarı bağlar (#16). nil/boşsa dışa aktarım imzasız (yalnız hash zinciri) olur.
+func (s *Server) SetAuditExportKey(priv ed25519.PrivateKey) { s.auditExpKey = priv }
+
 // Handler, yönlendirmeleri kayıtlı bir http.Handler döner.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
@@ -218,6 +225,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/features", s.authed(s.handleFeatures))
 	mux.HandleFunc("GET /api/audit", s.authed(s.handleListAudit))
 	mux.HandleFunc("GET /api/audit/verify", s.authed(s.handleVerifyAudit))
+	mux.HandleFunc("GET /api/audit/export", s.authed(s.handleAuditExport))
 	mux.HandleFunc("GET /api/stream", s.authed(s.handleStream))
 	// Sağlık uçları (kimlik doğrulama YOK — orkestrasyon/LB/monitoring için).
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
@@ -988,6 +996,38 @@ func (s *Server) handleCoverage(w http.ResponseWriter, r *http.Request, _ string
 		return
 	}
 	writeJSON(w, http.StatusOK, cov)
+}
+
+// handleAuditExport, denetim izini KURCALAMA-KANITLI, taşınabilir bir hash-zinciri
+// (JSONL) olarak dışa aktarır (#16). Anahtar bağlıysa (SetAuditExportKey) son
+// satıra imzalı bir manifest eklenir. Denetçi/WORM arşiv bunu C2'DEN BAĞIMSIZ
+// doğrulayabilir (tools/auditverify). OPERATOR+ gerekir (denetim izi hassas).
+func (s *Server) handleAuditExport(w http.ResponseWriter, r *http.Request, adminID string) {
+	if respondErr(w, s.adminSvc.EnsureRole(r.Context(), adminID, admin.RoleOperator)) {
+		return
+	}
+	rows, err := s.reader.Audit(r.Context(), intParam(r, "limit"))
+	if respondErr(w, err) {
+		return
+	}
+	// Audit en yeniden eskiye döner; zincir KRONOLOJİK (eskiden yeniye) olmalı.
+	entries := make([]auditexport.Entry, 0, len(rows))
+	for i := len(rows) - 1; i >= 0; i-- {
+		a := rows[i]
+		entries = append(entries, auditexport.Entry{
+			Admin: a.AdminEmail, Action: a.Action,
+			TargetType: a.TargetType, TargetID: a.TargetID, CreatedAt: a.CreatedAt,
+		})
+	}
+	data, err := auditexport.MarshalJSONL(auditexport.BuildChain(entries), s.auditExpKey)
+	if respondErr(w, err) {
+		return
+	}
+	w.Header().Set("Content-Type", "application/x-ndjson")
+	w.Header().Set("Content-Disposition", `attachment; filename="audit-export.jsonl"`)
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
 }
 
 // handleMetricsTrends, MTTD/MTTR metriklerini ve günlük trendini döner (SOC
