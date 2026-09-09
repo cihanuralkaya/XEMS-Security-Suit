@@ -623,6 +623,140 @@ func (s *Service) PendingWipes(ctx context.Context) ([]PendingWipeRow, error) {
 	return s.store.ListPendingWipes(ctx)
 }
 
+// TrendPoint, tek bir günün MTTD/MTTR ortalamalarıdır (trend çizgisi noktası).
+type TrendPoint struct {
+	Day         string  `json:"day"`          // YYYY-MM-DD (UTC)
+	MTTDSeconds float64 `json:"mttd_seconds"` // o gün algılanan olaylar için ort. algılama gecikmesi
+	MTTRSeconds float64 `json:"mttr_seconds"` // o gün triyaj edilen olaylar için ort. yanıt süresi
+	DetectN     int     `json:"detect_n"`     // MTTD örnek sayısı
+	RespondN    int     `json:"respond_n"`    // MTTR örnek sayısı
+}
+
+// TrendsDTO, MTTD (Mean Time To Detect) ve MTTR (Mean Time To Respond) metrikleri
+// ve günlük trendidir (SOC olgunluk göstergesi).
+//
+// MTTD = olay sunucuya ulaşma (created_at) − uçta gözlemlenme (occurred_at):
+//
+//	tespit/alım gecikmesi (SECURITY olayları üzerinde).
+//
+// MTTR = triyaj (ack_at) − olay oluşturulma (created_at): analistin yanıt süresi
+// (durum/atama işaretlenmiş olaylar üzerinde).
+type TrendsDTO struct {
+	WindowDays  int          `json:"window_days"`
+	MTTDSeconds float64      `json:"mttd_seconds"` // pencere geneli ortalama
+	MTTRSeconds float64      `json:"mttr_seconds"`
+	DetectN     int          `json:"detect_n"`
+	RespondN    int          `json:"respond_n"`
+	Daily       []TrendPoint `json:"daily"` // eskiden yeniye, gün başına (boş günler dahil)
+}
+
+// ComputeTrends, verilen olaylardan MTTD/MTTR metriklerini ve günlük trendini
+// hesaplar. SAF fonksiyon (test edilebilir): now referans an, days pencere.
+// Negatif gecikmeler (saat kayması) yok sayılır.
+func ComputeTrends(events []EventDTO, now time.Time, days int) TrendsDTO {
+	if days <= 0 {
+		days = 7
+	}
+	type bucket struct {
+		mttdSum, mttrSum float64
+		mttdN, mttrN     int
+	}
+	buckets := map[string]*bucket{}
+	get := func(day string) *bucket {
+		b := buckets[day]
+		if b == nil {
+			b = &bucket{}
+			buckets[day] = b
+		}
+		return b
+	}
+
+	var mttdSum, mttrSum float64
+	var mttdN, mttrN int
+	for _, e := range events {
+		day := e.CreatedAt.UTC().Format("2006-01-02")
+		// MTTD: SECURITY olayları için alım gecikmesi.
+		if e.Category == "SECURITY" && !e.OccurredAt.IsZero() && !e.CreatedAt.IsZero() {
+			if d := e.CreatedAt.Sub(e.OccurredAt).Seconds(); d >= 0 {
+				b := get(day)
+				b.mttdSum += d
+				b.mttdN++
+				mttdSum += d
+				mttdN++
+			}
+		}
+		// MTTR: triyaj edilmiş (durum ya da atama işaretli) olaylar için yanıt süresi.
+		triaged := e.AckStatus != "" || e.AckAssignee != ""
+		if triaged && !e.AckAt.IsZero() && !e.CreatedAt.IsZero() {
+			if r := e.AckAt.Sub(e.CreatedAt).Seconds(); r >= 0 {
+				b := get(day)
+				b.mttrSum += r
+				b.mttrN++
+				mttrSum += r
+				mttrN++
+			}
+		}
+	}
+
+	out := TrendsDTO{WindowDays: days, DetectN: mttdN, RespondN: mttrN}
+	out.MTTDSeconds = mean(mttdSum, mttdN)
+	out.MTTRSeconds = mean(mttrSum, mttrN)
+	// Bitişik günlük noktalar (eskiden yeniye), boş günler 0 ile dahil.
+	for i := days - 1; i >= 0; i-- {
+		day := now.UTC().AddDate(0, 0, -i).Format("2006-01-02")
+		p := TrendPoint{Day: day}
+		if b := buckets[day]; b != nil {
+			p.MTTDSeconds = mean(b.mttdSum, b.mttdN)
+			p.MTTRSeconds = mean(b.mttrSum, b.mttrN)
+			p.DetectN = b.mttdN
+			p.RespondN = b.mttrN
+		}
+		out.Daily = append(out.Daily, p)
+	}
+	return out
+}
+
+// mean, sıfır-bölmeye karşı güvenli ortalama (n==0 → 0).
+func mean(sum float64, n int) float64 {
+	if n == 0 {
+		return 0
+	}
+	return sum / float64(n)
+}
+
+// DetectionResponseTrends, son `days` gün için MTTD/MTTR metriklerini ve günlük
+// trendini hesaplar. Pencere içindeki olaylar (created_at) triyaj işaretleriyle
+// birleştirilip ComputeTrends'e verilir.
+func (s *Service) DetectionResponseTrends(ctx context.Context, days int) (TrendsDTO, error) {
+	if days <= 0 {
+		days = 7
+	}
+	now := time.Now()
+	rows, err := s.store.QueryEvents(ctx, EventFilter{
+		Since: now.AddDate(0, 0, -days), Until: now, Limit: 1000,
+	})
+	if err != nil {
+		return TrendsDTO{}, err
+	}
+	acks, err := s.store.EventAcks(ctx)
+	if err != nil {
+		return TrendsDTO{}, err
+	}
+	dtos := make([]EventDTO, 0, len(rows))
+	for _, r := range rows {
+		dto := EventDTO{
+			ID: r.ID, DeviceID: r.DeviceID, Category: r.Category, Severity: r.Severity,
+			Message: r.Message, OccurredAt: r.OccurredAt, CreatedAt: r.CreatedAt,
+		}
+		if a, ok := acks[r.ID]; ok {
+			dto.AckStatus, dto.AckBy, dto.AckAt = a.Status, a.AdminEmail, a.At
+			dto.AckAssignee, dto.AckNote = a.Assignee, a.Note
+		}
+		dtos = append(dtos, dto)
+	}
+	return ComputeTrends(dtos, now, days), nil
+}
+
 // LatestSoftwareByDevice, her cihazın en son yazılım envanterini döner (zafiyet
 // eşleştirme için; adminapi katmanı vuln veri kümesiyle eşler).
 func (s *Service) LatestSoftwareByDevice(ctx context.Context) (map[string][]string, error) {

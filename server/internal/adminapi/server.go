@@ -199,6 +199,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/incidents", s.authed(s.handleIncidents))
 	mux.HandleFunc("GET /api/report", s.authed(s.handleReport))
 	mux.HandleFunc("GET /api/coverage", s.authed(s.handleCoverage))
+	mux.HandleFunc("GET /api/metrics/trends", s.authed(s.handleMetricsTrends))
 	mux.HandleFunc("GET /api/software", s.authed(s.handleSoftwareSearch))
 	mux.HandleFunc("GET /api/vulnerabilities", s.authed(s.handleVulnerabilities))
 	mux.HandleFunc("POST /api/events/{id}/ack", s.authed(s.handleAckEvent))
@@ -987,6 +988,23 @@ func (s *Server) handleCoverage(w http.ResponseWriter, r *http.Request, _ string
 		return
 	}
 	writeJSON(w, http.StatusOK, cov)
+}
+
+// handleMetricsTrends, MTTD/MTTR metriklerini ve günlük trendini döner (SOC
+// olgunluk göstergesi). ?days=N ile pencere ayarlanır (varsayılan 7, üst sınır 90).
+func (s *Server) handleMetricsTrends(w http.ResponseWriter, r *http.Request, _ string) {
+	days := intParam(r, "days")
+	if days <= 0 {
+		days = 7
+	}
+	if days > 90 {
+		days = 90
+	}
+	tr, err := s.reader.DetectionResponseTrends(r.Context(), days)
+	if respondErr(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, tr)
 }
 
 // handleIncidents, korelasyonla gruplanmış olayları (incident) listeler (salt-okunur).
