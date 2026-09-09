@@ -54,6 +54,7 @@ import (
 	"xems.corp/suite/agent/internal/transport"
 	"xems.corp/suite/agent/internal/update"
 	"xems.corp/suite/agent/internal/usbmon"
+	"xems.corp/suite/contentscan"
 	xemsv1 "xems.corp/suite/gen/xems/v1"
 	"xems.corp/suite/logx"
 	"xems.corp/suite/offboard"
@@ -163,6 +164,33 @@ func selfBinaryHash() string {
 		return ""
 	}
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+// parseSize, bayt boyutu string'ini ayrıştırır: düz tamsayı (bayt) veya "KB"/"MB"/
+// "GB" son eki (1024-tabanlı). Geçersizse 0 döner.
+func parseSize(s string) int64 {
+	s = strings.TrimSpace(strings.ToUpper(s))
+	if s == "" {
+		return 0
+	}
+	mult := int64(1)
+	switch {
+	case strings.HasSuffix(s, "KB"):
+		mult, s = 1<<10, strings.TrimSuffix(s, "KB")
+	case strings.HasSuffix(s, "MB"):
+		mult, s = 1<<20, strings.TrimSuffix(s, "MB")
+	case strings.HasSuffix(s, "GB"):
+		mult, s = 1<<30, strings.TrimSuffix(s, "GB")
+	}
+	s = strings.TrimSpace(s)
+	var n int64
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return 0
+		}
+		n = n*10 + int64(s[i]-'0')
+	}
+	return n * mult
 }
 
 func splitCSV(s string) []string {
@@ -295,6 +323,34 @@ func run() error {
 	if paths := splitCSV(os.Getenv("XEMS_FIM_PATHS")); len(paths) > 0 {
 		fimTr = &fimTracker{paths: paths}
 	}
+	// İçerik-tarama (YARA-tarzı; #13): XEMS_YARA_PATHS + XEMS_YARA_RULES (imzalı)
+	// + XEMS_YARA_PUBKEY ayarlıysa yollar imza kurallarına karşı taranır; eşleşme
+	// SECURITY olayı olur. Kurallar YALNIZ imza doğrulanınca yüklenir (fail-closed):
+	// imza/anahtar geçersizse tarama DEVRE DIŞI kalır (kural gömülü değildir).
+	var scanner *contentScanner
+	if paths := splitCSV(os.Getenv("XEMS_YARA_PATHS")); len(paths) > 0 {
+		rulesPath := os.Getenv("XEMS_YARA_RULES")
+		pubB64 := os.Getenv("XEMS_YARA_PUBKEY")
+		switch {
+		case rulesPath == "" || pubB64 == "":
+			log.Printf("içerik-tarama yolları verildi ama XEMS_YARA_RULES/XEMS_YARA_PUBKEY eksik — tarama DEVRE DIŞI")
+		default:
+			if pub, err := base64.StdEncoding.DecodeString(pubB64); err != nil {
+				log.Printf("XEMS_YARA_PUBKEY geçersiz (%v) — içerik-tarama DEVRE DIŞI", err)
+			} else if rs, err := contentscan.LoadSigned(rulesPath, ed25519.PublicKey(pub)); err != nil {
+				log.Printf("imzalı tarama kuralları reddedildi (%v) — içerik-tarama DEVRE DIŞI", err)
+			} else {
+				maxSize := int64(10 << 20) // 10 MiB varsayılan üst sınır
+				if v := os.Getenv("XEMS_YARA_MAXSIZE"); v != "" {
+					if n := parseSize(v); n > 0 {
+						maxSize = n
+					}
+				}
+				scanner = &contentScanner{paths: paths, rules: rs, maxSize: maxSize}
+				log.Printf("içerik-tarama etkin: %d kural, %d yol", len(rs.Rules), len(paths))
+			}
+		}
+	}
 	// Kalıcılık (autostart) izleme (#5; varsayılan AÇIK, XEMS_PERSISTENCE_DISABLE ile
 	// kapatılır). Run anahtarları/görevler/cron/systemd; yeni girdiler POLICY_VIOLATION
 	// olayı olarak bildirilir. İlk tarama taban çizgisidir.
@@ -362,8 +418,12 @@ func run() error {
 	reportInventory(buf)
 	// Kaynak kullanımı (bellek/disk/uptime): uç-nokta sağlığı.
 	reportResource(buf)
-	// Periyodik uyum + envanter + kaynak yeniden-kontrolü: açılıştan sonra
-	// değişiklikler yakalanır (EDR duruş takibi). Seyrek (exec-ağır).
+	// İçerik-tarama (etkinse): başlangıçta bir kez tara (I/O-ağır).
+	if scanner != nil {
+		scanner.scan(buf)
+	}
+	// Periyodik uyum + envanter + kaynak + içerik-tarama yeniden-kontrolü: açılıştan
+	// sonra değişiklikler yakalanır (EDR duruş takibi). Seyrek (exec/IO-ağır).
 	go func() {
 		t := time.NewTicker(complianceInterval)
 		defer t.Stop()
@@ -375,6 +435,9 @@ func run() error {
 				reportCompliance(buf, compliance.NewChecker())
 				reportInventory(buf)
 				reportResource(buf)
+				if scanner != nil {
+					scanner.scan(buf)
+				}
 			}
 		}
 	}()
@@ -814,6 +877,63 @@ func (f *fimTracker) report(buf *collector.Buffer) {
 			Message:    "dosya bütünlüğü değişikliği (" + string(ch.Type) + "): " + ch.Path,
 			OccurredAt: time.Now(),
 			Details:    det,
+		})
+	}
+}
+
+// contentScanner, yapılandırılmış yolları imzalı içerik-tarama (YARA-tarzı)
+// kurallarına karşı tarar; eşleşen dosyalar SECURITY olayı olarak yayınlanır.
+// İçerik-tarama I/O-ağır olduğundan periyodik (uyum) kadansında çalışır. Aynı
+// (yol|kural) eşleşmesi süreç ömrü boyunca yalnız BİR kez bildirilir (gürültü
+// azaltma; kalıcılık izleyicisiyle aynı "yalnız-yeni" felsefesi).
+type contentScanner struct {
+	paths   []string
+	rules   contentscan.RuleSet
+	maxSize int64
+	seen    map[string]bool // "path|rule" → bildirildi
+}
+
+func (c *contentScanner) scan(buf *collector.Buffer) {
+	if c.seen == nil {
+		c.seen = map[string]bool{}
+	}
+	for _, root := range c.paths {
+		filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				return nil // erişilemeyen girdiyi atla (tarama sürsün)
+			}
+			if d.IsDir() {
+				return nil
+			}
+			info, err := d.Info()
+			if err != nil || info.Size() == 0 || info.Size() > c.maxSize {
+				return nil // boş ya da çok büyük dosyayı atla
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return nil
+			}
+			for _, m := range c.rules.Scan(data) {
+				key := path + "|" + m.Rule
+				if c.seen[key] {
+					continue
+				}
+				c.seen[key] = true
+				sev := m.Severity
+				if sev == "" {
+					sev = "MEDIUM"
+				}
+				buf.Add(collector.Event{
+					Category:   "SECURITY",
+					Severity:   sev,
+					Message:    "içerik-tarama eşleşmesi (" + m.Rule + "): " + path,
+					OccurredAt: time.Now(),
+					Details: map[string]any{
+						"content_scan": true, "rule": m.Rule, "path": path, "hits": m.Hits,
+					},
+				})
+			}
+			return nil
 		})
 	}
 }
