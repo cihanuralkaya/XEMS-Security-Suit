@@ -205,6 +205,8 @@ curl -sk "$B/api/coverage" -H "Authorization: Bearer $TOK" | grep -q "coverage_p
   && pass "/api/coverage filo kapsamı döndü" || fail "/api/coverage başarısız"
 curl -sk "$B/api/metrics/trends?days=7" -H "Authorization: Bearer $TOK" | grep -q "mttd_seconds" \
   && pass "/api/metrics/trends MTTD/MTTR trendi döndü" || fail "/api/metrics/trends başarısız"
+curl -sk "$B/api/maintenance" -H "Authorization: Bearer $TOK" | grep -q "windows" \
+  && pass "/api/maintenance bakım pencereleri ucu döndü" || fail "/api/maintenance başarısız"
 # Zengin telemetri: cihaz OS sürümü (ilk heartbeat'ten sonra dolar) — poll et.
 osv=""
 for _ in $(seq 1 40); do

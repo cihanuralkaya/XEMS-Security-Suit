@@ -161,6 +161,15 @@ func atoiEnv(k string) int {
 	return n
 }
 
+// loadWindows, bir JSON bastırma penceresi dosyasını okuyup ayrıştırır.
+func loadWindows(path string) ([]notify.Window, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return notify.ParseWindows(data)
+}
+
 // getdurEnv, süre biçimli bir ortam değişkenini okur (yoksa/geçersizse def).
 func getdurEnv(k string, def time.Duration) time.Duration {
 	if v := os.Getenv(k); v != "" {
@@ -331,6 +340,38 @@ func run() error {
 		siemOn = true
 		log.Printf("SIEM iletici etkin: %s (%s/%s)", siemAddr, getenv("XEMS_SIEM_PROTO", "udp"), getenv("XEMS_SIEM_FORMAT", "cef"))
 	}
+	// Bakım/bastırma pencereleri (#18): XEMS_SUPPRESS_FILE ayarlıysa planlı bakım
+	// aralıklarında (opsiyonel cihaz/kategori kapsamı) uyarılar bastırılır. Canlı
+	// hot-reload: XEMS_SUPPRESS_RELOAD_INTERVAL. Konsol için /api/maintenance.
+	var suppressHolder *notify.WindowHolder
+	if sf := os.Getenv("XEMS_SUPPRESS_FILE"); sf != "" {
+		ws, err := loadWindows(sf)
+		if err != nil {
+			return fmt.Errorf("bastırma penceresi dosyası: %w", err)
+		}
+		suppressHolder = notify.NewWindowHolder(ws)
+		log.Printf("bakım/bastırma pencereleri etkin: %d pencere", len(ws))
+		if d := getdurEnv("XEMS_SUPPRESS_RELOAD_INTERVAL", 0); d > 0 {
+			go func() {
+				t := time.NewTicker(d)
+				defer t.Stop()
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case <-t.C:
+						if ws, err := loadWindows(sf); err != nil {
+							log.Printf("[suppress] yeniden yükleme başarısız: %v (eski küme korunuyor)", err)
+						} else {
+							suppressHolder.Set(ws)
+						}
+					}
+				}
+			}()
+			log.Printf("bastırma pencereleri: canlı yeniden yükleme her %s", d)
+		}
+	}
+
 	if len(notifiers) > 0 {
 		var alerter notify.Notifier = notify.NewMulti(notifiers...)
 		// Yükseltme (#15): XEMS_ALERT_ESCALATE_COUNT>0 ise aynı cihaz|kategori için
@@ -340,6 +381,10 @@ func run() error {
 			win := getdurEnv("XEMS_ALERT_ESCALATE_WINDOW", 10*time.Minute)
 			alerter = notify.NewEscalator(alerter, getenv("XEMS_ALERT_ESCALATE_MIN_SEVERITY", "HIGH"), cnt, win, nil)
 			log.Printf("uyarı yükseltme etkin: %d uyarı/%s → CRITICAL", cnt, win)
+		}
+		// Bastırma en DIŞTA sarar: bastırılan uyarılar korelasyon/yükseltmeyi beslemez.
+		if suppressHolder != nil {
+			alerter = notify.NewSuppressor(alerter, suppressHolder.Windows, metrics.IncAlertSuppressed, nil)
 		}
 		agentHandler.SetAlerter(alerter)
 	}
@@ -433,6 +478,9 @@ func run() error {
 	adminAPI.SetLoginLimit(cfg.LoginMaxAttempts, cfg.LoginLockout) // kaba-kuvvet koruması
 	adminAPI.SetPrivacyNotice(os.Getenv("XEMS_PRIVACY_NOTICE"))    // KVKK aydınlatma (boşsa varsayılan)
 	adminAPI.SetAuditVerifier(backend.VerifyAuditChain)            // denetim izi hash-zincir doğrulama
+	if suppressHolder != nil {
+		adminAPI.SetMaintenanceProvider(suppressHolder.Windows) // bakım pencereleri görünürlüğü (#18)
+	}
 	// İmzalı denetim dışa aktarımı (#16): XEMS_AUDIT_EXPORT_KEY (base64 Ed25519 özel
 	// anahtar) ayarlıysa /api/audit/export imzalı manifest üretir; aksi halde imzasız
 	// (yalnız hash zinciri). Anahtar geçersizse başlatma durur (yanlış yapılandırma).

@@ -31,6 +31,7 @@ import (
 	"xems.corp/suite/server/internal/metrics"
 	"xems.corp/suite/server/internal/mitre"
 	"xems.corp/suite/server/internal/model"
+	"xems.corp/suite/server/internal/notify"
 	"xems.corp/suite/server/internal/report"
 	"xems.corp/suite/server/internal/security"
 	"xems.corp/suite/server/internal/vuln"
@@ -60,6 +61,7 @@ type Server struct {
 	sseConns     int64  // SEC-007: aktif SSE bağlantı sayısı (atomik)
 	auditVerify  func(context.Context) error
 	auditExpKey  ed25519.PrivateKey            // ayarlıysa /api/audit/export imzalı manifest üretir (#16)
+	maintWindows func() []notify.Window        // ayarlıysa /api/maintenance bakım pencerelerini döner (#18)
 	metricsToken string                        // ayarlıysa /metrics bu Bearer token ile açılır; boşsa uç kapalı
 	detector     atomic.Pointer[detect.Engine] // tespit kural kataloğu (görünürlük ucu; canlı hot-reload için atomik)
 	vulnSet      *vuln.Set                     // zafiyet veri kümesi (nil = kapalı); envanterle eşleşir
@@ -149,6 +151,10 @@ func (s *Server) SetAuditVerifier(fn func(context.Context) error) { s.auditVerif
 // anahtarı bağlar (#16). nil/boşsa dışa aktarım imzasız (yalnız hash zinciri) olur.
 func (s *Server) SetAuditExportKey(priv ed25519.PrivateKey) { s.auditExpKey = priv }
 
+// SetMaintenanceProvider, GET /api/maintenance için bakım/bastırma pencerelerini
+// sağlayan fonksiyonu bağlar (#18). nil ise uç boş liste döner.
+func (s *Server) SetMaintenanceProvider(fn func() []notify.Window) { s.maintWindows = fn }
+
 // Handler, yönlendirmeleri kayıtlı bir http.Handler döner.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
@@ -207,6 +213,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/report", s.authed(s.handleReport))
 	mux.HandleFunc("GET /api/coverage", s.authed(s.handleCoverage))
 	mux.HandleFunc("GET /api/metrics/trends", s.authed(s.handleMetricsTrends))
+	mux.HandleFunc("GET /api/maintenance", s.authed(s.handleMaintenance))
 	mux.HandleFunc("GET /api/software", s.authed(s.handleSoftwareSearch))
 	mux.HandleFunc("GET /api/vulnerabilities", s.authed(s.handleVulnerabilities))
 	mux.HandleFunc("POST /api/events/{id}/ack", s.authed(s.handleAckEvent))
@@ -1028,6 +1035,28 @@ func (s *Server) handleAuditExport(w http.ResponseWriter, r *http.Request, admin
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)
+}
+
+// handleMaintenance, yapılandırılmış bakım/bastırma pencerelerini döner (#18):
+// her pencere için zaman aralığı, kapsam (cihaz/kategori), gerekçe ve şu an ETKİN
+// olup olmadığı. Konsol "neden uyarı gelmiyor?" görünürlüğü.
+func (s *Server) handleMaintenance(w http.ResponseWriter, r *http.Request, _ string) {
+	type windowDTO struct {
+		Start  time.Time `json:"start"`
+		End    time.Time `json:"end"`
+		Reason string    `json:"reason,omitempty"`
+		Active bool      `json:"active"`
+	}
+	out := []windowDTO{}
+	if s.maintWindows != nil {
+		now := time.Now()
+		for _, wd := range s.maintWindows() {
+			out = append(out, windowDTO{
+				Start: wd.Start, End: wd.End, Reason: wd.Reason, Active: wd.Active(now),
+			})
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"windows": out})
 }
 
 // handleMetricsTrends, MTTD/MTTR metriklerini ve günlük trendini döner (SOC

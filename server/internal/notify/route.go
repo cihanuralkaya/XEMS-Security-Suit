@@ -14,7 +14,8 @@ import (
 //     yüksek-önem uyarıları eşiği aşınca CRITICAL "ESCALATED" uyarısına yükseltir
 //     (on-call'a sayfa atma deseni). Saf/testli (saat enjekte edilebilir).
 
-// set, küçük harfe normalize edilmiş bir üyelik kümesidir.
+// newSet, BÜYÜK harfe normalize edilmiş bir üyelik kümesidir (kategori/teknik gibi
+// büyük/küçük harf duyarsız alanlar için).
 func newSet(items []string) map[string]bool {
 	if len(items) == 0 {
 		return nil
@@ -22,6 +23,24 @@ func newSet(items []string) map[string]bool {
 	m := make(map[string]bool, len(items))
 	for _, s := range items {
 		if s = strings.ToUpper(strings.TrimSpace(s)); s != "" {
+			m[s] = true
+		}
+	}
+	if len(m) == 0 {
+		return nil
+	}
+	return m
+}
+
+// newSetRaw, girişleri OLDUĞU GİBİ (yalnız kırpılmış) tutan bir üyelik kümesidir
+// (cihaz kimliği gibi büyük/küçük harf DUYARLI alanlar için).
+func newSetRaw(items []string) map[string]bool {
+	if len(items) == 0 {
+		return nil
+	}
+	m := make(map[string]bool, len(items))
+	for _, s := range items {
+		if s = strings.TrimSpace(s); s != "" {
 			m[s] = true
 		}
 	}
