@@ -210,6 +210,8 @@ curl -sk "$B/api/report" -H "Authorization: Bearer $TOK" | grep -q "XEMS Securit
   && pass "/api/report duruş raporu üretti" || fail "/api/report başarısız"
 curl -sk "$B/api/coverage" -H "Authorization: Bearer $TOK" | grep -q "coverage_pct" \
   && pass "/api/coverage filo kapsamı döndü" || fail "/api/coverage başarısız"
+curl -sk "$B/api/risk" -H "Authorization: Bearer $TOK" | grep -q "fleet_score" \
+  && pass "/api/risk çok-faktörlü risk skoru döndü" || fail "/api/risk başarısız"
 curl -sk "$B/api/metrics/trends?days=7" -H "Authorization: Bearer $TOK" | grep -q "mttd_seconds" \
   && pass "/api/metrics/trends MTTD/MTTR trendi döndü" || fail "/api/metrics/trends başarısız"
 curl -sk "$B/api/maintenance" -H "Authorization: Bearer $TOK" | grep -q "windows" \

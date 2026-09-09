@@ -228,6 +228,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/incidents", s.authed(s.handleIncidents))
 	mux.HandleFunc("GET /api/report", s.authed(s.handleReport))
 	mux.HandleFunc("GET /api/coverage", s.authed(s.handleCoverage))
+	mux.HandleFunc("GET /api/risk", s.authed(s.handleRisk))
 	mux.HandleFunc("GET /api/metrics/trends", s.authed(s.handleMetricsTrends))
 	mux.HandleFunc("GET /api/maintenance", s.authed(s.handleMaintenance))
 	mux.HandleFunc("POST /api/hunt/saved", s.authed(s.handleSaveSearch))
@@ -1073,6 +1074,16 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request, _ string) 
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write([]byte(html))
+}
+
+// handleRisk, çok-faktörlü filo risk skorunu döner (#risk): açık incident'ler,
+// uyum ihlalleri ve karantina durumundan cihaz + filo risk skoru hesaplar.
+func (s *Server) handleRisk(w http.ResponseWriter, r *http.Request, _ string) {
+	rk, err := s.reader.FleetRisk(r.Context())
+	if respondErr(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, rk)
 }
 
 // handleCoverage, filo koruma-kapsamı + ajan sürüm-kayması ("kim korunuyor?").

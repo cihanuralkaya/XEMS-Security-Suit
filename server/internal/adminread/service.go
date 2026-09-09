@@ -7,9 +7,11 @@ package adminread
 import (
 	"context"
 	"encoding/json"
+	"sort"
 	"strings"
 	"time"
 
+	"xems.corp/suite/server/internal/risk"
 	"xems.corp/suite/server/internal/security"
 )
 
@@ -638,6 +640,97 @@ type PendingWipeRow struct {
 // PendingWipes, ikinci-onay bekleyen WIPE taleplerini döner (çift-kontrol konsol görünümü).
 func (s *Service) PendingWipes(ctx context.Context) ([]PendingWipeRow, error) {
 	return s.store.ListPendingWipes(ctx)
+}
+
+// DeviceRiskDTO, bir cihazın toplam risk skorudur (çok-faktörlü risk motoru).
+type DeviceRiskDTO struct {
+	DeviceID string   `json:"device_id"`
+	Hostname string   `json:"hostname"`
+	Score    int      `json:"score"` // 0-100
+	Band     string   `json:"band"`  // INFO..CRITICAL
+	Drivers  []string `json:"drivers"`
+}
+
+// FleetRiskDTO, filo-geneli risk özetidir.
+type FleetRiskDTO struct {
+	FleetScore int             `json:"fleet_score"` // en riskli cihaz baskın
+	FleetBand  string          `json:"fleet_band"`
+	Bands      map[string]int  `json:"bands"` // band → cihaz sayısı
+	Devices    []DeviceRiskDTO `json:"devices"`
+}
+
+// FleetRisk, çok-faktörlü risk motorunu (risk paketi) mevcut sinyallere (açık
+// incident'ler, uyum ihlalleri, karantina durumu) uygular ve cihaz + filo risk
+// skorlarını hesaplar. Yeni depo sorgusu kullanmaz.
+func (s *Service) FleetRisk(ctx context.Context) (FleetRiskDTO, error) {
+	devices, err := s.Devices(ctx, 0)
+	if err != nil {
+		return FleetRiskDTO{}, err
+	}
+	incidents, err := s.store.ListIncidents(ctx, clampLimit(1000))
+	if err != nil {
+		return FleetRiskDTO{}, err
+	}
+	comp, err := s.store.LatestComplianceByDevice(ctx)
+	if err != nil {
+		return FleetRiskDTO{}, err
+	}
+
+	// Cihaz başına risk faktörlerini (bulgu skorları + sürücü açıklamaları) topla.
+	scores := map[string][]int{}
+	drivers := map[string][]string{}
+	add := func(dev string, sc int, why string) {
+		scores[dev] = append(scores[dev], sc)
+		if why != "" {
+			drivers[dev] = append(drivers[dev], why)
+		}
+	}
+	for _, inc := range incidents {
+		if inc.Status == "RESOLVED" || inc.Status == "CLOSED" {
+			continue
+		}
+		sc := risk.Score(risk.Factors{
+			Severity: inc.Severity, AssetCriticality: 3,
+			Confidence: 0.9, Exploitability: 0.3,
+		})
+		add(inc.DeviceID, sc, "açık incident ("+inc.Severity+"): "+inc.RuleID)
+	}
+	for _, d := range devices {
+		if c, ok := comp[d.ID]; ok {
+			if c.Enc == "off" {
+				add(d.ID, risk.Score(risk.Factors{Severity: "MEDIUM", AssetCriticality: 3, Confidence: 1}), "disk şifreleme kapalı")
+			}
+			if c.Fw == "off" {
+				add(d.ID, risk.Score(risk.Factors{Severity: "MEDIUM", AssetCriticality: 3, Confidence: 1}), "güvenlik duvarı kapalı")
+			}
+		}
+		if d.Status == "QUARANTINED" {
+			add(d.ID, risk.Score(risk.Factors{Severity: "HIGH", AssetCriticality: 4, Exposure: 1, Confidence: 1}), "karantinada (aktif müdahale)")
+		}
+	}
+
+	out := FleetRiskDTO{Bands: map[string]int{}}
+	fleet := 0
+	for _, d := range devices {
+		sc := risk.Aggregate(scores[d.ID])
+		band := risk.Band(sc)
+		out.Bands[band]++
+		if sc > fleet {
+			fleet = sc
+		}
+		dr := drivers[d.ID]
+		if dr == nil {
+			dr = []string{}
+		}
+		out.Devices = append(out.Devices, DeviceRiskDTO{
+			DeviceID: d.ID, Hostname: d.Hostname, Score: sc, Band: band, Drivers: dr,
+		})
+	}
+	// En riskli cihaz önce.
+	sort.Slice(out.Devices, func(i, j int) bool { return out.Devices[i].Score > out.Devices[j].Score })
+	out.FleetScore = fleet
+	out.FleetBand = risk.Band(fleet)
+	return out, nil
 }
 
 // SaveSearch, adlandırılmış bir hunt sorgusunu kalıcılaştırır. Girdi doğrulaması
