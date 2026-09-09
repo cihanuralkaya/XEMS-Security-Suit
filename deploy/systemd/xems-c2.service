@@ -1,0 +1,63 @@
+# XEMS C2 (Command & Control) — SERTLEŞTİRİLMİŞ systemd birimi (referans).
+#
+# C2 bir kullanıcı-alanı ağ hizmetidir (yüksek portlarda mTLS dinler); hiçbir
+# özel yeteneğe (capability) ihtiyaç duymaz, bu yüzden AGRESİF biçimde kum-havuzuna
+# alınabilir. Kurulum: /etc/systemd/system/xems-c2.service olarak kopyalayın,
+# yolları/kullanıcıyı ortamınıza göre düzenleyin, `systemctl daemon-reload &&
+# systemctl enable --now xems-c2`.
+#
+# Doğrulama: `systemd-analyze security xems-c2.service` (hedef: "exposure" düşük).
+
+[Unit]
+Description=XEMS C2 (Command & Control)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Ayrıcalıksız özel kullanıcı (önceden oluşturun: useradd -r -s /usr/sbin/nologin xems).
+User=xems
+Group=xems
+EnvironmentFile=/etc/xems/c2.env
+ExecStart=/opt/xems/c2
+Restart=always
+RestartSec=5
+
+# --- Ayrıcalık ---
+NoNewPrivileges=true
+# C2 hiçbir capability gerektirmez (yüksek portlar; root değil).
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# --- Dosya sistemi ---
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+# Yalnız yapılandırma/veri dizinleri yazılabilir.
+ReadWritePaths=/etc/xems /var/lib/xems
+UMask=0077
+
+# --- Çekirdek / cihaz / namespace izolasyonu ---
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+# --- Ağ / syscall yüzeyi ---
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @obsolete
+
+[Install]
+WantedBy=multi-user.target

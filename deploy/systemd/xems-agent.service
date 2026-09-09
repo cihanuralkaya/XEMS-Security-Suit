@@ -1,0 +1,49 @@
+# XEMS Agent (uç-nokta ajanı) — SERTLEŞTİRİLMİŞ systemd birimi (referans).
+#
+# ÖNEMLİ FARK (C2'ye göre): Ajan bir EDR/MDM ürünüdür ve işini yapmak için GENİŞ
+# ayrıcalıklara ihtiyaç duyar — /proc altındaki tüm süreçleri okuma, güvenlik
+# duvarını/USB'yi yönetme, (silahlıysa) diski kripto-silme. Bu yüzden C2 kadar
+# kısıtlanamaz; over-hardening ajanı İŞLEVSİZ bırakır. Aşağıdaki profil, EDR
+# işlevini BOZMADAN uygulanabilen korumaları içerir ve uygulanAMAYANLARI neden
+# olarak belgeler.
+#
+# Ajan root çalışır (EDR görünürlüğü + MDM eylemleri için gerekli). Tamper-koruması
+# ek olarak watchdog (karşılıklı gözetim) + öz-tasdik (#4) ile sağlanır.
+
+[Unit]
+Description=XEMS Endpoint Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# EDR görünürlüğü + MDM eylemleri için root gerekir (bilinçli).
+User=root
+EnvironmentFile=/etc/xems-agent/agent.env
+ExecStart=/opt/xems/agent
+Restart=always
+RestartSec=5
+# Watchdog verilmişse (XEMS_WATCHDOG_BIN) çift-süreç karşılıklı gözetim; systemd
+# yeniden başlatması ek katmandır.
+
+# --- Uygulanabilir korumalar (EDR'yi bozmaz) ---
+# Ajan alt süreç başlatır (script/deviceaction) ama ayrıcalık YÜKSELTMEZ.
+NoNewPrivileges=true
+# Ajan yeni kernel modülü yüklemez / kernel tunable değiştirmez.
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectClock=true
+RestrictRealtime=true
+LockPersonality=true
+# Yalnız IPv4/IPv6/UNIX/NETLINK (netlink: süreç/soket telemetrisi için gerekli).
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+
+# --- BİLİNÇLİ olarak uygulanMAYAN kısıtlamalar (EDR/MDM işlevi için gerekli) ---
+# ProtectSystem/ProtectHome: FIM tüm dosya sistemini okumalı → strict UYGULANMAZ.
+# ProtectProc/ProcSubset: süreç telemetrisi tüm /proc'u görmeli → UYGULANMAZ.
+# PrivateDevices: diski kripto-silme (WIPE) blok cihazlara erişmeli → UYGULANMAZ.
+# CapabilityBoundingSet: firewall/USB/mount eylemleri için geniş caps gerekir → boş bırakılMAZ.
+# MemoryDenyWriteExecute: bazı OS entegrasyonlarını bozabilir → değerlendirilerek açılmalı.
+
+[Install]
+WantedBy=multi-user.target

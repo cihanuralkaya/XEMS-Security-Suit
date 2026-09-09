@@ -70,11 +70,31 @@ EnvironmentFile=$ENV_FILE
 ExecStart=$INSTALL_DIR/c2
 Restart=always
 RestartSec=5
-# Sertleştirme
+# Sertleştirme (C2 ayrıcalıksız ağ hizmeti — agresif kum-havuzu; bkz. deploy/HARDENING.md).
 NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
 ProtectSystem=strict
-ReadWritePaths=$CONF_DIR
 ProtectHome=true
+ReadWritePaths=$CONF_DIR
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @obsolete
+UMask=0077
 
 [Install]
 WantedBy=multi-user.target
