@@ -54,7 +54,9 @@ jobs:
 
   db-test:
     name: DB yolu (PostgreSQL)
-    runs-on: ubuntu-latest
+    # ubuntu-22.04'e sabitlendi: ubuntu-latest (24.04) imaj güncellemesi
+    # postgresql-client apt kurulumunu bozdu (bilinen-iyi 22.04'te stabil).
+    runs-on: ubuntu-22.04
     needs: test
     services:
       postgres:
