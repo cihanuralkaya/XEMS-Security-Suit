@@ -39,6 +39,7 @@ import (
 	"xems.corp/suite/agent/internal/compliance"
 	"xems.corp/suite/agent/internal/deviceaction"
 	"xems.corp/suite/agent/internal/discovery"
+	"xems.corp/suite/agent/internal/dlp"
 	"xems.corp/suite/agent/internal/dnsmon"
 	"xems.corp/suite/agent/internal/enforce"
 	"xems.corp/suite/agent/internal/fim"
@@ -366,6 +367,21 @@ func run() error {
 	if os.Getenv("XEMS_DNS_MONITOR") == "1" {
 		dnsTr = &dnsTracker{sc: dnsmon.NewScanner()}
 	}
+	// Çıkarılabilir medya DLP (#20; opt-in XEMS_DLP_PATHS). Verilen yollar (ör. USB
+	// bağlama noktaları) hassas veri (kredi kartı/TCKN/IBAN/e-posta) için taranır;
+	// bulgu POLICY_VIOLATION olur (yalnız TÜR+SAYI — ham değer yazılmaz). I/O-ağır:
+	// uyum kadansında çalışır.
+	var dlpSc *dlpScanner
+	if paths := splitCSV(os.Getenv("XEMS_DLP_PATHS")); len(paths) > 0 {
+		maxSize := int64(5 << 20) // 5 MiB varsayılan üst sınır
+		if v := os.Getenv("XEMS_DLP_MAXSIZE"); v != "" {
+			if n := parseSize(v); n > 0 {
+				maxSize = n
+			}
+		}
+		dlpSc = &dlpScanner{paths: paths, maxSize: maxSize}
+		log.Printf("DLP tarama etkin: %d yol", len(paths))
+	}
 
 	// Karantina yöneticisi: izolasyonda yalnız C2'ye izin verilir.
 	// SAFE MODE (XEMS_SAFE_MODE): gerçek firewall'a dokunmaz — demo/test için.
@@ -426,9 +442,12 @@ func run() error {
 	reportInventory(buf)
 	// Kaynak kullanımı (bellek/disk/uptime): uç-nokta sağlığı.
 	reportResource(buf)
-	// İçerik-tarama (etkinse): başlangıçta bir kez tara (I/O-ağır).
+	// İçerik-tarama + DLP (etkinse): başlangıçta bir kez tara (I/O-ağır).
 	if scanner != nil {
 		scanner.scan(buf)
+	}
+	if dlpSc != nil {
+		dlpSc.scan(buf)
 	}
 	// Periyodik uyum + envanter + kaynak + içerik-tarama yeniden-kontrolü: açılıştan
 	// sonra değişiklikler yakalanır (EDR duruş takibi). Seyrek (exec/IO-ağır).
@@ -445,6 +464,9 @@ func run() error {
 				reportResource(buf)
 				if scanner != nil {
 					scanner.scan(buf)
+				}
+				if dlpSc != nil {
+					dlpSc.scan(buf)
 				}
 			}
 		}
@@ -889,6 +911,60 @@ func (f *fimTracker) report(buf *collector.Buffer) {
 			Message:    "dosya bütünlüğü değişikliği (" + string(ch.Type) + "): " + ch.Path,
 			OccurredAt: time.Now(),
 			Details:    det,
+		})
+	}
+}
+
+// dlpScanner, yapılandırılmış yolları (ör. USB bağlama noktaları) hassas veri (PII)
+// sinyalleri için tarar (DLP). Bir dosyada kredi kartı/TCKN/IBAN/e-posta bulunursa
+// POLICY_VIOLATION olayı üretir. GİZLİLİK: yalnız TÜR + SAYI raporlanır (ham hassas
+// değer ASLA olaya yazılmaz — KVKK veri-minimizasyonu). (yol|dosya) başına bir kez.
+type dlpScanner struct {
+	paths   []string
+	maxSize int64
+	seen    map[string]bool
+}
+
+func (d *dlpScanner) scan(buf *collector.Buffer) {
+	if d.seen == nil {
+		d.seen = map[string]bool{}
+	}
+	for _, root := range d.paths {
+		filepath.WalkDir(root, func(path string, de os.DirEntry, err error) error {
+			if err != nil || de.IsDir() {
+				return nil
+			}
+			info, err := de.Info()
+			if err != nil || info.Size() == 0 || info.Size() > d.maxSize {
+				return nil
+			}
+			if d.seen[path] {
+				return nil
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return nil
+			}
+			sigs := dlp.Scan(string(data))
+			if len(sigs) == 0 {
+				return nil
+			}
+			d.seen[path] = true
+			// Redakte edilmiş özet (tür→sayı); ham değer yok.
+			kinds := make([]any, 0, len(sigs))
+			total := 0
+			for _, s := range sigs {
+				kinds = append(kinds, map[string]any{"kind": s.Kind, "count": s.Count})
+				total += s.Count
+			}
+			buf.Add(collector.Event{
+				Category:   "POLICY_VIOLATION",
+				Severity:   "HIGH",
+				Message:    fmt.Sprintf("DLP: hassas veri tespit edildi (%d sinyal): %s", total, path),
+				OccurredAt: time.Now(),
+				Details:    map[string]any{"dlp": true, "path": path, "signals": kinds},
+			})
+			return nil
 		})
 	}
 }
