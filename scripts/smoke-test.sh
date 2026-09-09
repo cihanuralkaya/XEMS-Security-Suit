@@ -196,6 +196,12 @@ curl -sk "$B/api/hunt" -X POST -H "Authorization: Bearer $TOK" \
   -H 'Content-Type: application/json' -d '{"mode":"rules","limit":500}' \
   | grep -q '"scanned"' \
   && pass "/api/hunt retro-hunt çalıştı (geçmiş olaylar tarandı)" || fail "/api/hunt başarısız"
+# Kayıtlı aramalar (#22 SIEM): bir hunt sorgusu kaydet + listede gör.
+curl -sk "$B/api/hunt/saved" -X POST -H "Authorization: Bearer $TOK" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Kritik olaylar","filter":{"mode":"query","severity":"CRITICAL"}}' >/dev/null
+curl -sk "$B/api/hunt/saved" -H "Authorization: Bearer $TOK" | grep -q "Kritik olaylar" \
+  && pass "/api/hunt/saved kayıtlı arama kalıcılaştı" || fail "/api/hunt/saved başarısız"
 # Olay korelasyonu (#2): incident listeleme ucu yanıt versin.
 curl -sk "$B/api/incidents" -H "Authorization: Bearer $TOK" | grep -q '"incidents"' \
   && pass "/api/incidents korelasyon ucu döndü" || fail "/api/incidents başarısız"

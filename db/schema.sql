@@ -329,3 +329,14 @@ CREATE TABLE incidents (
     status      TEXT NOT NULL DEFAULT 'OPEN'
 );
 CREATE INDEX idx_incidents_last ON incidents (last_seen DESC);
+
+-- Kayıtlı aramalar (SIEM): analistlerin kalıcılaştırdığı threat-hunting sorguları.
+-- filter, /api/hunt isteği JSON'udur (mode + EventFilter alanları).
+CREATE TABLE saved_searches (
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name        TEXT NOT NULL,
+    filter      JSONB NOT NULL,
+    created_by  UUID REFERENCES admins(id) ON DELETE SET NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_saved_searches_created ON saved_searches (created_at DESC);

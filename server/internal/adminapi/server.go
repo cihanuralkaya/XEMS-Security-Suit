@@ -230,6 +230,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/coverage", s.authed(s.handleCoverage))
 	mux.HandleFunc("GET /api/metrics/trends", s.authed(s.handleMetricsTrends))
 	mux.HandleFunc("GET /api/maintenance", s.authed(s.handleMaintenance))
+	mux.HandleFunc("POST /api/hunt/saved", s.authed(s.handleSaveSearch))
+	mux.HandleFunc("GET /api/hunt/saved", s.authed(s.handleListSavedSearches))
+	mux.HandleFunc("DELETE /api/hunt/saved/{id}", s.authed(s.handleDeleteSavedSearch))
 	mux.HandleFunc("GET /api/software", s.authed(s.handleSoftwareSearch))
 	mux.HandleFunc("GET /api/vulnerabilities", s.authed(s.handleVulnerabilities))
 	mux.HandleFunc("POST /api/events/{id}/ack", s.authed(s.handleAckEvent))
@@ -1111,6 +1114,54 @@ func (s *Server) handleAuditExport(w http.ResponseWriter, r *http.Request, admin
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)
+}
+
+// handleSaveSearch, bir threat-hunting sorgusunu adla kalıcılaştırır (SIEM kayıtlı
+// arama). Gövde: {"name": "...", "filter": {<hunt isteği>}}. filter ham JSON olarak
+// saklanır; sonradan /api/hunt'a aynen gönderilebilir.
+func (s *Server) handleSaveSearch(w http.ResponseWriter, r *http.Request, adminID string) {
+	var req struct {
+		Name   string          `json:"name"`
+		Filter json.RawMessage `json:"filter"`
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	if strings.TrimSpace(req.Name) == "" {
+		writeErr(w, http.StatusBadRequest, "ad zorunlu")
+		return
+	}
+	if len(req.Filter) == 0 || string(req.Filter) == "null" {
+		writeErr(w, http.StatusBadRequest, "filter zorunlu")
+		return
+	}
+	row, err := s.reader.SaveSearch(r.Context(), req.Name, string(req.Filter), adminID)
+	if respondErr(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, row)
+}
+
+// handleListSavedSearches, kayıtlı aramaları listeler.
+func (s *Server) handleListSavedSearches(w http.ResponseWriter, r *http.Request, _ string) {
+	rows, err := s.reader.SavedSearches(r.Context())
+	if respondErr(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"searches": rows})
+}
+
+// handleDeleteSavedSearch, bir kayıtlı aramayı siler.
+func (s *Server) handleDeleteSavedSearch(w http.ResponseWriter, r *http.Request, _ string) {
+	id := r.PathValue("id")
+	if strings.TrimSpace(id) == "" {
+		writeErr(w, http.StatusBadRequest, "kimlik zorunlu")
+		return
+	}
+	if respondErr(w, s.reader.DeleteSavedSearch(r.Context(), id)) {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"deleted": id})
 }
 
 // handleMaintenance, yapılandırılmış bakım/bastırma pencerelerini döner (#18):

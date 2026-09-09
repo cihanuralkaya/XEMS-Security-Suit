@@ -7,6 +7,7 @@ package adminread
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"xems.corp/suite/server/internal/security"
@@ -138,6 +139,22 @@ type Store interface {
 	// ListPolicies, tüm politikaları (kural sayısı + atanmış cihaz sayısıyla)
 	// listeler.
 	ListPolicies(ctx context.Context, limit int) ([]PolicyRow, error)
+	// SaveSearch, adlandırılmış bir threat-hunting sorgusunu (filtre JSON) kalıcılaştırır
+	// ve oluşturulan kaydı döner (SIEM kayıtlı-arama). name+filter zorunlu.
+	SaveSearch(ctx context.Context, name, filterJSON, createdBy string) (SavedSearchRow, error)
+	// ListSavedSearches, kayıtlı aramaları en yeniden eskiye döner.
+	ListSavedSearches(ctx context.Context) ([]SavedSearchRow, error)
+	// DeleteSavedSearch, verilen kimlikli kayıtlı aramayı siler.
+	DeleteSavedSearch(ctx context.Context, id string) error
+}
+
+// SavedSearchRow, kalıcılaştırılmış bir threat-hunting sorgusudur.
+type SavedSearchRow struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Filter    string    `json:"filter"` // ham EventFilter/hunt isteği JSON'u
+	CreatedBy string    `json:"created_by,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // DeviceDTO, konsola dönen deşifre edilmiş cihaz görünümüdür.
@@ -621,6 +638,22 @@ type PendingWipeRow struct {
 // PendingWipes, ikinci-onay bekleyen WIPE taleplerini döner (çift-kontrol konsol görünümü).
 func (s *Service) PendingWipes(ctx context.Context) ([]PendingWipeRow, error) {
 	return s.store.ListPendingWipes(ctx)
+}
+
+// SaveSearch, adlandırılmış bir hunt sorgusunu kalıcılaştırır. Girdi doğrulaması
+// (name+filter boş olamaz) çağıran katmanda (handler) yapılır.
+func (s *Service) SaveSearch(ctx context.Context, name, filterJSON, createdBy string) (SavedSearchRow, error) {
+	return s.store.SaveSearch(ctx, strings.TrimSpace(name), filterJSON, createdBy)
+}
+
+// SavedSearches, kayıtlı aramaları döner.
+func (s *Service) SavedSearches(ctx context.Context) ([]SavedSearchRow, error) {
+	return s.store.ListSavedSearches(ctx)
+}
+
+// DeleteSavedSearch, bir kayıtlı aramayı siler.
+func (s *Service) DeleteSavedSearch(ctx context.Context, id string) error {
+	return s.store.DeleteSavedSearch(ctx, id)
 }
 
 // TrendPoint, tek bir günün MTTD/MTTR ortalamalarıdır (trend çizgisi noktası).

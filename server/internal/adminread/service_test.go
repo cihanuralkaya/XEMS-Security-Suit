@@ -138,6 +138,13 @@ func (m *memStore) ListPendingWipes(_ context.Context) ([]PendingWipeRow, error)
 func (m *memStore) ListIncidents(_ context.Context, _ int) ([]IncidentRow, error) {
 	return nil, nil
 }
+func (m *memStore) SaveSearch(_ context.Context, name, filterJSON, createdBy string) (SavedSearchRow, error) {
+	return SavedSearchRow{ID: "srch-1", Name: name, Filter: filterJSON, CreatedBy: createdBy}, nil
+}
+func (m *memStore) ListSavedSearches(_ context.Context) ([]SavedSearchRow, error) {
+	return nil, nil
+}
+func (m *memStore) DeleteSavedSearch(_ context.Context, _ string) error { return nil }
 func (m *memStore) QueryEvents(_ context.Context, f EventFilter) ([]EventRow, error) {
 	var out []EventRow
 	for _, e := range m.events {

@@ -132,7 +132,14 @@ type Store struct {
 	pendWipes  map[string]pendingWipeRec    // deviceID -> bekleyen WIPE talebi (çift-kontrol)
 	incidents  []incidentRec                // korelasyonla gruplanmış olaylar
 	incSeq     int
+	savedSrch  []savedSearchRec // kayıtlı hunt sorguları (SIEM)
 	seq        int
+}
+
+// savedSearchRec, kalıcılaştırılmış bir threat-hunting sorgusudur (bellek-içi).
+type savedSearchRec struct {
+	id, name, filter, createdBy string
+	createdAt                   time.Time
 }
 
 // incidentRec, korelasyonla gruplanmış bir olaydır (bellek-içi).
@@ -1068,6 +1075,52 @@ func (s *Store) ListPendingWipes(_ context.Context) ([]adminread.PendingWipeRow,
 		})
 	}
 	return out, nil
+}
+
+// SaveSearch, adlandırılmış bir hunt sorgusunu kalıcılaştırır (SIEM kayıtlı-arama).
+func (s *Store) SaveSearch(_ context.Context, name, filterJSON, createdBy string) (adminread.SavedSearchRow, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rec := savedSearchRec{
+		id: randID("srch-"), name: name, filter: filterJSON,
+		createdBy: createdBy, createdAt: time.Now(),
+	}
+	s.savedSrch = append(s.savedSrch, rec)
+	return toSavedSearchRow(rec, s.adminsByID), nil
+}
+
+// ListSavedSearches, kayıtlı aramaları en yeniden eskiye döner.
+func (s *Store) ListSavedSearches(_ context.Context) ([]adminread.SavedSearchRow, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]adminread.SavedSearchRow, 0, len(s.savedSrch))
+	for i := len(s.savedSrch) - 1; i >= 0; i-- {
+		out = append(out, toSavedSearchRow(s.savedSrch[i], s.adminsByID))
+	}
+	return out, nil
+}
+
+// DeleteSavedSearch, verilen kimlikli kayıtlı aramayı siler.
+func (s *Store) DeleteSavedSearch(_ context.Context, id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, r := range s.savedSrch {
+		if r.id == id {
+			s.savedSrch = append(s.savedSrch[:i], s.savedSrch[i+1:]...)
+			return nil
+		}
+	}
+	return nil
+}
+
+func toSavedSearchRow(rec savedSearchRec, adminsByID map[string]*adminRec) adminread.SavedSearchRow {
+	by := rec.createdBy
+	if a, ok := adminsByID[rec.createdBy]; ok {
+		by = a.email
+	}
+	return adminread.SavedSearchRow{
+		ID: rec.id, Name: rec.name, Filter: rec.filter, CreatedBy: by, CreatedAt: rec.createdAt,
+	}
 }
 
 func (s *Store) SetEventAck(_ context.Context, eventID, adminID, status string) error {

@@ -372,6 +372,13 @@ func (m *memStore) ListPendingWipes(_ context.Context) ([]adminread.PendingWipeR
 func (m *memStore) ListIncidents(_ context.Context, _ int) ([]adminread.IncidentRow, error) {
 	return nil, nil
 }
+func (m *memStore) SaveSearch(_ context.Context, name, filterJSON, createdBy string) (adminread.SavedSearchRow, error) {
+	return adminread.SavedSearchRow{ID: "srch-1", Name: name, Filter: filterJSON, CreatedBy: createdBy}, nil
+}
+func (m *memStore) ListSavedSearches(_ context.Context) ([]adminread.SavedSearchRow, error) {
+	return nil, nil
+}
+func (m *memStore) DeleteSavedSearch(_ context.Context, _ string) error { return nil }
 func (m *memStore) QueryEvents(_ context.Context, f adminread.EventFilter) ([]adminread.EventRow, error) {
 	var out []adminread.EventRow
 	for _, e := range m.evtRows {

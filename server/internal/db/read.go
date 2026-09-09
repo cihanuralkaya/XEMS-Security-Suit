@@ -229,6 +229,53 @@ func (s *Store) ListPendingWipes(ctx context.Context) ([]adminread.PendingWipeRo
 	return out, rows.Err()
 }
 
+// SaveSearch, adlandırılmış bir hunt sorgusunu kalıcılaştırır (SIEM kayıtlı-arama).
+func (s *Store) SaveSearch(ctx context.Context, name, filterJSON, createdBy string) (adminread.SavedSearchRow, error) {
+	const q = `
+		INSERT INTO saved_searches (name, filter, created_by)
+		VALUES ($1, $2::jsonb, NULLIF($3,'')::uuid)
+		RETURNING id::text, name, filter::text, created_at`
+	var r adminread.SavedSearchRow
+	if err := s.pool.QueryRow(ctx, q, name, filterJSON, createdBy).
+		Scan(&r.ID, &r.Name, &r.Filter, &r.CreatedAt); err != nil {
+		return adminread.SavedSearchRow{}, fmt.Errorf("db: kayıtlı arama ekleme: %w", err)
+	}
+	r.CreatedBy = createdBy
+	return r, nil
+}
+
+// ListSavedSearches, kayıtlı aramaları en yeniden eskiye döner.
+func (s *Store) ListSavedSearches(ctx context.Context) ([]adminread.SavedSearchRow, error) {
+	const q = `
+		SELECT ss.id::text, ss.name, ss.filter::text,
+		       COALESCE(ad.email, ss.created_by::text, ''), ss.created_at
+		  FROM saved_searches ss
+		  LEFT JOIN admins ad ON ad.id = ss.created_by
+		 ORDER BY ss.created_at DESC`
+	rows, err := s.pool.Query(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("db: kayıtlı arama listesi: %w", err)
+	}
+	defer rows.Close()
+	var out []adminread.SavedSearchRow
+	for rows.Next() {
+		var r adminread.SavedSearchRow
+		if err := rows.Scan(&r.ID, &r.Name, &r.Filter, &r.CreatedBy, &r.CreatedAt); err != nil {
+			return nil, fmt.Errorf("db: kayıtlı arama okuma: %w", err)
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// DeleteSavedSearch, verilen kimlikli kayıtlı aramayı siler.
+func (s *Store) DeleteSavedSearch(ctx context.Context, id string) error {
+	if _, err := s.pool.Exec(ctx, `DELETE FROM saved_searches WHERE id = $1::uuid`, id); err != nil {
+		return fmt.Errorf("db: kayıtlı arama silme: %w", err)
+	}
+	return nil
+}
+
 func (s *Store) ListAudit(ctx context.Context, limit int) ([]adminread.AuditRow, error) {
 	const q = `
 		SELECT a.id, COALESCE(ad.email,''), a.action::text,
