@@ -205,6 +205,8 @@ curl -sk "$B/api/hunt/saved" -H "Authorization: Bearer $TOK" | grep -q "Kritik o
 # Olay korelasyonu (#2): incident listeleme ucu yanıt versin.
 curl -sk "$B/api/incidents" -H "Authorization: Bearer $TOK" | grep -q '"incidents"' \
   && pass "/api/incidents korelasyon ucu döndü" || fail "/api/incidents başarısız"
+curl -sk "$B/api/incidents/does-not-exist/timeline" -H "Authorization: Bearer $TOK" | grep -q "bulunamadı" \
+  && pass "/api/incidents/{id}/timeline ucu bağlı (404 yolu)" || fail "/api/incidents/{id}/timeline başarısız"
 # Zamanlanmış/dışa aktarılabilir rapor (#7): duruş raporu HTML üretimi.
 curl -sk "$B/api/report" -H "Authorization: Bearer $TOK" | grep -q "XEMS Security Suite" \
   && pass "/api/report duruş raporu üretti" || fail "/api/report başarısız"

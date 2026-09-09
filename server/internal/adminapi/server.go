@@ -226,6 +226,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/detections/test", s.authed(s.handleTestDetection))
 	mux.HandleFunc("POST /api/hunt", s.authed(s.handleHunt))
 	mux.HandleFunc("GET /api/incidents", s.authed(s.handleIncidents))
+	mux.HandleFunc("GET /api/incidents/{id}/timeline", s.authed(s.handleIncidentTimeline))
 	mux.HandleFunc("GET /api/report", s.authed(s.handleReport))
 	mux.HandleFunc("GET /api/coverage", s.authed(s.handleCoverage))
 	mux.HandleFunc("GET /api/risk", s.authed(s.handleRisk))
@@ -1240,6 +1241,21 @@ func (s *Server) handleMetricsTrends(w http.ResponseWriter, r *http.Request, _ s
 		return
 	}
 	writeJSON(w, http.StatusOK, tr)
+}
+
+// handleIncidentTimeline, bir incident'i ve onu oluşturan cihazın penceredeki
+// olaylarını kronolojik döner (IR araştırması). Bulunamazsa 404.
+func (s *Server) handleIncidentTimeline(w http.ResponseWriter, r *http.Request, _ string) {
+	id := r.PathValue("id")
+	tl, ok, err := s.reader.IncidentTimeline(r.Context(), id)
+	if respondErr(w, err) {
+		return
+	}
+	if !ok {
+		writeErr(w, http.StatusNotFound, "incident bulunamadı")
+		return
+	}
+	writeJSON(w, http.StatusOK, tl)
 }
 
 // handleIncidents, korelasyonla gruplanmış olayları (incident) listeler (salt-okunur).

@@ -643,6 +643,53 @@ func (s *Service) PendingWipes(ctx context.Context) ([]PendingWipeRow, error) {
 	return s.store.ListPendingWipes(ctx)
 }
 
+// IncidentTimelineDTO, bir incident'in kronolojik olay zaman çizelgesidir.
+type IncidentTimelineDTO struct {
+	Incident IncidentRow `json:"incident"`
+	Events   []EventDTO  `json:"events"`
+}
+
+// IncidentTimeline, bir incident'i (kimliğine göre) ve onu oluşturan cihazın
+// [first_seen, last_seen] penceresindeki olaylarını kronolojik döner (IR
+// araştırması: "bu incident nasıl gelişti?"). Mevcut depo yüzeyini kullanır.
+func (s *Service) IncidentTimeline(ctx context.Context, incidentID string) (IncidentTimelineDTO, bool, error) {
+	incidents, err := s.store.ListIncidents(ctx, clampLimit(1000))
+	if err != nil {
+		return IncidentTimelineDTO{}, false, err
+	}
+	var inc IncidentRow
+	found := false
+	for _, it := range incidents {
+		if it.ID == incidentID {
+			inc, found = it, true
+			break
+		}
+	}
+	if !found {
+		return IncidentTimelineDTO{}, false, nil
+	}
+	// İlişkili olaylar: aynı cihaz, [first_seen - tampon, last_seen + tampon].
+	buffer := 2 * time.Minute
+	rows, err := s.store.QueryEvents(ctx, EventFilter{
+		DeviceID: inc.DeviceID,
+		Since:    inc.FirstSeen.Add(-buffer),
+		Until:    inc.LastSeen.Add(buffer),
+		Limit:    500,
+	})
+	if err != nil {
+		return IncidentTimelineDTO{}, false, err
+	}
+	events := make([]EventDTO, 0, len(rows))
+	for _, r := range rows {
+		events = append(events, EventDTO{
+			ID: r.ID, DeviceID: r.DeviceID, Category: r.Category, Severity: r.Severity,
+			Message: r.Message, OccurredAt: r.OccurredAt, CreatedAt: r.CreatedAt, Details: r.Details,
+		})
+	}
+	sort.Slice(events, func(i, j int) bool { return events[i].OccurredAt.Before(events[j].OccurredAt) })
+	return IncidentTimelineDTO{Incident: inc, Events: events}, true, nil
+}
+
 // FrameworkCompliance, filo güvenlik-duruşunu tanınmış uyum çerçevelerine (CIS/
 // NIST/ISO/KVKK) eşler. Her kontrolün filo-geneli uyum oranı (uyumlu cihaz /
 // veri taşıyan cihaz) hesaplanıp çerçeve skorlarına çevrilir. Mevcut compliance
