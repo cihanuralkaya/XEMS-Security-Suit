@@ -219,6 +219,8 @@ curl -sk "$B/api/compliance/frameworks" -H "Authorization: Bearer $TOK" | grep -
 ASDID="$(curl -sk "$B/api/devices" -H "Authorization: Bearer $TOK" | sed -E 's/.*"id":"([^"]+)".*/\1/')"
 curl -sk "$B/api/devices/$ASDID/attack-story" -H "Authorization: Bearer $TOK" | grep -q '"steps"' \
   && pass "/api/devices/{id}/attack-story saldırı hikâyesi döndü" || fail "/api/attack-story başarısız"
+curl -sk "$B/api/devices/$ASDID/graph" -H "Authorization: Bearer $TOK" | grep -q '"nodes"' \
+  && pass "/api/devices/{id}/graph varlık grafiği döndü" || fail "/api/graph başarısız"
 curl -sk "$B/api/metrics/trends?days=7" -H "Authorization: Bearer $TOK" | grep -q "mttd_seconds" \
   && pass "/api/metrics/trends MTTD/MTTR trendi döndü" || fail "/api/metrics/trends başarısız"
 curl -sk "$B/api/maintenance" -H "Authorization: Bearer $TOK" | grep -q "windows" \

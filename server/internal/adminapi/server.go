@@ -232,6 +232,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/risk", s.authed(s.handleRisk))
 	mux.HandleFunc("GET /api/compliance/frameworks", s.authed(s.handleFrameworks))
 	mux.HandleFunc("GET /api/devices/{id}/attack-story", s.authed(s.handleAttackStory))
+	mux.HandleFunc("GET /api/devices/{id}/graph", s.authed(s.handleEntityGraph))
 	mux.HandleFunc("GET /api/metrics/trends", s.authed(s.handleMetricsTrends))
 	mux.HandleFunc("GET /api/maintenance", s.authed(s.handleMaintenance))
 	mux.HandleFunc("POST /api/hunt/saved", s.authed(s.handleSaveSearch))
@@ -1077,6 +1078,21 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request, _ string) 
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write([]byte(html))
+}
+
+// handleEntityGraph, bir cihazın olaylarından cihaz-merkezli varlık grafiğini
+// (süreç/alan adı/IP/dosya düğümleri) döner (IR investigation görselleştirmesi).
+func (s *Server) handleEntityGraph(w http.ResponseWriter, r *http.Request, _ string) {
+	id := r.PathValue("id")
+	if strings.TrimSpace(id) == "" {
+		writeErr(w, http.StatusBadRequest, "cihaz kimliği zorunlu")
+		return
+	}
+	g, err := s.reader.DeviceEntityGraph(r.Context(), id, intParam(r, "limit"))
+	if respondErr(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, g)
 }
 
 // handleAttackStory, bir cihazın olaylarını kill-chain aşamalarına göre sıralanmış
