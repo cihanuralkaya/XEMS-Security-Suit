@@ -12,6 +12,14 @@
 //	mimikatz.exe       kimlik-hırsızı
 //
 // İlk boşlukla-ayrılmış belirteç GÖSTERGEDİR; kalanı isteğe bağlı etikettir.
+//
+// ZENGİNLEŞTİRME (opsiyonel, geriye uyumlu): etiketten sonra `conf=` ve `src=`
+// anahtar-değer belirteçleri ile GÜVEN düzeyi ve KAYNAK (feed) verilebilir:
+//
+//	1.2.3.4  known-c2  conf=high src=abuse.ch
+//
+// conf ∈ {low,medium,high,critical} (varsayılan medium); src serbest metin. Bu
+// belirteçler etikete DAHİL EDİLMEZ; eşleşme olayına iliştirilir (önceliklendirme).
 // Bağımlılıksız (yalnız stdlib).
 package ioc
 
@@ -22,9 +30,16 @@ import (
 	"strings"
 )
 
-// Set, göstergeleri (küçük harfe normalize edilmiş) etiketleriyle tutar.
+// Indicator, bir IoC göstergesinin etiketi + zenginleştirme meta verisidir.
+type Indicator struct {
+	Label      string `json:"label"`
+	Confidence string `json:"confidence"`       // low | medium | high | critical
+	Source     string `json:"source,omitempty"` // feed adı (ör. abuse.ch)
+}
+
+// Set, göstergeleri (küçük harfe normalize edilmiş) meta verisiyle tutar.
 type Set struct {
-	byValue map[string]string
+	byValue map[string]Indicator
 }
 
 // Size, gösterge sayısını döner.
@@ -37,7 +52,7 @@ func (s *Set) Size() int {
 
 // Load, verilen okuyucudan gösterge listesini ayrıştırır.
 func Load(r io.Reader) (*Set, error) {
-	set := &Set{byValue: map[string]string{}}
+	set := &Set{byValue: map[string]Indicator{}}
 	sc := bufio.NewScanner(r)
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
@@ -46,16 +61,35 @@ func Load(r io.Reader) (*Set, error) {
 		}
 		fields := strings.Fields(line)
 		val := strings.ToLower(fields[0])
-		label := ""
-		if len(fields) > 1 {
-			label = strings.Join(fields[1:], " ")
-		}
-		if label == "" {
-			label = "etiketsiz"
-		}
-		set.byValue[val] = label
+		set.byValue[val] = parseIndicator(fields[1:])
 	}
 	return set, sc.Err()
+}
+
+// parseIndicator, etiket alanlarından conf=/src= zenginleştirme belirteçlerini
+// ayıklar; kalan sözcükler etikettir (geriye uyumlu).
+func parseIndicator(rest []string) Indicator {
+	ind := Indicator{Confidence: "medium"}
+	var labelWords []string
+	for _, w := range rest {
+		lw := strings.ToLower(w)
+		switch {
+		case strings.HasPrefix(lw, "conf="):
+			c := strings.TrimPrefix(lw, "conf=")
+			if c == "low" || c == "medium" || c == "high" || c == "critical" {
+				ind.Confidence = c
+			}
+		case strings.HasPrefix(lw, "src="):
+			ind.Source = strings.TrimPrefix(w, "src=") // özgün büyük/küçük harf korunur
+		default:
+			labelWords = append(labelWords, w)
+		}
+	}
+	ind.Label = strings.Join(labelWords, " ")
+	if ind.Label == "" {
+		ind.Label = "etiketsiz"
+	}
+	return ind
 }
 
 // LoadFile, bir dosyadan gösterge listesi yükler.
@@ -69,26 +103,36 @@ func LoadFile(path string) (*Set, error) {
 }
 
 // Match, olayın Details string değerleri ile göstergeleri (tam, küçük/büyük harf
-// duyarsız) ve mesajı (alt dize) karşılaştırır. İlk eşleşmenin etiketini döner.
-// Set boş/nil ise asla eşleşmez (özellik kapalı).
+// duyarsız) ve mesajı (alt dize) karşılaştırır. İlk eşleşmenin etiketini döner
+// (geriye uyumlu). Set boş/nil ise asla eşleşmez (özellik kapalı).
 func (s *Set) Match(details map[string]any, message string) (label, indicator string, ok bool) {
-	if s == nil || len(s.byValue) == 0 {
+	ind, val, hit := s.MatchIndicator(details, message)
+	if !hit {
 		return "", "", false
+	}
+	return ind.Label, val, true
+}
+
+// MatchIndicator, Match ile aynı eşleştirmeyi yapar ancak zenginleştirilmiş
+// göstergeyi (etiket + güven + kaynak) döner — önceliklendirme/olay Details'i için.
+func (s *Set) MatchIndicator(details map[string]any, message string) (ind Indicator, indicator string, ok bool) {
+	if s == nil || len(s.byValue) == 0 {
+		return Indicator{}, "", false
 	}
 	// 1) Details string değerleri — tam eşleşme (ip/mac/process gibi yapısal alanlar).
 	for _, v := range details {
 		if str, isStr := v.(string); isStr {
-			if lbl, hit := s.byValue[strings.ToLower(strings.TrimSpace(str))]; hit {
-				return lbl, str, true
+			if got, hit := s.byValue[strings.ToLower(strings.TrimSpace(str))]; hit {
+				return got, str, true
 			}
 		}
 	}
 	// 2) Mesaj — gösterge alt dize olarak geçiyorsa (mesaja gömülü alan adı/hash).
 	msg := strings.ToLower(message)
-	for val, lbl := range s.byValue {
+	for val, got := range s.byValue {
 		if strings.Contains(msg, val) {
-			return lbl, val, true
+			return got, val, true
 		}
 	}
-	return "", "", false
+	return Indicator{}, "", false
 }

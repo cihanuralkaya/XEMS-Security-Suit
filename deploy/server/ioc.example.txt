@@ -9,7 +9,10 @@
 # XEMS_IOC_FILE=/etc/xdr/ioc.txt ile yüklenir.
 
 # --- Örnek göstergeler (kendi feed'inizle değiştirin) ---
-10.13.37.5            bilinen-c2-sunucusu
-aa:bb:cc:dd:ee:ff     yetkisiz-cihaz
-mimikatz.exe          kimlik-hırsızı-araç
-evil.example.com      phishing-altyapısı
+# Zenginleştirme (opsiyonel): etiketten sonra conf=low|medium|high|critical ve
+# src=<feed adı> ekleyebilirsiniz. Bu bilgiler eşleşme uyarısına iliştirilir
+# (önceliklendirme). Belirtilmezse güven=medium varsayılır. Geriye uyumludur.
+10.13.37.5            bilinen-c2-sunucusu    conf=high src=abuse.ch
+aa:bb:cc:dd:ee:ff     yetkisiz-cihaz         conf=medium
+mimikatz.exe          kimlik-hırsızı-araç    conf=critical src=internal-ti
+evil.example.com      phishing-altyapısı     conf=high src=phishtank

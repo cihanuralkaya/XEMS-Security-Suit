@@ -76,3 +76,39 @@ func TestLoadSkipsCommentsAndBlanks(t *testing.T) {
 		t.Fatalf("etiketsiz gösterge eşleşmeliydi: %s %v", lbl, ok)
 	}
 }
+
+func TestLoadEnrichmentMetadata(t *testing.T) {
+	set, err := Load(strings.NewReader(
+		"1.2.3.4  known-c2  conf=high src=abuse.ch\n" +
+			"evil.example.com  phishing altyapısı\n" + // meta yok → varsayılan medium
+			"deadbeef  hash conf=critical\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ind, val, ok := set.MatchIndicator(map[string]any{"ip": "1.2.3.4"}, "")
+	if !ok || val != "1.2.3.4" {
+		t.Fatalf("eşleşme bekleniyordu, %v %q", ok, val)
+	}
+	if ind.Label != "known-c2" || ind.Confidence != "high" || ind.Source != "abuse.ch" {
+		t.Fatalf("zenginleştirme yanlış: %+v", ind)
+	}
+	// Meta olmayan → varsayılan medium, kaynak boş, etiket korunur.
+	ind2, _, _ := set.MatchIndicator(map[string]any{"d": "evil.example.com"}, "")
+	if ind2.Label != "phishing altyapısı" || ind2.Confidence != "medium" || ind2.Source != "" {
+		t.Fatalf("varsayılan zenginleştirme yanlış: %+v", ind2)
+	}
+	// conf-only
+	ind3, _, _ := set.MatchIndicator(map[string]any{"h": "deadbeef"}, "")
+	if ind3.Label != "hash" || ind3.Confidence != "critical" {
+		t.Fatalf("conf-only yanlış: %+v", ind3)
+	}
+}
+
+func TestMatchBackwardCompatible(t *testing.T) {
+	// Eski Match imzası hâlâ etiketi döndürmeli (geriye uyumluluk).
+	set, _ := Load(strings.NewReader("1.2.3.4 c2 conf=high src=feed"))
+	lbl, val, ok := set.Match(map[string]any{"ip": "1.2.3.4"}, "")
+	if !ok || lbl != "c2" || val != "1.2.3.4" {
+		t.Fatalf("Match geriye uyumlu değil: %q %q %v", lbl, val, ok)
+	}
+}

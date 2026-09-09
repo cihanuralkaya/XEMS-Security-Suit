@@ -362,14 +362,23 @@ func (h *AgentHandler) ReportEvents(stream xemsv1.AgentService_ReportEventsServe
 				if e.Details != "" {
 					_ = json.Unmarshal([]byte(e.Details), &dm)
 				}
-				if lbl, ind, ok := iocSet.Match(dm, e.Message); ok {
+				if ti, ind, ok := iocSet.MatchIndicator(dm, e.Message); ok {
 					metrics.IncIocHit()
 					metrics.IncAlertRaised()
+					// Zenginleştirme: eşleşen göstergenin güven + kaynak bilgisini mesaja iliştir.
+					enrich := "IoC eşleşmesi [" + ti.Label + "] " + ind
+					if ti.Confidence != "" {
+						enrich += " (güven=" + ti.Confidence
+						if ti.Source != "" {
+							enrich += ", kaynak=" + ti.Source
+						}
+						enrich += ")"
+					}
 					h.alerter.Notify(notify.Alert{
 						DeviceID:      deviceID,
 						Category:      e.Category,
 						Severity:      "CRITICAL",
-						Message:       "IoC eşleşmesi [" + lbl + "] " + ind + ": " + e.Message,
+						Message:       enrich + ": " + e.Message,
 						OccurredAt:    e.OccurredAt,
 						TechniqueID:   "T1071",
 						TechniqueName: "Application Layer Protocol",
