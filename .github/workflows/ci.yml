@@ -94,6 +94,56 @@ jobs:
           XEMS_DATABASE_URL: postgres://xems:xems@localhost:5432/xems?sslmode=disable
         run: bash scripts/smoke-test.sh
 
+  security:
+    name: Güvenlik (govulncheck + fuzz + SBOM)
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache: true
+      - uses: bufbuild/buf-setup-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: protoc-gen eklentileri
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+      - name: Proto üret
+        run: make proto
+
+      # Bağımlılık zafiyet taraması (bilinen CVE'ler). Bulgu → job kırmızı.
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          "$(go env GOPATH)/bin/govulncheck" ./...
+
+      # Kritik ayrıştırıcıların kısa fuzz taraması (panik regresyon kalkanı).
+      - name: Fuzz (kısa)
+        run: FUZZTIME=15s bash scripts/fuzz.sh
+
+      # SBOM üretimi (CycloneDX) — tedarik zinciri şeffaflığı. Artifact olarak yüklenir.
+      - name: SBOM (Syft)
+        uses: anchore/sbom-action@v0
+        with:
+          format: cyclonedx-json
+          output-file: sbom.cyclonedx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.cyclonedx.json
+          if-no-files-found: warn
+
+      # Statik güvenlik analizi (gosec). Bilgilendirici — bulgular job'ı kırmazın
+      # (kademeli benimseme); SARIF ileride Code Scanning'e bağlanabilir.
+      - name: gosec (bilgilendirici)
+        continue-on-error: true
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          "$(go env GOPATH)/bin/gosec" -quiet ./... || true
+
   release:
     name: Çapraz derleme (release)
     runs-on: ubuntu-latest
