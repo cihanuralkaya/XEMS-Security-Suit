@@ -496,6 +496,13 @@ func run() error {
 	// token). Ayarlı değilse uç kapalıdır (toplu veriyi kimliksiz sızdırmama).
 	metrics.SetBuildVersion(os.Getenv("XEMS_BUILD_VERSION"))
 	adminAPI.SetMetricsToken(os.Getenv("XEMS_METRICS_TOKEN"))
+	// Harici log alımı (#21 SIEM): XEMS_INGEST_TOKEN ayarlıysa POST /api/ingest açılır
+	// (statik Bearer token). Harici kaynaklar (güvenlik duvarı/bulut/SIEM) JSON veya
+	// CEF logları gönderebilir; normalize edilip olay yoluna yazılır.
+	if it := os.Getenv("XEMS_INGEST_TOKEN"); it != "" {
+		adminAPI.SetIngest(backend, it)
+		log.Println("harici log alımı etkin: POST /api/ingest (JSON + CEF)")
+	}
 	adminAPI.SetDetector(detector) // tespit kural kataloğu (ingest ile aynı motor)
 
 	// Tespit kuralları canlı hot-reload: XEMS_DETECT_RELOAD_INTERVAL ayarlıysa (ör.

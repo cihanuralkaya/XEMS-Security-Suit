@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"strconv"
@@ -28,6 +29,7 @@ import (
 	"xems.corp/suite/server/internal/auditexport"
 	"xems.corp/suite/server/internal/detect"
 	"xems.corp/suite/server/internal/eventbus"
+	"xems.corp/suite/server/internal/logingest"
 	"xems.corp/suite/server/internal/metrics"
 	"xems.corp/suite/server/internal/mitre"
 	"xems.corp/suite/server/internal/model"
@@ -63,6 +65,8 @@ type Server struct {
 	auditExpKey  ed25519.PrivateKey            // ayarlıysa /api/audit/export imzalı manifest üretir (#16)
 	maintWindows func() []notify.Window        // ayarlıysa /api/maintenance bakım pencerelerini döner (#18)
 	metricsToken string                        // ayarlıysa /metrics bu Bearer token ile açılır; boşsa uç kapalı
+	ingestToken  string                        // ayarlıysa POST /api/ingest bu Bearer token ile açılır (#21)
+	ingestSink   EventIngestor                 // harici log alımı için olay yazma yolu
 	detector     atomic.Pointer[detect.Engine] // tespit kural kataloğu (görünürlük ucu; canlı hot-reload için atomik)
 	vulnSet      *vuln.Set                     // zafiyet veri kümesi (nil = kapalı); envanterle eşleşir
 	features     map[string]any                // dağıtım koruma-duruşu (opsiyonel özellik bayrakları)
@@ -84,6 +88,18 @@ func (s *Server) SetFeatures(m map[string]any) { s.features = m }
 // SetVulnSet, zafiyet veri kümesini (envanter eşleştirme) etkinleştirir. nil ise
 // /api/vulnerabilities boş döner.
 func (s *Server) SetVulnSet(v *vuln.Set) { s.vulnSet = v }
+
+// EventIngestor, harici log alımının normalize edilmiş olayları yazdığı yoldur
+// (ajan olay yazma yoluyla aynı: backend.SaveEvents).
+type EventIngestor interface {
+	SaveEvents(ctx context.Context, deviceID string, evs []model.Event) (uint64, error)
+}
+
+// SetIngest, POST /api/ingest harici log alım ucunu etkinleştirir: statik Bearer
+// token (makine-makine) + olay yazma yolu. token boşsa uç kapalıdır (#21).
+func (s *Server) SetIngest(sink EventIngestor, token string) {
+	s.ingestSink, s.ingestToken = sink, token
+}
 
 // SetMetricsToken, Prometheus /metrics ucunu verilen statik Bearer token ile
 // etkinleştirir. Boş bırakılırsa uç tamamen kapalıdır (cihaz sayıları gibi
@@ -237,8 +253,9 @@ func (s *Server) Handler() http.Handler {
 	// Sağlık uçları (kimlik doğrulama YOK — orkestrasyon/LB/monitoring için).
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
 	mux.HandleFunc("GET /readyz", s.handleReadyz)
-	mux.HandleFunc("GET /api/notice", s.handleNotice) // KVKK aydınlatma (public)
-	mux.HandleFunc("GET /metrics", s.handleMetrics)   // Prometheus (statik token ile)
+	mux.HandleFunc("GET /api/notice", s.handleNotice)  // KVKK aydınlatma (public)
+	mux.HandleFunc("GET /metrics", s.handleMetrics)    // Prometheus (statik token ile)
+	mux.HandleFunc("POST /api/ingest", s.handleIngest) // harici log alımı (statik token ile, #21)
 	return securityHeaders(mux)
 }
 
@@ -373,6 +390,65 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	metrics.IncLoginSuccess()
 	token := s.sessions.Sign(adminID, s.now().Add(s.ttl))
 	writeJSON(w, http.StatusOK, map[string]string{"token": token})
+}
+
+// handleIngest, HARİCİ kaynaklardan (güvenlik duvarı, bulut, SIEM) gelen logları
+// alır, XEMS olay modeline normalize eder ve olay yoluna yazar (#21 SIEM alımı).
+// ingestToken ayarlı değilse uç KAPALIDIR (404). Ayarlıysa doğru Bearer token
+// gerekir (sabit-zaman). Content-Type application/json → JSON dizi/nesne; aksi
+// halde metin (satır başına CEF). Body üst sınırı 4 MiB.
+func (s *Server) handleIngest(w http.ResponseWriter, r *http.Request) {
+	if s.ingestToken == "" || s.ingestSink == nil {
+		http.NotFound(w, r)
+		return
+	}
+	if subtle.ConstantTimeCompare([]byte(bearer(r)), []byte(s.ingestToken)) != 1 {
+		writeErr(w, http.StatusUnauthorized, "geçersiz ingest token")
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, 4<<20))
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "gövde okunamadı")
+		return
+	}
+	now := time.Now()
+	var records []logingest.Record
+	if strings.Contains(r.Header.Get("Content-Type"), "application/json") {
+		records, err = logingest.NormalizeJSON(body, now)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	} else {
+		// Satır-başına CEF; tanınmayan satırlar atlanır.
+		for _, line := range strings.Split(string(body), "\n") {
+			if strings.TrimSpace(line) == "" {
+				continue
+			}
+			if rec, e := logingest.NormalizeCEF(line, now); e == nil {
+				records = append(records, rec)
+			}
+		}
+	}
+	if len(records) == 0 {
+		writeErr(w, http.StatusBadRequest, "normalize edilebilir kayıt yok")
+		return
+	}
+	// Kaynağa (device_id) göre grupla ve yaz.
+	byDevice := map[string][]model.Event{}
+	for _, rec := range records {
+		byDevice[rec.DeviceID] = append(byDevice[rec.DeviceID], rec.Event)
+	}
+	accepted := 0
+	for dev, evs := range byDevice {
+		if _, err := s.ingestSink.SaveEvents(r.Context(), dev, evs); err != nil {
+			writeErr(w, http.StatusInternalServerError, "olaylar yazılamadı")
+			return
+		}
+		accepted += len(evs)
+	}
+	metrics.AddEventsIngested(accepted)
+	writeJSON(w, http.StatusOK, map[string]any{"accepted": accepted, "sources": len(byDevice)})
 }
 
 // handleMetrics, Prometheus metin-exposition'ını döner. metricsToken ayarlı

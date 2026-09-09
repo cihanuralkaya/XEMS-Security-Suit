@@ -52,6 +52,7 @@ COMMON_ENV=(
   "XEMS_SERVER_CERT=$WORK/pki/server.crt" "XEMS_SERVER_KEY=$WORK/pki/server.key"
   "XEMS_LISTEN_AGENT=:$AGENT_PORT" "XEMS_LISTEN_ENROLL=:$ENROLL_PORT" "XEMS_LISTEN_ADMIN=:$ADMIN_PORT"
   "XEMS_VULN_FILE=deploy/vuln-sample.json"
+  "XEMS_INGEST_TOKEN=smoke-ingest-token"
 )
 if [ -n "${XEMS_DATABASE_URL:-}" ]; then
   # DB modunda yatay-ölçekleme fan-out'unu aç (#10): SSE iddiası gerçek Postgres
@@ -207,6 +208,12 @@ curl -sk "$B/api/metrics/trends?days=7" -H "Authorization: Bearer $TOK" | grep -
   && pass "/api/metrics/trends MTTD/MTTR trendi döndü" || fail "/api/metrics/trends başarısız"
 curl -sk "$B/api/maintenance" -H "Authorization: Bearer $TOK" | grep -q "windows" \
   && pass "/api/maintenance bakım pencereleri ucu döndü" || fail "/api/maintenance başarısız"
+# Harici log alımı (#21 SIEM): JSON log gönder, normalize edilip yazılmalı.
+curl -sk "$B/api/ingest" -X POST -H "Authorization: Bearer smoke-ingest-token" \
+  -H "Content-Type: application/json" \
+  -d '[{"source":"fw-test","category":"NETWORK_CONN","severity":"high","message":"smoke ingest"}]' \
+  | grep -q '"accepted":1' \
+  && pass "/api/ingest harici log alımı çalıştı" || fail "/api/ingest başarısız"
 # Zengin telemetri: cihaz OS sürümü (ilk heartbeat'ten sonra dolar) — poll et.
 osv=""
 for _ in $(seq 1 40); do
