@@ -212,6 +212,9 @@ curl -sk "$B/api/coverage" -H "Authorization: Bearer $TOK" | grep -q "coverage_p
   && pass "/api/coverage filo kapsamı döndü" || fail "/api/coverage başarısız"
 curl -sk "$B/api/risk" -H "Authorization: Bearer $TOK" | grep -q "fleet_score" \
   && pass "/api/risk çok-faktörlü risk skoru döndü" || fail "/api/risk başarısız"
+ASDID="$(curl -sk "$B/api/devices" -H "Authorization: Bearer $TOK" | sed -E 's/.*"id":"([^"]+)".*/\1/')"
+curl -sk "$B/api/devices/$ASDID/attack-story" -H "Authorization: Bearer $TOK" | grep -q '"steps"' \
+  && pass "/api/devices/{id}/attack-story saldırı hikâyesi döndü" || fail "/api/attack-story başarısız"
 curl -sk "$B/api/metrics/trends?days=7" -H "Authorization: Bearer $TOK" | grep -q "mttd_seconds" \
   && pass "/api/metrics/trends MTTD/MTTR trendi döndü" || fail "/api/metrics/trends başarısız"
 curl -sk "$B/api/maintenance" -H "Authorization: Bearer $TOK" | grep -q "windows" \
