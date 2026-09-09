@@ -39,6 +39,7 @@ import (
 	"xems.corp/suite/agent/internal/compliance"
 	"xems.corp/suite/agent/internal/deviceaction"
 	"xems.corp/suite/agent/internal/discovery"
+	"xems.corp/suite/agent/internal/dnsmon"
 	"xems.corp/suite/agent/internal/enforce"
 	"xems.corp/suite/agent/internal/fim"
 	"xems.corp/suite/agent/internal/inventory"
@@ -358,6 +359,13 @@ func run() error {
 	if os.Getenv("XEMS_PERSISTENCE_DISABLE") == "" {
 		persistTr = &persistenceTracker{}
 	}
+	// DNS telemetri + DGA tespiti (#19; opt-in XEMS_DNS_MONITOR=1). OS DNS önbelleği
+	// periyodik taranır; YENİ alanlar NETWORK_DISCOVERY, DGA-şüphelileri SECURITY
+	// olayı olur. İlk tarama taban çizgisidir. (Toplama Windows'ta; skorlama her yerde.)
+	var dnsTr *dnsTracker
+	if os.Getenv("XEMS_DNS_MONITOR") == "1" {
+		dnsTr = &dnsTracker{sc: dnsmon.NewScanner()}
+	}
 
 	// Karantina yöneticisi: izolasyonda yalnız C2'ye izin verilir.
 	// SAFE MODE (XEMS_SAFE_MODE): gerçek firewall'a dokunmaz — demo/test için.
@@ -511,6 +519,10 @@ func run() error {
 		// Kalıcılık izleme (etkinse): yeni autostart girdilerini bildir (#5).
 		if persistTr != nil {
 			persistTr.report(buf)
+		}
+		// DNS telemetri + DGA (etkinse): yeni alan sorgularını + DGA-şüphelileri bildir.
+		if dnsTr != nil {
+			dnsTr.report(buf)
 		}
 		flushEvents(hbCtx, cli, ident, buf)
 	}
@@ -878,6 +890,54 @@ func (f *fimTracker) report(buf *collector.Buffer) {
 			OccurredAt: time.Now(),
 			Details:    det,
 		})
+	}
+}
+
+// dnsTracker, uç noktanın DNS önbelleğini periyodik tarar; YENİ alan adlarını
+// NETWORK_DISCOVERY, DGA-şüphelileri SECURITY olayı olarak bildirir. İlk tarama
+// taban çizgisidir (mevcut önbellek gürültü üretmez). Yalnız-yeni felsefesi.
+type dnsTracker struct {
+	sc   dnsmon.Scanner
+	seen map[string]bool
+}
+
+func (d *dnsTracker) report(buf *collector.Buffer) {
+	names := d.sc.Scan()
+	if d.seen == nil {
+		// İlk tarama: mevcut önbelleği taban çizgisi say (olay üretme).
+		d.seen = make(map[string]bool, len(names))
+		for _, n := range names {
+			d.seen[n] = true
+		}
+		return
+	}
+	for _, n := range names {
+		if d.seen[n] {
+			continue
+		}
+		d.seen[n] = true
+		score := dnsmon.ScoreDomain(n)
+		if score.Suspicious {
+			buf.Add(collector.Event{
+				Category:   "SECURITY",
+				Severity:   "HIGH",
+				Message:    "DGA-şüpheli DNS sorgusu: " + n,
+				OccurredAt: time.Now(),
+				Details: map[string]any{
+					"dns": true, "domain": n, "dga_suspicious": true,
+					"entropy": score.Entropy, "vowel_ratio": score.VowelRatio,
+					"digit_ratio": score.DigitRatio,
+				},
+			})
+		} else {
+			buf.Add(collector.Event{
+				Category:   "NETWORK_DISCOVERY",
+				Severity:   "INFO",
+				Message:    "yeni DNS sorgusu: " + n,
+				OccurredAt: time.Now(),
+				Details:    map[string]any{"dns": true, "domain": n},
+			})
+		}
 	}
 }
 
