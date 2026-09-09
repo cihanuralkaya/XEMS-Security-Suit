@@ -115,6 +115,7 @@ type AgentHandler struct {
 	responder  AutoResponder
 	detector   atomic.Pointer[detect.Engine] // tespit motoru (canlı hot-reload için atomik)
 	correlator *correlate.Correlator         // olay korelasyonu (nil = gruplama/bastırma yok)
+	chain      *correlate.ChainDetector      // çok-sinyal korelasyon (nil = kapalı)
 	iocSet     atomic.Pointer[ioc.Set]       // tehdit istihbaratı göstergeleri (nil = kapalı; canlı hot-reload için atomik)
 	artifacts  ArtifactSink                  // adli/IR dosya toplama deposu
 	now        func() time.Time
@@ -186,6 +187,10 @@ func (h *AgentHandler) SetDetector(e *detect.Engine) {
 // SetCorrelator, olay korelasyonunu (incident gruplama + alarm-fırtınası bastırma)
 // etkinleştirir. nil ise her tespit ayrı alarm üretir (eski davranış).
 func (h *AgentHandler) SetCorrelator(c *correlate.Correlator) { h.correlator = c }
+
+// SetChainDetector, çok-sinyal (multi-signal) korelasyonu etkinleştirir: aynı
+// cihazda kısa pencerede birden çok FARKLI sinyal → yüksek-güvenli zincir uyarısı.
+func (h *AgentHandler) SetChainDetector(c *correlate.ChainDetector) { h.chain = c }
 
 // SetAlerter, yüksek önem düzeyli olaylarda dış uyarı (webhook) gönderimini
 // etkinleştirir. nil ise noop kalır (uyarı gönderilmez).
@@ -339,6 +344,27 @@ func (h *AgentHandler) ReportEvents(stream xemsv1.AgentService_ReportEventsServe
 						TechniqueName: d.Technique.Name,
 						Tactic:        d.Technique.Tactic,
 					})
+					// Çok-sinyal korelasyon: farklı kill-chain sinyalleri birikirse
+					// yüksek-güvenli zincir uyarısı üret (tek tespitten daha güçlü kanıt).
+					if h.chain != nil {
+						sig := d.Technique.Tactic
+						if sig == "" {
+							sig = d.Technique.ID
+						}
+						if sig == "" {
+							sig = e.Category
+						}
+						if fired, signals := h.chain.Observe(deviceID, sig, e.OccurredAt); fired {
+							metrics.IncAlertRaised()
+							h.alerter.Notify(notify.Alert{
+								DeviceID:   deviceID,
+								Category:   "SECURITY",
+								Severity:   "CRITICAL",
+								Message:    "yüksek-güvenli saldırı zinciri (çok-sinyal): " + strings.Join(signals, " + "),
+								OccurredAt: e.OccurredAt,
+							})
+						}
+					}
 				}
 			} else {
 				al := notify.Alert{

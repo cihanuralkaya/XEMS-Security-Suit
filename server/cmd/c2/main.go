@@ -302,6 +302,18 @@ func run() error {
 		corrWindow = d
 	}
 	agentHandler.SetCorrelator(correlate.New(corrWindow, backend))
+	// Çok-sinyal korelasyon: aynı cihazda XEMS_CHAIN_WINDOW (varsayılan 15dk) içinde
+	// XEMS_CHAIN_THRESHOLD (varsayılan 3) FARKLI kill-chain sinyali birikirse
+	// yüksek-güvenli saldırı-zinciri uyarısı üretilir. 0 eşik → kapalı.
+	chainWindow := getdurEnv("XEMS_CHAIN_WINDOW", 15*time.Minute)
+	chainThreshold := 3
+	if n := atoiEnv("XEMS_CHAIN_THRESHOLD"); n > 0 {
+		chainThreshold = n
+	}
+	if chainThreshold > 0 {
+		agentHandler.SetChainDetector(correlate.NewChainDetector(chainWindow, chainThreshold, nil))
+		log.Printf("çok-sinyal korelasyon etkin: %d farklı sinyal/%s → yüksek-güven zincir", chainThreshold, chainWindow)
+	}
 
 	// Dış uyarı (SOC webhook): XEMS_ALERT_WEBHOOK_URL ayarlıysa yüksek önem düzeyli
 	// olaylar bir HTTPS webhook'una gönderilir (Slack/Teams/genel). Eşik
