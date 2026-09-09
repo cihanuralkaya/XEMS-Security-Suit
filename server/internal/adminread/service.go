@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"xems.corp/suite/server/internal/complianceframework"
 	"xems.corp/suite/server/internal/risk"
 	"xems.corp/suite/server/internal/security"
 )
@@ -640,6 +641,40 @@ type PendingWipeRow struct {
 // PendingWipes, ikinci-onay bekleyen WIPE taleplerini döner (çift-kontrol konsol görünümü).
 func (s *Service) PendingWipes(ctx context.Context) ([]PendingWipeRow, error) {
 	return s.store.ListPendingWipes(ctx)
+}
+
+// FrameworkCompliance, filo güvenlik-duruşunu tanınmış uyum çerçevelerine (CIS/
+// NIST/ISO/KVKK) eşler. Her kontrolün filo-geneli uyum oranı (uyumlu cihaz /
+// veri taşıyan cihaz) hesaplanıp çerçeve skorlarına çevrilir. Mevcut compliance
+// verisini (LatestComplianceByDevice) kullanır; yeni depo sorgusu yok.
+func (s *Service) FrameworkCompliance(ctx context.Context) (complianceframework.Report, error) {
+	comp, err := s.store.LatestComplianceByDevice(ctx)
+	if err != nil {
+		return complianceframework.Report{}, err
+	}
+	var encOn, encTotal, fwOn, fwTotal int
+	for _, c := range comp {
+		if c.Enc != "" && c.Enc != "unknown" {
+			encTotal++
+			if c.Enc == "on" {
+				encOn++
+			}
+		}
+		if c.Fw != "" && c.Fw != "unknown" {
+			fwTotal++
+			if c.Fw == "on" {
+				fwOn++
+			}
+		}
+	}
+	ratios := map[string]float64{}
+	if encTotal > 0 {
+		ratios["disk_encryption"] = float64(encOn) / float64(encTotal)
+	}
+	if fwTotal > 0 {
+		ratios["firewall"] = float64(fwOn) / float64(fwTotal)
+	}
+	return complianceframework.Evaluate(ratios), nil
 }
 
 // DeviceRiskDTO, bir cihazın toplam risk skorudur (çok-faktörlü risk motoru).

@@ -229,6 +229,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/report", s.authed(s.handleReport))
 	mux.HandleFunc("GET /api/coverage", s.authed(s.handleCoverage))
 	mux.HandleFunc("GET /api/risk", s.authed(s.handleRisk))
+	mux.HandleFunc("GET /api/compliance/frameworks", s.authed(s.handleFrameworks))
 	mux.HandleFunc("GET /api/devices/{id}/attack-story", s.authed(s.handleAttackStory))
 	mux.HandleFunc("GET /api/metrics/trends", s.authed(s.handleMetricsTrends))
 	mux.HandleFunc("GET /api/maintenance", s.authed(s.handleMaintenance))
@@ -1091,6 +1092,16 @@ func (s *Server) handleAttackStory(w http.ResponseWriter, r *http.Request, _ str
 		return
 	}
 	writeJSON(w, http.StatusOK, story)
+}
+
+// handleFrameworks, filo güvenlik-duruşunu uyum çerçevelerine (CIS/NIST/ISO/KVKK)
+// eşleyen skor raporunu döner (denetçi görünürlüğü).
+func (s *Server) handleFrameworks(w http.ResponseWriter, r *http.Request, _ string) {
+	rep, err := s.reader.FrameworkCompliance(r.Context())
+	if respondErr(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, rep)
 }
 
 // handleRisk, çok-faktörlü filo risk skorunu döner (#risk): açık incident'ler,
