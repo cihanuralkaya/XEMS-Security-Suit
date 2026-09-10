@@ -7,15 +7,19 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -169,6 +173,34 @@ func loadWindows(path string) ([]notify.Window, error) {
 		return nil, err
 	}
 	return notify.ParseWindows(data)
+}
+
+// postReportJSON, duruş raporunu (JSON) bir HTTPS webhook'una POST eder; secret
+// verilirse gövde HMAC-SHA256 ile imzalanır (X-XEMS-Signature). Zamanlanmış rapor
+// teslimi (SOC/SIEM/otomasyon). Kısa zaman aşımı; hata çağırana döner (loglanır).
+func postReportJSON(ctx context.Context, url, secret string, d report.Data) error {
+	body, err := json.Marshal(d)
+	if err != nil {
+		return err
+	}
+	rctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(rctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if secret != "" {
+		mac := hmac.New(sha256.New, []byte(secret))
+		mac.Write(body)
+		req.Header.Set("X-XEMS-Signature", "sha256="+hex.EncodeToString(mac.Sum(nil)))
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	_ = resp.Body.Close()
+	return nil
 }
 
 // getdurEnv, süre biçimli bir ortam değişkenini okur (yoksa/geçersizse def).
@@ -642,6 +674,17 @@ func run() error {
 	if d, err := time.ParseDuration(os.Getenv("XEMS_REPORT_INTERVAL")); err == nil && d > 0 {
 		repInterval = d
 	}
+	// İsteğe bağlı teslim: XEMS_REPORT_WEBHOOK_URL ayarlıysa zamanlanmış rapor JSON'u
+	// bir HTTPS webhook'una POST edilir (opsiyonel HMAC imza). URL https OLMALI —
+	// aksi halde başlatma durur (rapor düz-metin taşınmaz).
+	repWebhook := os.Getenv("XEMS_REPORT_WEBHOOK_URL")
+	repSecret := os.Getenv("XEMS_REPORT_WEBHOOK_SECRET")
+	if repWebhook != "" {
+		if u, err := neturl.Parse(repWebhook); err != nil || u.Scheme != "https" || u.Host == "" {
+			return fmt.Errorf("config: XEMS_REPORT_WEBHOOK_URL https olmalı: %q", repWebhook)
+		}
+		log.Println("zamanlanmış rapor teslimi etkin: HTTPS webhook")
+	}
 	go func() {
 		t := time.NewTicker(repInterval)
 		defer t.Stop()
@@ -651,15 +694,25 @@ func run() error {
 				return
 			case <-t.C:
 			}
-			if sum, err := readSvc.Summary(ctx); err == nil {
-				c := metrics.Counters()
-				d := report.Data{
-					DevicesTotal: sum.DevicesTotal, DevicesOnline: sum.DevicesOnline,
-					DevicesQuarantined: sum.DevicesQuarantined, NonCompliant: sum.NonCompliantDevices,
-					Detections: c["detections"], AlertsRaised: c["alerts_raised"],
-					AlertsSuppressed: c["alerts_suppressed"], IocHits: c["ioc_hits"],
+			sum, err := readSvc.Summary(ctx)
+			if err != nil {
+				continue
+			}
+			c := metrics.Counters()
+			d := report.Data{
+				GeneratedAt: time.Now(), SchemaVersion: model.EventSchemaVersion, TenantID: cfg.TenantID,
+				Title:        "Güvenlik Duruş Raporu",
+				DevicesTotal: sum.DevicesTotal, DevicesOnline: sum.DevicesOnline, DevicesOffline: sum.DevicesOffline,
+				DevicesQuarantined: sum.DevicesQuarantined, NonCompliant: sum.NonCompliantDevices,
+				EventsBySeverity: sum.EventsBySeverity, DevicesByOS: sum.DevicesByOS,
+				Detections: c["detections"], AlertsRaised: c["alerts_raised"],
+				AlertsSuppressed: c["alerts_suppressed"], IocHits: c["ioc_hits"],
+			}
+			log.Printf("[report] zamanlanmış duruş: %s", d.Summary())
+			if repWebhook != "" {
+				if err := postReportJSON(ctx, repWebhook, repSecret, d); err != nil {
+					log.Printf("[report] webhook teslimi başarısız: %v", err)
 				}
-				log.Printf("[report] zamanlanmış duruş: %s", d.Summary())
 			}
 		}
 	}()
