@@ -41,6 +41,30 @@ func TestClassify(t *testing.T) {
 	}
 }
 
+// TestClassifyWindows, Windows olay günlüğü (winlogbeat/nxlog) normalize edilmiş
+// mesajlarının ATT&CK tekniklerine eşlendiğini doğrular (logingest.WinEventClass'ın
+// ürettiği gerçek mesaj kalıplarıyla).
+func TestClassifyWindows(t *testing.T) {
+	cases := []struct {
+		msg    string
+		wantID string
+	}{
+		{"[WS-01] EventID 4625 oturum açma başarısız (failed logon): ...", "T1110"},
+		{"[DC] EventID 1102 denetim günlüğü temizlendi (audit log cleared)", "T1070"},
+		{"[SRV] EventID 7045 yeni hizmet kuruldu (service installed persistence)", "T1543"},
+		{"[SRV] EventID 4698 zamanlanmış görev oluşturuldu (scheduled task created persistence)", "T1053"},
+		{"[DC] EventID 4720 kullanıcı hesabı oluşturuldu (user account created)", "T1136"},
+		{"[DC] EventID 4728 güvenlik-etkin global gruba üye eklendi (privilege escalation)", "T1098"},
+		{"[WS] EventID 8 CreateRemoteThread (Sysmon process injection)", "T1055"},
+	}
+	for _, c := range cases {
+		got, ok := Classify("SECURITY", c.msg)
+		if !ok || got.ID != c.wantID {
+			t.Errorf("Classify(SECURITY,%q)=(%s,%v) beklenen %s", c.msg, got.ID, ok, c.wantID)
+		}
+	}
+}
+
 func TestCatalogUnique(t *testing.T) {
 	seen := map[string]bool{}
 	cat := Catalog()
