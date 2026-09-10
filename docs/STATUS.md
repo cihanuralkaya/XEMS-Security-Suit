@@ -138,11 +138,16 @@ Aşağıdakiler ilk matristen sonra eklendi; hepsi test + smoke + CI yeşil.
   `/api/compliance/frameworks`).
 - **Tespit:** çok-sinyal **korelasyon** (yüksek-güven zincir), **yanal hareket** (netconn
   fan-out, T1046), **DNS tünelleme** (T1071.004), **kaba-kuvvet/parola-püskürtme** (Windows
-  4625/4771 seri toplama, saldırgan IP + hedef hesap özniteliği, T1110), geliştirilmiş
-  **DGA** (ünsüz-dizisi), **Sigma içe aktarma**, **YARA-tarzı içerik tarama**,
+  4625/4771 seri toplama, saldırgan IP + hedef hesap özniteliği, T1110), **başarılı
+  kaba-kuvvet / hesap ele geçirme** (başarısız-seri ardından başarılı oturum → CRITICAL),
+  geliştirilmiş **DGA** (ünsüz-dizisi), **Sigma içe aktarma**, **YARA-tarzı içerik tarama**,
   Detection-as-Code yaşam-döngüsü, **16 teknikli** MITRE kataloğu (Windows olay
   telemetrisi → ATT&CK: hizmet/görev kurulumu, hesap oluşturma, ayrıcalık, günlük
   temizleme, kod enjeksiyonu) + 14 yerleşik kural.
+- **Korelasyon bütünlüğü:** sunucu-taraflı tespitler (beacon/yanal/DNS-tüneli/kaba-kuvvet)
+  artık ajan tespitleri gibi **izlenen incident'lere** dönüşür (vaka yönetimi + filo-risk)
+  VE **çok-sinyal saldırı zincirini** besler; filo-risk incident istismar-edilebilirliğini
+  önem düzeyine göre tartar (aktif tehdit önceliği).
 - **İmzalı içerik (kurcalamaya karşı):** TÜM yüklenebilir içerik (YARA, tespit kuralı,
   IoC, anomali modeli, OTA, offline offboard, denetim dışa aktarımı) Ed25519 imzalanabilir.
 - **Alarm & teslim:** bildirim **yönlendirme + yükseltme**, **webhook HMAC imza**, sürekli
@@ -151,7 +156,9 @@ Aşağıdakiler ilk matristen sonra eklendi; hepsi test + smoke + CI yeşil.
 - **Alım (SIEM):** JSON + **CEF** + **LEEF** (QRadar) + düz **syslog** (RFC5424/3164) +
   **Windows olay günlüğü** (winlogbeat/nxlog/EVTX; EventID+kanal sınıflaması, EventData
   zenginleştirme: hedef hesap/kaynak IP/oturum türü) giden log alımı, hız sınırlama.
-  Tüm ağ-yüzeyli ayrıştırıcılar fuzz kapsamında.
+  Beş biçimin tümü olayın gerçek zaman damgasını kullanır (zaman çizelgesi doğruluğu);
+  tüm ağ-yüzeyli ayrıştırıcılar fuzz + özyineleme-derinliği koruması altında. Operatörler
+  için çevrimdışı doğrulama CLI'si (`logcheck`) ve entegrasyon kılavuzu (`docs/INGEST.md`).
 - **Ops/dayanıklılık:** **sertifika ömür-sonu izleme** (log + `/api/features` + metrik),
   **kaba-kuvvet kilidi sinyali**, genişletilmiş Prometheus metrikleri + hazır **alarm
   kuralları** (`deploy/prometheus-alerts.example.yml`), istek korelasyon kimliği + erişim logu.
