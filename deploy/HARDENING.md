@@ -54,9 +54,15 @@ BİLİNÇLİ olarak açık bırakılır. Gerekçeler birim dosyasında satır-sa
 
 ## 5. Sırlar (secrets)
 
-- Üretimde `XEMS_MASTER_KEY`, CA özel anahtarı, imzalama anahtarları ve DB kimlik
-  bilgileri düz-metin env yerine bir sır yöneticisinde (KMS / Vault / systemd
-  `LoadCredential=`) tutulmalı.
+- Üretimde `XEMS_MASTER_KEY`, `XEMS_MASTER_KEY_OLD` ve `XEMS_DATABASE_URL` düz-metin
+  env yerine DOSYA-TABANLI sır olarak verilebilir: `XEMS_MASTER_KEY_FILE=/path`
+  (env öncelikli; yoksa dosya okunur, içerik kırpılır). systemd `LoadCredential=`,
+  Docker/K8s secrets ve Vault agent bu dosyaları sağlar — böylece sır
+  `/proc/<pid>/environ` veya `ps` üzerinden sızmaz.
+  Örnek (systemd): `LoadCredential=mk:/etc/xems/master.key` +
+  `Environment=XEMS_MASTER_KEY_FILE=%d/mk`.
+- CA özel anahtarı ve imzalama anahtarları da benzer şekilde bir KMS/Vault'ta
+  tutulmalı (dosya-tabanlı erişim veya kısa-ömürlü materyal).
 - Alan-şifreleme (at-rest) + KDF zaten uygulanır; anahtar rotasyonu için keyring
   (#9) mevcuttur.
 

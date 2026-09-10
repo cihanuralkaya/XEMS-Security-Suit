@@ -62,7 +62,6 @@ func Load() (*Config, error) {
 		ListenAdmin:      getenv("XEMS_LISTEN_ADMIN", ":8445"),
 		AdminSessionTTL:  getdur("XEMS_ADMIN_SESSION_TTL", 12*time.Hour),
 		EnrollTokenTTL:   getdur("XEMS_ENROLL_TOKEN_TTL", 24*time.Hour),
-		DatabaseURL:      os.Getenv("XEMS_DATABASE_URL"),
 		CACertPath:       os.Getenv("XEMS_CA_CERT"),
 		CAKeyPath:        os.Getenv("XEMS_CA_KEY"),
 		ServerCertPath:   os.Getenv("XEMS_SERVER_CERT"),
@@ -73,9 +72,21 @@ func Load() (*Config, error) {
 		LoginLockout:     getdur("XEMS_LOGIN_LOCKOUT", 15*time.Minute),
 	}
 
-	mk := os.Getenv("XEMS_MASTER_KEY")
+	// Hassas değerler ya doğrudan env'den ya da <KEY>_FILE dosyasından okunur
+	// (systemd LoadCredential / Docker-K8s secrets / Vault agent — düz-metin env
+	// yerine dosya-tabanlı sır; bkz. deploy/HARDENING.md).
+	dbURL, err := secretEnv("XEMS_DATABASE_URL")
+	if err != nil {
+		return nil, err
+	}
+	c.DatabaseURL = dbURL
+
+	mk, err := secretEnv("XEMS_MASTER_KEY")
+	if err != nil {
+		return nil, err
+	}
 	if mk == "" {
-		return nil, fmt.Errorf("config: XEMS_MASTER_KEY zorunlu")
+		return nil, fmt.Errorf("config: XEMS_MASTER_KEY zorunlu (env veya XEMS_MASTER_KEY_FILE)")
 	}
 	key, err := base64.StdEncoding.DecodeString(mk)
 	if err != nil {
@@ -86,8 +97,12 @@ func Load() (*Config, error) {
 	}
 	c.MasterKey = key
 
-	// Eski ana anahtarlar (rotasyon örtüşmesi; opsiyonel).
-	if old := os.Getenv("XEMS_MASTER_KEY_OLD"); old != "" {
+	// Eski ana anahtarlar (rotasyon örtüşmesi; opsiyonel). Dosya-tabanlı sır da desteklenir.
+	old, err := secretEnv("XEMS_MASTER_KEY_OLD")
+	if err != nil {
+		return nil, err
+	}
+	if old != "" {
 		for _, part := range strings.Split(old, ",") {
 			part = strings.TrimSpace(part)
 			if part == "" {
@@ -124,6 +139,24 @@ func Load() (*Config, error) {
 
 	// XEMS_DATABASE_URL boşsa sunucu bellek-içi DEMO deposuyla başlar (kalıcılık yok).
 	return c, nil
+}
+
+// secretEnv, hassas bir değeri döner: <key> ayarlıysa onu; değilse <key>_FILE
+// ayarlıysa o dosyanın kırpılmış içeriğini (systemd LoadCredential / Docker-K8s
+// secrets / Vault agent gibi dosya-tabanlı sır sağlayıcıları). İkisi de yoksa boş.
+// Böylece sırlar düz-metin ortam değişkeni olarak sızmaz (proc/environ, ps).
+func secretEnv(key string) (string, error) {
+	if v := os.Getenv(key); v != "" {
+		return v, nil
+	}
+	if p := os.Getenv(key + "_FILE"); p != "" {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return "", fmt.Errorf("config: %s_FILE okunamadı: %w", key, err)
+		}
+		return strings.TrimSpace(string(b)), nil
+	}
+	return "", nil
 }
 
 func getenv(key, def string) string {
