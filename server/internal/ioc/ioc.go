@@ -25,6 +25,11 @@ package ioc
 
 import (
 	"bufio"
+	"bytes"
+	"crypto/ed25519"
+	"encoding/base64"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -100,6 +105,32 @@ func LoadFile(path string) (*Set, error) {
 	}
 	defer f.Close()
 	return Load(f)
+}
+
+// ErrBadSignature, IoC dosyası imzası doğrulanamadığında döner.
+var ErrBadSignature = errors.New("ioc: gösterge listesi imzası GEÇERSİZ — yükleme reddedildi")
+
+// LoadFileSigned, IoC göstergelerini YALNIZ Ed25519 imzası doğrulandıktan sonra
+// yükler (kurcalamaya karşı; imzalı tespit kuralı / YARA kuralı ile aynı desen).
+// Kurcalanmış bir IoC feed'i bilinen-kötü göstergeleri sessizce ÇIKARARAK tespiti
+// körleştirebilir; imza bunu önler (fail-closed). İmza `<path>.sig` içinde base64.
+func LoadFileSigned(path string, pub ed25519.PublicKey) (*Set, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	sigB64, err := os.ReadFile(path + ".sig")
+	if err != nil {
+		return nil, fmt.Errorf("ioc: imza dosyası (%s.sig) okunamadı: %w", path, err)
+	}
+	sig, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(sigB64)))
+	if err != nil {
+		return nil, fmt.Errorf("ioc: imza base64 çözülemedi: %w", err)
+	}
+	if len(pub) != ed25519.PublicKeySize || !ed25519.Verify(pub, data, sig) {
+		return nil, ErrBadSignature
+	}
+	return Load(bytes.NewReader(data))
 }
 
 // Match, olayın Details string değerleri ile göstergeleri (tam, küçük/büyük harf

@@ -216,6 +216,20 @@ func loadDetectRules(path string) ([]detect.Rule, error) {
 	return detect.LoadRulesFile(path)
 }
 
+// loadIoC, IoC gösterge dosyasını yükler; XEMS_IOC_PUBKEY ayarlıysa YALNIZ Ed25519
+// imzası doğrulanmış feed'i kabul eder (kurcalanmış feed known-bad göstergeleri
+// çıkararak tespiti körleştiremez; fail-closed).
+func loadIoC(path string) (*ioc.Set, error) {
+	if pk := os.Getenv("XEMS_IOC_PUBKEY"); pk != "" {
+		raw, err := base64.StdEncoding.DecodeString(pk)
+		if err != nil || len(raw) != ed25519.PublicKeySize {
+			return nil, fmt.Errorf("XEMS_IOC_PUBKEY geçersiz Ed25519 açık anahtar")
+		}
+		return ioc.LoadFileSigned(path, ed25519.PublicKey(raw))
+	}
+	return ioc.LoadFile(path)
+}
+
 // getdurEnv, süre biçimli bir ortam değişkenini okur (yoksa/geçersizse def).
 func getdurEnv(k string, def time.Duration) time.Duration {
 	if v := os.Getenv(k); v != "" {
@@ -465,7 +479,7 @@ func run() error {
 	// Tehdit istihbaratı (IoC): XEMS_IOC_FILE ayarlıysa bilinen-kötü göstergeler
 	// (IP/MAC/alan adı/hash/süreç) yüklenir; eşleşen olaylar KRİTİK uyarı üretir.
 	if iocPath := os.Getenv("XEMS_IOC_FILE"); iocPath != "" {
-		set, err := ioc.LoadFile(iocPath)
+		set, err := loadIoC(iocPath)
 		if err != nil {
 			return fmt.Errorf("IoC listesi yüklenemedi: %w", err)
 		}
@@ -488,7 +502,7 @@ func run() error {
 						return
 					case <-t.C:
 					}
-					ns, e := ioc.LoadFile(iocPath)
+					ns, e := loadIoC(iocPath)
 					if e != nil {
 						log.Printf("[ioc] yeniden yükleme başarısız (eski küme korunuyor): %v", e)
 						continue

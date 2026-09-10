@@ -1,6 +1,10 @@
 package ioc
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
+	"os"
 	"strings"
 	"testing"
 )
@@ -110,5 +114,32 @@ func TestMatchBackwardCompatible(t *testing.T) {
 	lbl, val, ok := set.Match(map[string]any{"ip": "1.2.3.4"}, "")
 	if !ok || lbl != "c2" || val != "1.2.3.4" {
 		t.Fatalf("Match geriye uyumlu değil: %q %q %v", lbl, val, ok)
+	}
+}
+
+func TestLoadFileSigned(t *testing.T) {
+	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+	data := []byte("1.2.3.4 c2 conf=high\nevil.com phishing\n")
+	dir := t.TempDir()
+	fp := dir + "/ioc.txt"
+	if err := os.WriteFile(fp, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(fp+".sig", []byte(base64.StdEncoding.EncodeToString(ed25519.Sign(priv, data))), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	set, err := LoadFileSigned(fp, pub)
+	if err != nil {
+		t.Fatalf("geçerli imza yüklenmeli: %v", err)
+	}
+	if set.Size() != 2 {
+		t.Fatalf("2 gösterge beklenirdi, %d", set.Size())
+	}
+	// Kurcalama reddedilmeli.
+	if err := os.WriteFile(fp, append(data, ' '), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadFileSigned(fp, pub); err != ErrBadSignature {
+		t.Fatalf("kurcalama ErrBadSignature vermeli, %v", err)
 	}
 }
