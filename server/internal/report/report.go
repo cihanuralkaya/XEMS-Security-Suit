@@ -27,6 +27,7 @@ type Incident struct {
 // makine-okunur rapor (?format=json) için; html/template alan adlarını kullanır.
 type Data struct {
 	GeneratedAt        time.Time      `json:"generated_at"`
+	SchemaVersion      string         `json:"schema_version,omitempty"`
 	Title              string         `json:"title"`
 	DevicesTotal       int            `json:"devices_total"`
 	DevicesOnline      int            `json:"devices_online"`

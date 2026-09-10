@@ -578,6 +578,7 @@ func run() error {
 		"cluster_enabled":       clusterOn,
 		"wipe_dual_control":     wipeDual,
 		"tenant_id":             cfg.TenantID,
+		"event_schema_version":  model.EventSchemaVersion,
 	})
 	if cfg.TenantID != "default" {
 		log.Printf("kiracı (tenant): %s", cfg.TenantID)

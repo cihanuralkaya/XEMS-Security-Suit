@@ -1044,7 +1044,7 @@ func (s *Server) buildReportData(r *http.Request) (report.Data, error) {
 	incs, _ := s.reader.Incidents(r.Context(), 20)
 	c := metrics.Counters()
 	d := report.Data{
-		GeneratedAt: s.now(), Title: "Güvenlik Duruş Raporu",
+		GeneratedAt: s.now(), SchemaVersion: model.EventSchemaVersion, Title: "Güvenlik Duruş Raporu",
 		DevicesTotal: sum.DevicesTotal, DevicesOnline: sum.DevicesOnline, DevicesOffline: sum.DevicesOffline,
 		DevicesQuarantined: sum.DevicesQuarantined, NonCompliant: sum.NonCompliantDevices,
 		EventsBySeverity: sum.EventsBySeverity, DevicesByOS: sum.DevicesByOS,
