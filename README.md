@@ -254,3 +254,23 @@ and the decisions taken in response are in [docs/threat-model.md](docs/threat-mo
 For external log ingest integration, see [docs/INGEST.md](docs/INGEST.md); for ONNX
 model integration, see [docs/ONNX.md](docs/ONNX.md); for kernel-level tamper-protection
 design, see [docs/KERNEL-TAMPER.md](docs/KERNEL-TAMPER.md).
+
+## Lisans / License
+
+Bu proje **Apache License 2.0** ile lisanslanmıştır — bkz. [LICENSE](LICENSE) ve
+[NOTICE](NOTICE). Üçüncü taraf bileşenlerin lisansları
+[docs/THIRD_PARTY_LICENSES.md](docs/THIRD_PARTY_LICENSES.md) içindedir.
+
+This project is licensed under the **Apache License 2.0** — see [LICENSE](LICENSE) and
+[NOTICE](NOTICE). Third-party component licenses are listed in
+[docs/THIRD_PARTY_LICENSES.md](docs/THIRD_PARTY_LICENSES.md).
+
+```
+Copyright 2026 Cihan Uralkaya
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+```
