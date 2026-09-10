@@ -53,6 +53,7 @@ import (
 	"xems.corp/suite/agent/internal/resource"
 	"xems.corp/suite/agent/internal/script"
 	"xems.corp/suite/agent/internal/standdown"
+	"xems.corp/suite/agent/internal/tamperprotect"
 	"xems.corp/suite/agent/internal/transport"
 	"xems.corp/suite/agent/internal/update"
 	"xems.corp/suite/agent/internal/usbmon"
@@ -440,6 +441,25 @@ func run() error {
 	osVersion := osinfo.Version() // okunabilir OS sürümü (bir kez; Windows'ta exec)
 	buf.Add(collector.Event{Category: "SYSTEM", Severity: "INFO", Message: "ajan başladı", OccurredAt: time.Now(),
 		Details: map[string]any{"os": runtime.GOOS, "os_version": osVersion, "arch": runtime.GOARCH, "agent_version": agentVersion, "hostname": hostname}})
+
+	// Kurcalama-koruma duruşu (SECURITY görünürlüğü): hangi savunmalar aktif ve çekirdek
+	// koruma sürücüsü mevcut mu (bkz. docs/KERNEL-TAMPER.md — gerçek sürücü ayrı C/C++
+	// projesidir; bu depoda userland savunma-derinliği sevk edilir). Savunmacı, uç noktanın
+	// koruma seviyesini (none/userland/kernel) tek bir olayda görür.
+	kdPresent, kdName := tamperprotect.KernelDriverProbe()
+	posture := tamperprotect.Assess(tamperprotect.Defenses{
+		Watchdog:   cfg.watchdogBin != "",
+		Liveness:   cfg.watchdogBin != "",
+		FIM:        len(splitCSV(os.Getenv("XEMS_FIM_PATHS"))) > 0,
+		SelfAttest: selfHash != "",
+		SignedOTA:  os.Getenv("XEMS_UPDATE_PUBKEY") != "",
+	}, kdPresent, kdName)
+	postureSev := "INFO"
+	if posture.Level == "none" {
+		postureSev = "LOW" // hiç kurcalama koruması yok → güvenlik-duruşu uyarısı
+	}
+	buf.Add(collector.Event{Category: "SECURITY", Severity: postureSev, Message: posture.Summary, OccurredAt: time.Now(),
+		Details: map[string]any{"tamper_level": posture.Level, "userland": posture.Userland, "kernel_driver": posture.KernelDriver}})
 
 	// Uyum durumu: başlangıçta disk şifreleme kontrol edilir ve raporlanır. Şifreleme
 	// KAPALIYSA güvenlik-duruşu ihlali (SECURITY/MEDIUM); açık/bilinmiyor bilgi amaçlı.

@@ -191,7 +191,11 @@ memstore ona eşitlendi + regresyon testi (`TestLookupAdminExcludesDeactivated`)
 
 - **Kernel-seviye tamper koruması** (MiniFilter sürücüsü + PPL/ELAM): C/C++, EV
   sertifikası, WHQL/attestation imzalama, BSOD riski — Go kod tabanının dışında,
-  çok yüksek maliyetli **ayrı proje**. Watchdog + liveness yalnız **ilk savunma**.
+  çok yüksek maliyetli **ayrı proje** (tasarım + Go-tarafı arayüz: `docs/KERNEL-TAMPER.md`).
+  Userland savunma-derinliği (watchdog + çift-süreç canlılık + FIM + öz-tasdik + imzalı OTA)
+  **ilk savunma** olarak sevk edilir; `agent/internal/tamperprotect` koruma DURUŞUNU
+  (none/userland/kernel) değerlendirip başlangıçta SECURITY olayı olarak raporlar ve gelecek
+  sürücüyü otomatik algılayan bir seam sağlar (sürücü kurulursa kod değişikliği gerekmez).
 - **Canlı çalıştırılmayanlar** (mantık test edildi, ama bu ortamda çalıştırılmadı):
   - PostgreSQL'e karşı gerçek sorgular: bu makinede Postgres/Docker olmadığından
     yerelde çalıştırılmadı; **ancak CI'da `postgres:16` servisine karşı GEÇTİ**
