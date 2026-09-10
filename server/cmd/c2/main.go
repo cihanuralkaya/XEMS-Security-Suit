@@ -717,6 +717,31 @@ func run() error {
 		}
 	}()
 
+	// Zamanlanmış/sürekli tehdit-avı: XEMS_HUNT_INTERVAL ayarlıysa (ör. 15m) kayıtlı
+	// aramalar periyodik olarak SON ARALIK penceresinde çalıştırılır; yeni eşleşme
+	// bulan aramalar loglanır (JSON log → SIEM sürekli-tespit). 0/boş = kapalı.
+	if hi := getdurEnv("XEMS_HUNT_INTERVAL", 0); hi > 0 {
+		go func() {
+			t := time.NewTicker(hi)
+			defer t.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+				}
+				hits, err := readSvc.RunSavedSearches(ctx, time.Now().Add(-hi))
+				if err != nil {
+					continue
+				}
+				for _, h := range hits {
+					log.Printf("[hunt] kayıtlı arama %q son %s içinde %d olayla eşleşti", h.Name, hi, h.Count)
+				}
+			}
+		}()
+		log.Printf("zamanlanmış tehdit-avı etkin: kayıtlı aramalar her %s", hi)
+	}
+
 	// C2 beacon tespiti (#8): periyodik olarak netconn geçmişini analiz eder;
 	// düzenli-aralıklı (düşük-jitter) (cihaz, uzak-IP) çiftlerini olası C2 beacon
 	// olarak işaretler — bilinen IoC olmadan bilinmeyen C2'yi yakalar. Aynı çift

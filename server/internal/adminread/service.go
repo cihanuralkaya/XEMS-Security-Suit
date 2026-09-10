@@ -691,6 +691,58 @@ func (s *Service) IncidentTimeline(ctx context.Context, incidentID string) (Inci
 	return IncidentTimelineDTO{Incident: inc, Events: events}, true, nil
 }
 
+// SavedSearchHit, zamanlanmış bir hunt çalıştırmasında eşleşme bulan kayıtlı aramadır.
+type SavedSearchHit struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+}
+
+// parseSavedFilter, bir kayıtlı-arama filtresi JSON'unu (hunt isteği biçimi) bir
+// EventFilter'a çevirir; Since ZORUNLU olarak override edilir (sürekli-hunt penceresi).
+// SAF/testli — kayıtlı aramanın kendi since/until/mode alanları yok sayılır.
+func parseSavedFilter(filterJSON string, since time.Time) (EventFilter, error) {
+	var q struct {
+		DeviceID        string `json:"device_id"`
+		Severity        string `json:"severity"`
+		Category        string `json:"category"`
+		MessageContains string `json:"message_contains"`
+		Limit           int    `json:"limit"`
+	}
+	if err := json.Unmarshal([]byte(filterJSON), &q); err != nil {
+		return EventFilter{}, err
+	}
+	return EventFilter{
+		DeviceID: q.DeviceID, Severity: q.Severity, Category: q.Category,
+		MessageContains: q.MessageContains, Since: since, Limit: q.Limit,
+	}, nil
+}
+
+// RunSavedSearches, tüm kayıtlı aramaları verilen `since` anından itibaren çalıştırır
+// (sürekli/zamanlanmış tehdit-avı) ve eşleşme bulanları döner. Ayrıştırılamayan
+// filtre atlanır (bir bozuk arama diğerlerini durdurmaz). Mevcut depo yüzeyini kullanır.
+func (s *Service) RunSavedSearches(ctx context.Context, since time.Time) ([]SavedSearchHit, error) {
+	rows, err := s.store.ListSavedSearches(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var hits []SavedSearchHit
+	for _, r := range rows {
+		f, err := parseSavedFilter(r.Filter, since)
+		if err != nil {
+			continue
+		}
+		evs, err := s.QueryEvents(ctx, f)
+		if err != nil {
+			continue
+		}
+		if len(evs) > 0 {
+			hits = append(hits, SavedSearchHit{ID: r.ID, Name: r.Name, Count: len(evs)})
+		}
+	}
+	return hits, nil
+}
+
 // AdminBehavior, ayrıcalıklı-kullanıcı (yönetici) davranış analitiğini denetim
 // izinden hesaplar (UEBA): yıkıcı-eylem serisi / yüksek yıkıcı oran anomalileri.
 // Mevcut audit_log'u kullanır; yeni depo sorgusu yok.
