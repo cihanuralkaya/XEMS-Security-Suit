@@ -217,6 +217,8 @@ curl -sk "$B/api/incidents/does-not-exist/timeline" -H "Authorization: Bearer $T
 # Zamanlanmış/dışa aktarılabilir rapor (#7): duruş raporu HTML üretimi.
 curl -sk "$B/api/report" -H "Authorization: Bearer $TOK" | grep -q "XEMS Security Suite" \
   && pass "/api/report duruş raporu üretti" || fail "/api/report başarısız"
+curl -sk "$B/api/report?format=json" -H "Authorization: Bearer $TOK" | grep -q '"devices_total"' \
+  && pass "/api/report?format=json makine-okunur rapor üretti" || fail "/api/report json başarısız"
 curl -sk "$B/api/coverage" -H "Authorization: Bearer $TOK" | grep -q "coverage_pct" \
   && pass "/api/coverage filo kapsamı döndü" || fail "/api/coverage başarısız"
 curl -sk "$B/api/risk" -H "Authorization: Bearer $TOK" | grep -q "fleet_score" \

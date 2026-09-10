@@ -1066,10 +1066,15 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request, _ string) 
 	if respondErr(w, err) {
 		return
 	}
-	if r.URL.Query().Get("format") == "csv" {
+	switch r.URL.Query().Get("format") {
+	case "csv":
 		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 		w.Header().Set("Content-Disposition", `attachment; filename="xems-report.csv"`)
 		_, _ = w.Write([]byte(report.RenderCSV(d)))
+		return
+	case "json":
+		// Makine-okunur rapor (otomasyon / zamanlanmış raporlama / SIEM).
+		writeJSON(w, http.StatusOK, d)
 		return
 	}
 	html, err := report.RenderHTML(d)

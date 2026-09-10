@@ -16,29 +16,30 @@ import (
 
 // Incident, rapordaki özet bir korelasyon olayıdır.
 type Incident struct {
-	DeviceID string
-	RuleID   string
-	Severity string
-	Count    int
-	LastSeen time.Time
+	DeviceID string    `json:"device_id"`
+	RuleID   string    `json:"rule_id"`
+	Severity string    `json:"severity"`
+	Count    int       `json:"count"`
+	LastSeen time.Time `json:"last_seen"`
 }
 
-// Data, raporun girdisidir (çağıran adminread/metrics'ten doldurur).
+// Data, raporun girdisidir (çağıran adminread/metrics'ten doldurur). JSON etiketleri
+// makine-okunur rapor (?format=json) için; html/template alan adlarını kullanır.
 type Data struct {
-	GeneratedAt        time.Time
-	Title              string
-	DevicesTotal       int
-	DevicesOnline      int
-	DevicesOffline     int
-	DevicesQuarantined int
-	NonCompliant       int
-	EventsBySeverity   map[string]int
-	DevicesByOS        map[string]int
-	TopIncidents       []Incident
-	Detections         int64
-	AlertsRaised       int64
-	AlertsSuppressed   int64
-	IocHits            int64
+	GeneratedAt        time.Time      `json:"generated_at"`
+	Title              string         `json:"title"`
+	DevicesTotal       int            `json:"devices_total"`
+	DevicesOnline      int            `json:"devices_online"`
+	DevicesOffline     int            `json:"devices_offline"`
+	DevicesQuarantined int            `json:"devices_quarantined"`
+	NonCompliant       int            `json:"non_compliant"`
+	EventsBySeverity   map[string]int `json:"events_by_severity"`
+	DevicesByOS        map[string]int `json:"devices_by_os"`
+	TopIncidents       []Incident     `json:"top_incidents"`
+	Detections         int64          `json:"detections"`
+	AlertsRaised       int64          `json:"alerts_raised"`
+	AlertsSuppressed   int64          `json:"alerts_suppressed"`
+	IocHits            int64          `json:"ioc_hits"`
 }
 
 var htmlTmpl = template.Must(template.New("report").Funcs(template.FuncMap{
