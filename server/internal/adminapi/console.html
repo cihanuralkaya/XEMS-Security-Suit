@@ -419,6 +419,8 @@
         <div id="fw-list" style="display:flex;flex-direction:column;gap:5px"></div>
         <div class="lbl" style="margin:10px 0 4px">Tespit/Yanıt süreleri</div>
         <div id="trend-summary" class="mono" style="font-size:12px;color:var(--muted)"></div>
+        <div class="lbl" style="margin:10px 0 4px">Yönetici davranışı (UEBA)</div>
+        <div id="ueba-summary" style="display:flex;flex-direction:column;gap:4px"></div>
       </div>
     </div>
 
@@ -1630,7 +1632,7 @@
       renderStats(); renderSeverity(); renderOSInventory(); renderTopDevices(); renderComplianceCard(); renderTactics(); renderDevices(); renderEvents(); renderAudit();
       renderTokens(); renderAdmins(); renderPolicies(); setLive(true);
       loadActivity(); loadPendingWipes(); loadIncidents(); loadCoverage();
-      loadRisk(); loadFrameworks(); loadTrends();
+      loadRisk(); loadFrameworks(); loadTrends(); loadUeba();
       if(state.sel) loadDetail(state.sel);
     }).catch(function(e){ setLive(false); });
   }
@@ -1978,6 +1980,21 @@
       var mttd=Math.round(r.mttd_seconds||0), mttr=Math.round(r.mttr_seconds||0);
       el.textContent="MTTD ~"+riskDur(mttd)+" ("+(r.detect_n||0)+" örnek) · MTTR ~"+riskDur(mttr)+" ("+(r.respond_n||0)+" örnek) · son "+(r.window_days||7)+" gün";
     }).catch(function(){ el.textContent="—"; });
+  }
+  // loadUeba: ayrıcalıklı-kullanıcı (yönetici) davranış anomalileri (UEBA). Bulgu
+  // varsa gösterir; yoksa "anomali yok". Sonuç kullanıcı-görünür → esc().
+  function loadUeba(){
+    var el=$("ueba-summary"); if(!el) return;
+    return api("/api/ueba/admins").then(function(r){
+      var f=(r&&r.findings)||[], profs=(r&&r.profiles)||[];
+      if(!f.length){ el.innerHTML="<span class='hint'>✓ "+profs.length+" yönetici · anomali yok</span>"; return; }
+      el.innerHTML=f.map(function(x){
+        return "<div style='display:flex;align-items:baseline;gap:8px;font-size:12px'>"+
+          "<span class='sev "+esc(x.severity||"")+"'>"+esc(x.severity||"")+"</span>"+
+          "<span style='min-width:120px'>"+esc(x.admin||"")+"</span>"+
+          "<span class='hint' style='flex:1'>"+esc(x.reason||"")+"</span></div>";
+      }).join("");
+    }).catch(function(){ el.innerHTML="<span class='hint'>—</span>"; });
   }
   // loadIncidents: korelasyonla gruplanmış olayları (incident) yükler. Sonuç
   // kullanıcı-görünür HTML olduğundan tüm alanlar esc()'ten geçer.
