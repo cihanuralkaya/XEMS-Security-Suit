@@ -53,6 +53,9 @@ fi
 echo "[2/6] PKI + sunucuyu başlat ($MODE)"
 "$WORK/gencerts$EXT" -out "$WORK/pki" -name xems-c2 >/dev/null
 MASTER_KEY="$(openssl rand -base64 32 2>/dev/null || head -c32 /dev/urandom | base64)"
+# base64 çıktısındaki olası satır-sonu/boşlukları temizle (bazı platformlarda base64
+# 76 sütunda kırar / CRLF ekler → config base64-çözme hatası). Güvenli tek-satır anahtar.
+MASTER_KEY="$(printf '%s' "$MASTER_KEY" | tr -d '[:space:]')"
 COMMON_ENV=(
   "XEMS_MASTER_KEY=$MASTER_KEY"
   "XEMS_CA_CERT=$WORK/pki/ca.crt" "XEMS_CA_KEY=$WORK/pki/ca.key"
