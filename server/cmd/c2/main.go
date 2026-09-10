@@ -364,6 +364,16 @@ func run() error {
 		corrWindow = d
 	}
 	agentHandler.SetCorrelator(correlate.New(corrWindow, backend))
+	// Sunucu-taraflı korelatör: arka plan analizörlerinin (beacon, yanal hareket,
+	// DNS-tüneli, kaba-kuvvet) tespitleri de İZLENEN incident'lere dönüşsün — böylece
+	// vaka yönetimi (sorumlu/not) ve filo-risk bunları görür (yalnız olay+alarm değil).
+	// Ajan yolundan ayrı bir örnek (anahtar çakışmasını önler).
+	srvCorr := correlate.New(corrWindow, backend)
+	trackIncident := func(dev, ruleID, tech, sev, msg string, at time.Time) {
+		if dev != "" {
+			_, _ = srvCorr.Observe(ctx, dev, ruleID, tech, sev, msg)
+		}
+	}
 	// Çok-sinyal korelasyon: aynı cihazda XEMS_CHAIN_WINDOW (varsayılan 15dk) içinde
 	// XEMS_CHAIN_THRESHOLD (varsayılan 3) FARKLI kill-chain sinyali birikirse
 	// yüksek-güvenli saldırı-zinciri uyarısı üretilir. 0 eşik → kapalı.
@@ -849,6 +859,7 @@ func run() error {
 						socAlerter.Notify(notify.Alert{DeviceID: f.DeviceID, Category: "SECURITY", Severity: "HIGH",
 							Message: ev.Message, OccurredAt: ev.OccurredAt, TechniqueID: "T1071",
 							TechniqueName: "Application Layer Protocol", Tactic: "Command and Control"})
+						trackIncident(f.DeviceID, "SRV-BEACON", "T1071", ev.Severity, ev.Message, ev.OccurredAt)
 						log.Printf("[beacon] cihaz %s: %s", f.DeviceID, ev.Message)
 					}
 				}
@@ -875,6 +886,7 @@ func run() error {
 						socAlerter.Notify(notify.Alert{DeviceID: f.DeviceID, Category: "SECURITY", Severity: "HIGH",
 							Message: ev.Message, OccurredAt: ev.OccurredAt, TechniqueID: "T1046",
 							TechniqueName: "Network Service Discovery", Tactic: "Discovery"})
+						trackIncident(f.DeviceID, "SRV-LATERAL", "T1046", ev.Severity, ev.Message, ev.OccurredAt)
 						log.Printf("[lateral] cihaz %s: %s", f.DeviceID, ev.Message)
 					}
 				}
@@ -942,6 +954,7 @@ func run() error {
 						socAlerter.Notify(notify.Alert{DeviceID: f.DeviceID, Category: "SECURITY", Severity: "HIGH",
 							Message: ev.Message, OccurredAt: ev.OccurredAt, TechniqueID: "T1071.004",
 							TechniqueName: "DNS", Tactic: "Command and Control"})
+						trackIncident(f.DeviceID, "SRV-DNSTUNNEL", "T1071.004", ev.Severity, ev.Message, ev.OccurredAt)
 						log.Printf("[dnstunnel] cihaz %s: %s", f.DeviceID, ev.Message)
 					}
 				}
@@ -1038,6 +1051,7 @@ func run() error {
 						socAlerter.Notify(notify.Alert{DeviceID: f.DeviceID, Category: "SECURITY", Severity: "HIGH",
 							Message: ev.Message, OccurredAt: ev.OccurredAt, TechniqueID: "T1110",
 							TechniqueName: "Brute Force", Tactic: "Credential Access"})
+						trackIncident(f.DeviceID, "SRV-BRUTEFORCE", "T1110", ev.Severity, ev.Message, ev.OccurredAt)
 						log.Printf("[bruteforce] cihaz %s: %s", f.DeviceID, ev.Message)
 					}
 				}
@@ -1067,6 +1081,7 @@ func run() error {
 						socAlerter.Notify(notify.Alert{DeviceID: f.DeviceID, Category: "SECURITY", Severity: "CRITICAL",
 							Message: ev.Message, OccurredAt: ev.OccurredAt, TechniqueID: "T1110",
 							TechniqueName: "Brute Force", Tactic: "Credential Access"})
+						trackIncident(f.DeviceID, "SRV-BFSUCCESS", "T1110", ev.Severity, ev.Message, ev.OccurredAt)
 						log.Printf("[bruteforce] cihaz %s (BAŞARILI): %s", f.DeviceID, ev.Message)
 					}
 				}
