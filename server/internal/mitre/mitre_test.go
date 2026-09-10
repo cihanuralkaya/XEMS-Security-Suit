@@ -15,6 +15,15 @@ func TestClassify(t *testing.T) {
 		{"SECURITY", "anomali: olağandışı süreç davranışı: x.exe", "T1055", true},
 		{"SECURITY", "watchdog kurcalama tespit edildi", "T1562", true},
 		{"SECURITY", "tanımsız güvenlik olayı", "T1562", true}, // default
+		// Genişletilmiş kapsam:
+		{"POLICY_VIOLATION", "yeni kalıcılık girdisi: Run key", "T1547", true},
+		{"NETWORK_CONN", "giden bağlantı: 1.2.3.4:443", "T1071", true},
+		{"SECURITY", "DGA-şüpheli DNS sorgusu: xjq.com", "T1071", true},
+		{"SECURITY", "IoC eşleşmesi [bad] 1.2.3.4", "T1071", true},
+		{"SECURITY", "DLP: hassas veri tespit edildi", "T1048", true},
+		{"SECURITY", "içerik-tarama eşleşmesi (R1): /tmp/x", "T1105", true},
+		{"SECURITY", "dosya bütünlüğü değişikliği (deleted): /etc/passwd", "T1070", true},
+		{"SECURITY", "ajan öz-tasdik ihlali", "T1562", true},
 		{"SYSTEM", "ajan başladı", "", false},
 		{"AGENT_UPDATE", "güncellendi", "", false},
 	}

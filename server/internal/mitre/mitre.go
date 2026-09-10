@@ -24,6 +24,12 @@ var (
 	tSupplyChain     = Technique{ID: "T1195", Name: "Supply Chain Compromise", Tactic: "Initial Access"}
 	tNetworkDiscover = Technique{ID: "T1046", Name: "Network Service Discovery", Tactic: "Discovery"}
 	tProcInjection   = Technique{ID: "T1055", Name: "Process Injection", Tactic: "Defense Evasion"}
+	// Genişletilmiş kapsam (sistemin ürettiği yeni olay türleri):
+	tAutostart     = Technique{ID: "T1547", Name: "Boot or Logon Autostart Execution", Tactic: "Persistence"}
+	tAppLayerC2    = Technique{ID: "T1071", Name: "Application Layer Protocol", Tactic: "Command and Control"}
+	tExfilAltProto = Technique{ID: "T1048", Name: "Exfiltration Over Alternative Protocol", Tactic: "Exfiltration"}
+	tIndicatorRem  = Technique{ID: "T1070", Name: "Indicator Removal", Tactic: "Defense Evasion"}
+	tIngressTool   = Technique{ID: "T1105", Name: "Ingress Tool Transfer", Tactic: "Command and Control"}
 )
 
 // Catalog, sistemin eşleyebildiği tekniklerin tam listesini (kapsama matrisi)
@@ -36,6 +42,11 @@ func Catalog() []Technique {
 		tExecutionScript, // T1059
 		tUserExecution,   // T1204
 		tImpairDefenses,  // T1562
+		tAutostart,       // T1547
+		tAppLayerC2,      // T1071
+		tExfilAltProto,   // T1048
+		tIndicatorRem,    // T1070
+		tIngressTool,     // T1105
 	}
 }
 
@@ -47,11 +58,31 @@ func Classify(category, message string) (Technique, bool) {
 	switch category {
 	case "NETWORK_DISCOVERY":
 		return tNetworkDiscover, true
+	case "NETWORK_CONN":
+		// Giden bağlantı telemetrisi → uygulama-katmanı C2 kanalı bağlamı.
+		return tAppLayerC2, true
 	case "POLICY_VIOLATION":
-		// Yasaklı/yetkisiz süreç yürütmesi tespiti.
+		// Kalıcılık (autostart) girdisi mi, yoksa yasaklı süreç yürütmesi mi?
+		if strings.Contains(m, "kalıcılık") || strings.Contains(m, "persistence") ||
+			strings.Contains(m, "autostart") || strings.Contains(m, "run key") ||
+			strings.Contains(m, "cron") || strings.Contains(m, "systemd") ||
+			strings.Contains(m, "zamanlanmış görev") || strings.Contains(m, "scheduled task") {
+			return tAutostart, true
+		}
 		return tUserExecution, true
 	case "SECURITY":
 		switch {
+		case strings.Contains(m, "dlp") || strings.Contains(m, "hassas veri") ||
+			strings.Contains(m, "veri sızıntısı") || strings.Contains(m, "exfil"):
+			return tExfilAltProto, true // veri sızdırma (DLP)
+		case strings.Contains(m, "dga") || strings.Contains(m, "beacon") ||
+			strings.Contains(m, "ioc eşleşmesi") || strings.Contains(m, "periyodik") ||
+			strings.Contains(m, "c2"):
+			return tAppLayerC2, true // C2 / beacon / IoC
+		case strings.Contains(m, "içerik-tarama") || strings.Contains(m, "yara"):
+			return tIngressTool, true // bilinen-kötü içerik (dışarıdan getirilen araç)
+		case strings.Contains(m, "dosya bütünlüğü") || strings.Contains(m, "fim"):
+			return tIndicatorRem, true // dosya kurcalama/silme (iz temizleme)
 		case strings.Contains(m, "güncelleme"): // sahte/bozuk OTA reddi
 			return tSupplyChain, true
 		case strings.Contains(m, "script"): // imzasız/sahte script reddi
@@ -59,7 +90,8 @@ func Classify(category, message string) (Technique, bool) {
 		case strings.Contains(m, "anomali"): // olağandışı süreç davranışı
 			return tProcInjection, true
 		case strings.Contains(m, "kurcalama") || strings.Contains(m, "tamper") ||
-			strings.Contains(m, "watchdog") || strings.Contains(m, "karantina"):
+			strings.Contains(m, "watchdog") || strings.Contains(m, "karantina") ||
+			strings.Contains(m, "öz-tasdik") || strings.Contains(m, "devre dışı"):
 			return tImpairDefenses, true
 		default:
 			// Sınıflandırılamayan SECURITY olayı: savunma-etkisizleştirme varsay.
