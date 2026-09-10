@@ -35,7 +35,15 @@ var (
 	clusterFallback  atomic.Int64
 	chainFired       atomic.Int64 // çok-sinyal yüksek-güvenli saldırı zinciri tetiklemeleri
 	lastIngestUnix   atomic.Int64 // son olay-alımının Unix saniyesi (boru-hattı canlılığı)
+	lateralMovement  atomic.Int64 // yanal-hareket (netconn fan-out) tespitleri
+	savedSearchHits  atomic.Int64 // zamanlanmış kayıtlı-arama eşleşmeleri
 )
+
+// certExpiryDays, CA+sunucu sertifikalarının EN AZ kalan günü (gauge). Sentinel 9999
+// = henüz ayarlanmadı (ops alarmını tetiklemez).
+var certExpiryDays atomic.Int64
+
+func init() { certExpiryDays.Store(9999) }
 
 // buildVersion, xems_build_info etiketinde raporlanan sürümdür.
 var buildVersion = "dev"
@@ -66,6 +74,8 @@ func Counters() map[string]int64 {
 		"cluster_received":  clusterReceived.Load(),
 		"cluster_fallback":  clusterFallback.Load(),
 		"chain_fired":       chainFired.Load(),
+		"lateral_movement":  lateralMovement.Load(),
+		"saved_search_hits": savedSearchHits.Load(),
 	}
 }
 
@@ -87,6 +97,19 @@ func AddEventsIngested(n int) {
 
 // IncChainFired, çok-sinyal yüksek-güvenli saldırı-zinciri tetikleme sayacını artırır.
 func IncChainFired() { chainFired.Add(1) }
+
+// IncLateralMovement, yanal-hareket (netconn fan-out) tespit sayacını artırır.
+func IncLateralMovement() { lateralMovement.Add(1) }
+
+// AddSavedSearchHits, zamanlanmış kayıtlı-arama eşleşme sayacını artırır.
+func AddSavedSearchHits(n int) {
+	if n > 0 {
+		savedSearchHits.Add(int64(n))
+	}
+}
+
+// SetCertExpiryDays, CA+sunucu sertifikalarının EN AZ kalan gününü (gauge) ayarlar.
+func SetCertExpiryDays(d int) { certExpiryDays.Store(int64(d)) }
 
 // AddDetections, kural-eşleşmeli tespit sayacını artırır (sunucu-taraflı motor).
 func AddDetections(n int) {
@@ -175,6 +198,20 @@ func Write(w io.Writer, s Snapshot) {
 	fmt.Fprintf(w, "# HELP xems_chain_fired_total Çok-sinyal yüksek-güvenli saldırı zinciri tetiklemeleri.\n")
 	fmt.Fprintf(w, "# TYPE xems_chain_fired_total counter\n")
 	fmt.Fprintf(w, "xems_chain_fired_total %d\n", chainFired.Load())
+
+	fmt.Fprintf(w, "# HELP xems_lateral_movement_total Yanal-hareket (netconn fan-out) tespitleri.\n")
+	fmt.Fprintf(w, "# TYPE xems_lateral_movement_total counter\n")
+	fmt.Fprintf(w, "xems_lateral_movement_total %d\n", lateralMovement.Load())
+
+	fmt.Fprintf(w, "# HELP xems_saved_search_hits_total Zamanlanmış kayıtlı-arama eşleşmeleri.\n")
+	fmt.Fprintf(w, "# TYPE xems_saved_search_hits_total counter\n")
+	fmt.Fprintf(w, "xems_saved_search_hits_total %d\n", savedSearchHits.Load())
+
+	// Sertifika ömrü (gauge): CA+sunucu sertifikalarının EN AZ kalan günü. Prometheus
+	// alarmı için ideal (ör. < 14 → uyarı). Negatif = süresi dolmuş.
+	fmt.Fprintf(w, "# HELP xems_cert_expiry_days CA/sunucu sertifikalarının en az kalan günü.\n")
+	fmt.Fprintf(w, "# TYPE xems_cert_expiry_days gauge\n")
+	fmt.Fprintf(w, "xems_cert_expiry_days %d\n", certExpiryDays.Load())
 
 	// Boru-hattı canlılığı: son olay-alımından bu yana geçen saniye. Uzun süre
 	// artıyorsa ajan/alım yolu durmuş olabilir (ops alarmı için ideal gauge).

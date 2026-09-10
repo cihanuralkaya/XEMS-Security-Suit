@@ -626,6 +626,8 @@ func run() error {
 		}
 	}
 
+	metrics.SetCertExpiryDays(certMinDays)
+
 	// Dağıtım koruma-duruşu (admin görünürlüğü: /api/features + konsol sistem kartı).
 	adminAPI.SetFeatures(map[string]any{
 		"alerting_enabled":      alertingOn,
@@ -745,6 +747,7 @@ func run() error {
 					continue
 				}
 				for _, h := range hits {
+					metrics.AddSavedSearchHits(h.Count)
 					log.Printf("[hunt] kayıtlı arama %q son %s içinde %d olayla eşleşti", h.Name, hi, h.Count)
 				}
 			}
@@ -821,6 +824,7 @@ func run() error {
 						continue
 					}
 					alerted[key] = true
+					metrics.IncLateralMovement()
 					ev := model.Event{
 						Category: "SECURITY", Severity: "HIGH",
 						Message: fmt.Sprintf("olası yanal hareket: %s içinde %d farklı iç hedefe bağlantı",
