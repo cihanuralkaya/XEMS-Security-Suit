@@ -36,12 +36,13 @@ type ProcessController interface {
 // Monitor, tek bir değerlendirme turunu yürütür. Motor ajan tarafında sıcak
 // değiştirildiğinden, geçerli motor her turda Tick'e verilir.
 type Monitor struct {
-	ctrl     ProcessController
-	clock    *agentclock.Clock
-	buf      *collector.Buffer
-	self     uint32 // ajanın kendi PID'i — asla sonlandırılmaz
-	detector *anomaly.Detector
-	flagged  map[uint32]bool // anomali bildirilen PID'ler (tur-arası tekrar bastırma)
+	ctrl      ProcessController
+	clock     *agentclock.Clock
+	buf       *collector.Buffer
+	self      uint32 // ajanın kendi PID'i — asla sonlandırılmaz
+	detector  *anomaly.Detector
+	flagged   map[uint32]bool // anomali bildirilen PID'ler (tur-arası tekrar bastırma)
+	auditOnly bool            // denetim modu: yasaklıları TESPİT et + olay üret, SONLANDIRMA
 	// Süreç-yürütme telemetrisi (EDR görünürlüğü): yeni süreçler PROCESS olayı
 	// olarak yayınlanır. İlk turda taban çizgisi sessizce alınır (açılış selini
 	// önlemek için); sonraki turlarda yalnız YENİ süreçler bildirilir.
@@ -62,6 +63,12 @@ func (m *Monitor) SetAnomalyDetector(d *anomaly.Detector) { m.detector = d }
 // SetProcessTelemetry, süreç-yürütme telemetrisini açar/kapatır (varsayılan kapalı;
 // ajan main açar). Açıkken her turda yeni süreçler PROCESS/INFO olayı üretir.
 func (m *Monitor) SetProcessTelemetry(on bool) { m.procTelemetry = on }
+
+// SetAuditOnly, DENETİM (audit) modunu açar: yasaklı süreçler tespit edilip olay
+// üretilir ANCAK sonlandırılmaz (Kill çağrılmaz). Operatör, gerçek engellemeyi açmadan
+// önce enforcement politikasını canlıda güvenle doğrulayabilir — gerçek EDR'lerdeki
+// "audit vs block" modu. Varsayılan kapalı (gerçek sonlandırma).
+func (m *Monitor) SetAuditOnly(on bool) { m.auditOnly = on }
 
 // emitProcessTelemetry, bir önceki tura göre YENİ süreçleri PROCESS olayı olarak
 // yayınlar. İlk tur taban çizgisidir (yayın yok). Ölü PID'ler budanır (PID
@@ -145,6 +152,20 @@ func (m *Monitor) Tick(engine *policy.Engine) (int, error) {
 			dec = engine.EvaluateAlways(target)
 		}
 		if !dec.Blocked {
+			continue
+		}
+
+		// DENETİM MODU: yasaklıyı tespit et + olay üret ama SONLANDIRMA. Operatör
+		// gerçek engellemeyi açmadan önce politikayı güvenle doğrular (audit vs block).
+		if m.auditOnly {
+			kids := descendants(procs, p.PID)
+			det := map[string]any{"process": p.Name, "pid": int(p.PID), "rule": dec.RuleID,
+				"reason": dec.Reason, "audit_only": true, "would_kill_children": len(kids)}
+			addParentChain(det, procs, p.PID)
+			m.emitCatDetails("POLICY_VIOLATION", "MEDIUM", time.Now(),
+				fmt.Sprintf("yasaklı süreç (DENETİM MODU — sonlandırılmadı): %s (pid=%d, kural=%s, sebep=%s)",
+					p.Name, p.PID, dec.RuleID, dec.Reason), det)
+			enforced++
 			continue
 		}
 

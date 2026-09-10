@@ -304,6 +304,13 @@ func run() error {
 	if os.Getenv("XEMS_PROCESS_TELEMETRY_DISABLE") == "" {
 		monitor.SetProcessTelemetry(true)
 	}
+	// Enforcement DENETİM modu (audit vs block): XEMS_ENFORCE_AUDIT ayarlıysa yasaklı
+	// süreçler tespit edilip olay üretilir ama SONLANDIRILMAZ — operatör gerçek
+	// engellemeyi açmadan önce politikayı canlıda güvenle doğrular.
+	if os.Getenv("XEMS_ENFORCE_AUDIT") != "" {
+		monitor.SetAuditOnly(true)
+		log.Println("[enforce] DENETİM modu etkin: yasaklı süreçler sonlandırılmayacak, yalnız raporlanacak")
+	}
 	neighbors := discovery.NewNeighborSource()
 	netTracker := discovery.NewTracker(cfg.authMACs)
 	// Giden bağlantı telemetrisi (EDR/IoC; varsayılan AÇIK, XEMS_NETCONN_DISABLE

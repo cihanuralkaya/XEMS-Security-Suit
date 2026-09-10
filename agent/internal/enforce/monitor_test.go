@@ -117,6 +117,44 @@ func TestEnforceAlwaysBlock(t *testing.T) {
 	}
 }
 
+func TestEnforceAuditOnlyDoesNotKill(t *testing.T) {
+	// Denetim modu: yasaklı süreç TESPİT edilir + olay üretilir ama ÖLDÜRÜLMEZ.
+	ctrl := &fakeCtrl{procs: []Process{
+		{PID: 100, PPID: 5, Name: "torrent.exe"},
+		{PID: 200, PPID: 100, Name: "torrent-helper.exe"},
+		{PID: 42, Name: "agent.exe"},
+	}}
+	buf := collector.NewBuffer(10)
+	mon := NewMonitor(ctrl, fixedClock(time.Now()), buf, 42)
+	mon.SetAuditOnly(true)
+	engine := policy.New(policy.Bundle{Rules: []policy.Rule{
+		{ID: "b1", Type: policy.RuleAppBlockAlways, Target: "torrent.exe"},
+	}})
+
+	n, err := mon.Tick(engine)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Hiçbir süreç öldürülmemeli.
+	if len(ctrl.killed) != 0 {
+		t.Fatalf("denetim modunda hiçbir süreç öldürülmemeli, killed=%v", ctrl.killed)
+	}
+	// Yine de eşleşen süreç sayılır ve olay üretilir.
+	if n != 1 || buf.Len() != 1 {
+		t.Fatalf("1 eşleşme + 1 olay beklenirdi, n=%d olay=%d", n, buf.Len())
+	}
+	ev := buf.Pending(1)[0]
+	if ev.Severity != "MEDIUM" || ev.Details["audit_only"] != true {
+		t.Fatalf("olay MEDIUM + audit_only:true taşımalı: sev=%s det=%+v", ev.Severity, ev.Details)
+	}
+	if ev.Details["would_kill_children"] != 1 {
+		t.Fatalf("would_kill_children=1 beklenirdi: %+v", ev.Details)
+	}
+	if !strings.Contains(ev.Message, "DENETİM MODU") {
+		t.Fatalf("mesaj denetim modunu belirtmeli: %q", ev.Message)
+	}
+}
+
 func TestParsePPIDStat(t *testing.T) {
 	// Normal.
 	if got := parsePPIDStat("100 (bash) S 42 100 100 0 -1 4194304"); got != 42 {
