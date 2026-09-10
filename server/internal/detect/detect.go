@@ -8,7 +8,11 @@
 package detect
 
 import (
+	"bytes"
+	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -189,6 +193,33 @@ func LoadRulesFile(path string) ([]Rule, error) {
 	}
 	defer f.Close()
 	return LoadRules(f)
+}
+
+// ErrBadSignature, kural dosyası imzası doğrulanamadığında döner.
+var ErrBadSignature = errors.New("detect: kural imzası GEÇERSİZ — yükleme reddedildi")
+
+// LoadRulesFileSigned, tespit kurallarını YALNIZ Ed25519 imzası doğrulandıktan
+// sonra yükler (kurcalamaya karşı; anomali modeli / YARA kuralı imzasıyla aynı
+// desen). İmza, kural JSON baytları üzerinedir ve `<path>.sig` dosyasında base64
+// beklenir. Kuralları yazabilen ama imzalayamayan bir saldırgan, tespit içeriğini
+// sessizce değiştiremez (fail-closed).
+func LoadRulesFileSigned(path string, pub ed25519.PublicKey) ([]Rule, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	sigB64, err := os.ReadFile(path + ".sig")
+	if err != nil {
+		return nil, fmt.Errorf("detect: imza dosyası (%s.sig) okunamadı: %w", path, err)
+	}
+	sig, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(sigB64)))
+	if err != nil {
+		return nil, fmt.Errorf("detect: imza base64 çözülemedi: %w", err)
+	}
+	if len(pub) != ed25519.PublicKeySize || !ed25519.Verify(pub, data, sig) {
+		return nil, ErrBadSignature
+	}
+	return LoadRules(bytes.NewReader(data))
 }
 
 // WithDefaults, yerleşik kurallara özel kuralları ekler (yerleşikler önce

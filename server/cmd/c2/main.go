@@ -203,6 +203,19 @@ func postReportJSON(ctx context.Context, url, secret string, d report.Data) erro
 	return nil
 }
 
+// loadDetectRules, tespit kural dosyasını yükler; XEMS_DETECT_RULES_PUBKEY ayarlıysa
+// YALNIZ Ed25519 imzası doğrulanmış kuralları kabul eder (kurcalamaya karşı; fail-closed).
+func loadDetectRules(path string) ([]detect.Rule, error) {
+	if pk := os.Getenv("XEMS_DETECT_RULES_PUBKEY"); pk != "" {
+		raw, err := base64.StdEncoding.DecodeString(pk)
+		if err != nil || len(raw) != ed25519.PublicKeySize {
+			return nil, fmt.Errorf("XEMS_DETECT_RULES_PUBKEY geçersiz Ed25519 açık anahtar")
+		}
+		return detect.LoadRulesFileSigned(path, ed25519.PublicKey(raw))
+	}
+	return detect.LoadRulesFile(path)
+}
+
 // getdurEnv, süre biçimli bir ortam değişkenini okur (yoksa/geçersizse def).
 func getdurEnv(k string, def time.Duration) time.Duration {
 	if v := os.Getenv(k); v != "" {
@@ -318,7 +331,7 @@ func run() error {
 	// operatör-tanımlı özel kurallar yerleşiklere EKLENİR (koda dokunmadan).
 	detectRules := detect.DefaultRules()
 	if rf := os.Getenv("XEMS_DETECT_RULES_FILE"); rf != "" {
-		custom, err := detect.LoadRulesFile(rf)
+		custom, err := loadDetectRules(rf)
 		if err != nil {
 			return fmt.Errorf("tespit kuralları yüklenemedi: %w", err)
 		}
@@ -592,7 +605,7 @@ func run() error {
 						return
 					case <-t.C:
 					}
-					custom, e := detect.LoadRulesFile(rf)
+					custom, e := loadDetectRules(rf)
 					if e != nil {
 						log.Printf("[detect] kural yeniden yükleme başarısız (eski korunuyor): %v", e)
 						continue
