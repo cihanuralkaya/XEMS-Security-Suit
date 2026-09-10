@@ -14,6 +14,7 @@ import (
 	"xems.corp/suite/server/internal/complianceframework"
 	"xems.corp/suite/server/internal/risk"
 	"xems.corp/suite/server/internal/security"
+	"xems.corp/suite/server/internal/ueba"
 )
 
 // DeviceRow, DB'den okunan ham cihaz satırıdır (şifreli alanlar dahil).
@@ -688,6 +689,21 @@ func (s *Service) IncidentTimeline(ctx context.Context, incidentID string) (Inci
 	}
 	sort.Slice(events, func(i, j int) bool { return events[i].OccurredAt.Before(events[j].OccurredAt) })
 	return IncidentTimelineDTO{Incident: inc, Events: events}, true, nil
+}
+
+// AdminBehavior, ayrıcalıklı-kullanıcı (yönetici) davranış analitiğini denetim
+// izinden hesaplar (UEBA): yıkıcı-eylem serisi / yüksek yıkıcı oran anomalileri.
+// Mevcut audit_log'u kullanır; yeni depo sorgusu yok.
+func (s *Service) AdminBehavior(ctx context.Context, limit int) (ueba.Report, error) {
+	rows, err := s.store.ListAudit(ctx, clampLimit(limit))
+	if err != nil {
+		return ueba.Report{}, err
+	}
+	entries := make([]ueba.Entry, 0, len(rows))
+	for _, r := range rows {
+		entries = append(entries, ueba.Entry{Admin: r.AdminEmail, Action: r.Action, At: r.CreatedAt})
+	}
+	return ueba.Analyze(entries, ueba.Options{}), nil
 }
 
 // FrameworkCompliance, filo güvenlik-duruşunu tanınmış uyum çerçevelerine (CIS/

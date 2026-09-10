@@ -219,6 +219,8 @@ curl -sk "$B/api/incidents" -H "Authorization: Bearer $TOK" | grep -q '"incident
   && pass "/api/incidents korelasyon ucu döndü" || fail "/api/incidents başarısız"
 curl -sk "$B/api/incidents/does-not-exist/timeline" -H "Authorization: Bearer $TOK" | grep -q "bulunamadı" \
   && pass "/api/incidents/{id}/timeline ucu bağlı (404 yolu)" || fail "/api/incidents/{id}/timeline başarısız"
+curl -sk "$B/api/ueba/admins" -H "Authorization: Bearer $TOK" | grep -q "profiles" \
+  && pass "/api/ueba/admins yönetici davranış analitiği döndü" || fail "/api/ueba/admins başarısız"
 # Zamanlanmış/dışa aktarılabilir rapor (#7): duruş raporu HTML üretimi.
 curl -sk "$B/api/report" -H "Authorization: Bearer $TOK" | grep -q "XEMS Security Suite" \
   && pass "/api/report duruş raporu üretti" || fail "/api/report başarısız"

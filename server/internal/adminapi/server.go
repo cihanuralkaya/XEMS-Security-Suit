@@ -269,6 +269,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/audit", s.authed(s.handleListAudit))
 	mux.HandleFunc("GET /api/audit/verify", s.authed(s.handleVerifyAudit))
 	mux.HandleFunc("GET /api/audit/export", s.authed(s.handleAuditExport))
+	mux.HandleFunc("GET /api/ueba/admins", s.authed(s.handleAdminBehavior))
 	mux.HandleFunc("GET /api/stream", s.authed(s.handleStream))
 	// Sağlık uçları (kimlik doğrulama YOK — orkestrasyon/LB/monitoring için).
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
@@ -1217,6 +1218,20 @@ func (s *Server) handleCoverage(w http.ResponseWriter, r *http.Request, _ string
 		return
 	}
 	writeJSON(w, http.StatusOK, cov)
+}
+
+// handleAdminBehavior, ayrıcalıklı-kullanıcı (yönetici) davranış analitiğini döner
+// (UEBA): yıkıcı-eylem serisi / yüksek yıkıcı oran anomalileri. Denetim izi hassas —
+// OPERATOR+ gerekir.
+func (s *Server) handleAdminBehavior(w http.ResponseWriter, r *http.Request, adminID string) {
+	if respondErr(w, s.adminSvc.EnsureRole(r.Context(), adminID, admin.RoleOperator)) {
+		return
+	}
+	rep, err := s.reader.AdminBehavior(r.Context(), intParam(r, "limit"))
+	if respondErr(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, rep)
 }
 
 // handleAuditExport, denetim izini KURCALAMA-KANITLI, taşınabilir bir hash-zinciri
