@@ -203,9 +203,16 @@ memstore ona eşitlendi + regresyon testi (`TestLookupAdminExcludesDeactivated`)
   - Linux `/proc`+SIGKILL ve OS izolatörleri — yalnız cross-compile.
   - `go test -race` — C derleyicisi (gcc) yok; eşzamanlılık mutex/atomic ile doğru-inşa.
 - **Operasyonel uçlar:** veri sahibi başvuru akışı (KVKK erişim/silme) **YAPILDI**
-  (aşağı bkz.). Kalan: ONNX ML anomali hattı: **Faz 1-3 YAPILDI** — saf-Go istatistiksel + JSON-eğitilmiş-model (MLP/lojistik) çıkarımı, ajan-döngüsüne bağlı, SECURITY olayları üretir. Gerçek .onnx ikili yükleme (onnxruntime CGo, //go:build onnx) arayüz-hazır ama bu ortamda derlenemez (C bağımlılığı saf-Go CI'ı bozar).
-  İmzalı script yürütme YAPILDI (imza + sınırlı yürütme) ama gerçek sandbox/
-  süreç-ağacı sonlandırma yok — ileri faz.
+  (aşağı bkz.). ONNX ML anomali hattı: **Faz 1-3 YAPILDI** — saf-Go istatistiksel +
+  JSON-eğitilmiş-model (MLP/lojistik) çıkarımı, ajan-döngüsüne bağlı, SECURITY olayları
+  üretir. **ONNX köprüsü YAPILDI (Seçenek D, DÜŞÜK risk):** `tools/onnx2json` çevrimdışı
+  dönüştürücü, eğitilmiş bir ONNX'i (Gemm/MatMul + Relu/Sigmoid) taşınabilir JSON ağırlık
+  formatına çevirir + Ed25519 imzalar (`-sign-key`); çalışan ikiliye/CGo/CI/go.mod'a
+  ETKİSİ YOK (bkz. `docs/ONNX.md`). Gerçek onnxruntime CGo backend'i `//go:build onnx`
+  arkasında **opt-in olarak belgelendi** (varsayılan derleme saf-Go kalır) — yalnız keyfi
+  ONNX grafikleri gerekirse; CGO_ENABLED=0 cross-compile'ı bozacağından varsayılanda YOK.
+  İmzalı script yürütme YAPILDI; süreç-AĞACI sonlandırma **YAPILDI** (enforce.descendants;
+  denetim/audit modu XEMS_ENFORCE_AUDIT ile) — gerçek sandbox ileri faz.
 
 ## Çalıştırma
 
