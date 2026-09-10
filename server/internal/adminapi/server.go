@@ -519,9 +519,14 @@ func (s *Server) handleIngest(w http.ResponseWriter, r *http.Request) {
 			}
 			var rec logingest.Record
 			var e error
-			if strings.Contains(line, "LEEF:") {
+			switch {
+			case strings.Contains(line, "LEEF:"):
 				rec, e = logingest.NormalizeLEEF(line, now)
-			} else {
+			case strings.Contains(line, "CEF:"):
+				rec, e = logingest.NormalizeCEF(line, now)
+			case strings.HasPrefix(strings.TrimSpace(line), "<"):
+				rec, e = logingest.NormalizeSyslog(line, now) // düz syslog (rsyslog/fluent-bit HTTP)
+			default:
 				rec, e = logingest.NormalizeCEF(line, now)
 			}
 			if e == nil {

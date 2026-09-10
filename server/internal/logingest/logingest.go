@@ -246,6 +246,108 @@ func decodeLEEFDelim(f string) string {
 	return f
 }
 
+// NormalizeSyslog, bir düz syslog satırını (RFC5424 veya RFC3164) olay kaydına
+// çevirir. Log-shipper'lar (rsyslog omhttp, fluent-bit http) syslog'u HTTP üzerinden
+// iletebildiğinden bu, CEF/LEEF dışı kaynakları da kapsar. PRAGMATİK ayrıştırma:
+// <PRI>'dan önem çıkarılır; RFC5424'te hostname/app-name kaynak olur; kalan MSG'dir.
+//
+//	RFC5424: <PRI>VERSION TIMESTAMP HOSTNAME APP-NAME PROCID MSGID [SD] MSG
+//	RFC3164: <PRI>TIMESTAMP HOSTNAME TAG: MSG
+func NormalizeSyslog(line string, now time.Time) (Record, error) {
+	line = strings.TrimSpace(line)
+	if len(line) < 3 || line[0] != '<' {
+		return Record{}, fmt.Errorf("logingest: syslog <PRI> öneki yok")
+	}
+	end := strings.IndexByte(line, '>')
+	if end < 2 || end > 4 { // <PRI> en fazla 3 basamak
+		return Record{}, fmt.Errorf("logingest: syslog <PRI> geçersiz")
+	}
+	pri, err := strconv.Atoi(line[1:end])
+	if err != nil || pri < 0 || pri > 191 {
+		return Record{}, fmt.Errorf("logingest: syslog PRI geçersiz")
+	}
+	rest := line[end+1:]
+	sev := syslogSeverity(pri % 8)
+
+	source, msg := "syslog", strings.TrimSpace(rest)
+	fields := strings.Fields(rest)
+	// RFC5424: ilk alan sürüm ("1"); HOSTNAME=fields[2], APP-NAME=fields[3].
+	if len(fields) >= 5 && fields[0] == "1" {
+		host := deNil(fields[2])
+		app := deNil(fields[3])
+		if host != "" {
+			source = host
+		} else if app != "" {
+			source = app
+		}
+		// MSG: MSGID(+SD) sonrası; SD karmaşık olabilir → pragmatik: 6. alandan sonrası.
+		if i := nthFieldIndex(rest, 6); i >= 0 {
+			msg = strings.TrimSpace(rest[i:])
+		}
+	} else if len(fields) >= 5 {
+		// RFC3164: "Mon DD HH:MM:SS HOST TAG: MSG" — HOST 4. alan (fields[3]).
+		if h := fields[3]; h != "" {
+			source = h
+		}
+	}
+	if msg == "" {
+		msg = "(boş syslog mesajı)"
+	}
+	return Record{
+		DeviceID: SourceUUID(source),
+		Event: model.Event{
+			Category:   "SECURITY",
+			Severity:   sev,
+			Message:    "[" + source + "] " + msg,
+			OccurredAt: now,
+		},
+	}, nil
+}
+
+// syslogSeverity, syslog önem kodunu (0-7) XEMS önem düzeyine eşler.
+func syslogSeverity(s int) string {
+	switch {
+	case s <= 2: // emerg/alert/crit
+		return "CRITICAL"
+	case s == 3: // err
+		return "HIGH"
+	case s == 4: // warning
+		return "MEDIUM"
+	case s == 5: // notice
+		return "LOW"
+	default: // info/debug
+		return "INFO"
+	}
+}
+
+// deNil, syslog "-" (yok) değerini boş string'e çevirir.
+func deNil(s string) string {
+	if s == "-" {
+		return ""
+	}
+	return s
+}
+
+// nthFieldIndex, boşlukla ayrılmış n. alanın (0-tabanlı) `s` içindeki başlangıç
+// bayt indeksini döner; yoksa -1.
+func nthFieldIndex(s string, n int) int {
+	field, inField := 0, false
+	for i := 0; i < len(s); i++ {
+		if s[i] != ' ' && s[i] != '\t' {
+			if !inField {
+				if field == n {
+					return i
+				}
+				field++
+				inField = true
+			}
+		} else {
+			inField = false
+		}
+	}
+	return -1
+}
+
 // cefSeverity, CEF 0-10 önem ölçeğini XEMS önem düzeyine eşler.
 func cefSeverity(s string) string {
 	n, err := strconv.Atoi(strings.TrimSpace(s))

@@ -147,3 +147,38 @@ func TestNormalizeLEEFBad(t *testing.T) {
 		t.Fatal("eksik alanlarda hata döndürmeli")
 	}
 }
+
+func TestNormalizeSyslog5424(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	// <134> = facility 16 (local0), severity 6 (info); version 1.
+	rec, err := NormalizeSyslog("<134>1 2026-09-10T12:00:00Z fw01 kernel 1234 ID47 - port scan detected", now)
+	if err != nil {
+		t.Fatalf("NormalizeSyslog: %v", err)
+	}
+	if rec.Event.Severity != "INFO" {
+		t.Fatalf("sev INFO beklenirdi, %q", rec.Event.Severity)
+	}
+	if !strings.Contains(rec.Event.Message, "fw01") || !strings.Contains(rec.Event.Message, "port scan detected") {
+		t.Fatalf("host + mesaj taşımalı, %q", rec.Event.Message)
+	}
+}
+
+func TestNormalizeSyslog3164Severity(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	// <131> = severity 3 (err) → HIGH.
+	rec, err := NormalizeSyslog("<131>Sep 10 12:00:00 gw sshd: auth failure", now)
+	if err != nil {
+		t.Fatalf("NormalizeSyslog: %v", err)
+	}
+	if rec.Event.Severity != "HIGH" {
+		t.Fatalf("sev HIGH beklenirdi, %q", rec.Event.Severity)
+	}
+}
+
+func TestNormalizeSyslogBad(t *testing.T) {
+	for _, s := range []string{"no pri", "<abc>x", "<9999>x", ""} {
+		if _, err := NormalizeSyslog(s, time.Now()); err == nil {
+			t.Errorf("NormalizeSyslog(%q) hata döndürmeliydi", s)
+		}
+	}
+}
