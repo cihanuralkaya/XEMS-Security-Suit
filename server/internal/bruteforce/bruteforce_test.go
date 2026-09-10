@@ -70,6 +70,46 @@ func TestAnalyzeAttribution(t *testing.T) {
 	}
 }
 
+func TestAnalyzeSuccessAfterBurst(t *testing.T) {
+	base := time.Date(2026, 3, 10, 9, 0, 0, 0, time.UTC)
+	var evs []LogonEvent
+	// host-A: 5 başarısız sonra 1 başarılı (2dk) → başarılı kaba-kuvvet.
+	for i := 0; i < 5; i++ {
+		evs = append(evs, LogonEvent{DeviceID: "host-A", At: base.Add(time.Duration(i) * 20 * time.Second), Success: false})
+	}
+	evs = append(evs, LogonEvent{DeviceID: "host-A", At: base.Add(2 * time.Minute), SourceIP: "6.6.6.6", Success: true})
+	// host-B: 5 başarısız ama başarı YOK → bulgu yok.
+	for i := 0; i < 5; i++ {
+		evs = append(evs, LogonEvent{DeviceID: "host-B", At: base.Add(time.Duration(i) * 20 * time.Second), Success: false})
+	}
+	// host-C: başarı var ama yalnız 2 başarısız → eşik altında.
+	evs = append(evs,
+		LogonEvent{DeviceID: "host-C", At: base, Success: false},
+		LogonEvent{DeviceID: "host-C", At: base.Add(time.Minute), Success: false},
+		LogonEvent{DeviceID: "host-C", At: base.Add(90 * time.Second), Success: true},
+	)
+	got := AnalyzeSuccessAfterBurst(evs, 5, 5*time.Minute)
+	if len(got) != 1 {
+		t.Fatalf("1 bulgu beklenirdi (host-A), %d: %+v", len(got), got)
+	}
+	if got[0].DeviceID != "host-A" || got[0].FailuresBefore != 5 || got[0].SourceIP != "6.6.6.6" {
+		t.Fatalf("host-A: 5 başarısız + kaynak IP beklenirdi, %+v", got[0])
+	}
+}
+
+func TestAnalyzeSuccessWindowExpiry(t *testing.T) {
+	base := time.Date(2026, 3, 10, 9, 0, 0, 0, time.UTC)
+	var evs []LogonEvent
+	// 5 başarısız, sonra 10dk BOŞLUK, sonra başarı → başarısızlar pencereden düştü.
+	for i := 0; i < 5; i++ {
+		evs = append(evs, LogonEvent{DeviceID: "h", At: base.Add(time.Duration(i) * 20 * time.Second), Success: false})
+	}
+	evs = append(evs, LogonEvent{DeviceID: "h", At: base.Add(10 * time.Minute), Success: true})
+	if got := AnalyzeSuccessAfterBurst(evs, 5, 5*time.Minute); len(got) != 0 {
+		t.Fatalf("pencere dışı başarısızlar sayılmamalı, %+v", got)
+	}
+}
+
 func TestAnalyzeDeterministicOrder(t *testing.T) {
 	base := time.Now()
 	var att []Attempt

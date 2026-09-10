@@ -962,6 +962,10 @@ func run() error {
 		if n := atoiEnv("XEMS_BRUTEFORCE_MIN"); n > 0 {
 			bfMin = n
 		}
+		bfSuccessMin := 8 // başarıdan önceki başarısız eşiği (hesap ele geçirme sinyali)
+		if n := atoiEnv("XEMS_BRUTEFORCE_SUCCESS_MIN"); n > 0 {
+			bfSuccessMin = n
+		}
 		bfAlerted := map[string]bool{}
 		go func() {
 			t := time.NewTicker(bfInterval)
@@ -979,21 +983,31 @@ func run() error {
 					continue
 				}
 				attempts := make([]bruteforce.Attempt, 0, len(evs))
+				logons := make([]bruteforce.LogonEvent, 0, len(evs))
 				for _, e := range evs {
 					m := strings.ToLower(e.Message)
-					if strings.Contains(m, "failed logon") || strings.Contains(m, "oturum açma başarısız") ||
-						strings.Contains(m, "pre-authentication failed") {
-						var d struct {
-							SrcIP      string `json:"src_ip"`
-							TargetUser string `json:"target_user"`
-						}
-						if len(e.Details) > 0 {
-							_ = json.Unmarshal(e.Details, &d)
-						}
+					fail := strings.Contains(m, "failed logon") || strings.Contains(m, "oturum açma başarısız") ||
+						strings.Contains(m, "pre-authentication failed")
+					// 4624 başarılı oturum açma ("başarılı oturum açma"); "başarısız" içermez.
+					success := strings.Contains(m, "başarılı oturum açma")
+					if !fail && !success {
+						continue
+					}
+					var d struct {
+						SrcIP      string `json:"src_ip"`
+						TargetUser string `json:"target_user"`
+					}
+					if len(e.Details) > 0 {
+						_ = json.Unmarshal(e.Details, &d)
+					}
+					if fail {
 						attempts = append(attempts, bruteforce.Attempt{
 							DeviceID: e.DeviceID, At: e.CreatedAt, SourceIP: d.SrcIP, TargetUser: d.TargetUser,
 						})
 					}
+					logons = append(logons, bruteforce.LogonEvent{
+						DeviceID: e.DeviceID, At: e.CreatedAt, SourceIP: d.SrcIP, Success: success,
+					})
 				}
 				for _, f := range bruteforce.Analyze(attempts, bfMin, bfWindow) {
 					key := "bruteforce|" + f.DeviceID
@@ -1027,9 +1041,37 @@ func run() error {
 						log.Printf("[bruteforce] cihaz %s: %s", f.DeviceID, ev.Message)
 					}
 				}
+				// Başarılı kaba-kuvvet: bir başarılı oturum açma, aynı ana bilgisayarda
+				// başarısız-seriden SONRA gelmişse olası hesap ele geçirme (CRITICAL).
+				for _, f := range bruteforce.AnalyzeSuccessAfterBurst(logons, bfSuccessMin, bfWindow) {
+					key := "bfsuccess|" + f.DeviceID
+					if bfAlerted[key] {
+						continue
+					}
+					bfAlerted[key] = true
+					attr := ""
+					if f.SourceIP != "" {
+						attr = fmt.Sprintf(" (kaynak IP %s)", f.SourceIP)
+					}
+					ev := model.Event{
+						Category: "SECURITY", Severity: "CRITICAL",
+						Message: fmt.Sprintf("olası BAŞARILI kaba-kuvvet — hesap ele geçirilmiş olabilir: %d başarısız denemenin ardından başarılı oturum açma%s",
+							f.FailuresBefore, attr),
+						OccurredAt: time.Now(),
+						Details: fmt.Sprintf(`{"brute_force_success":true,"failures_before":%d,"window_sec":%d,"source_ip":%q,"technique":"T1110"}`,
+							f.FailuresBefore, int(bfWindow.Seconds()), f.SourceIP),
+					}
+					if _, err := backend.SaveEvents(ctx, f.DeviceID, []model.Event{ev}); err == nil {
+						liveBus.PublishEvent(f.DeviceID, ev.Severity, ev.Message)
+						socAlerter.Notify(notify.Alert{DeviceID: f.DeviceID, Category: "SECURITY", Severity: "CRITICAL",
+							Message: ev.Message, OccurredAt: ev.OccurredAt, TechniqueID: "T1110",
+							TechniqueName: "Brute Force", Tactic: "Credential Access"})
+						log.Printf("[bruteforce] cihaz %s (BAŞARILI): %s", f.DeviceID, ev.Message)
+					}
+				}
 			}
 		}()
-		log.Printf("Kaba-kuvvet tespiti etkin (her %s, %s pencere, eşik %d)", bfInterval, bfWindow, bfMin)
+		log.Printf("Kaba-kuvvet tespiti etkin (her %s, %s pencere, eşik %d, başarı-eşiği %d)", bfInterval, bfWindow, bfMin, bfSuccessMin)
 	}
 
 	// Sertifika ömür-sonu izleme: sunucu/CA sertifikaları uzun-ömürlü ve OTO-YENİLENMEZ

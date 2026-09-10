@@ -33,6 +33,73 @@ type Finding struct {
 	TopSource       string        // en çok görülen saldırgan IP (öznitelik)
 }
 
+// LogonEvent, başarılı ya da başarısız bir oturum-açma olayıdır (başarı-serisi
+// tespiti için). SourceIP opsiyoneldir.
+type LogonEvent struct {
+	DeviceID string
+	At       time.Time
+	SourceIP string
+	Success  bool
+}
+
+// SuccessFinding, olası BAŞARILI bir kaba-kuvvettir: bir başarılı oturum açma, aynı
+// ana bilgisayarda kısa pencerede çok sayıda BAŞARISIZ denemenin ARDINDAN gelmiştir —
+// klasik "hesap ele geçirildi" sinyali (T1110 → geçerli hesaplar).
+type SuccessFinding struct {
+	DeviceID       string
+	SourceIP       string    // başarılı oturumun kaynak IP'si (öznitelik)
+	FailuresBefore int       // başarıdan önce penceredeki başarısız deneme sayısı
+	At             time.Time // başarılı oturum zamanı
+}
+
+// AnalyzeSuccessAfterBurst, her cihaz için, penceresinde >= minFailures başarısız
+// denemenin ardından gelen İLK başarılı oturum açmayı olası başarılı-kaba-kuvvet olarak
+// döner (cihaz başına bir kez). Eşleşme ana bilgisayar (DeviceID) düzeyindedir; başarılı
+// oturumun kaynak IP'si öznitelik olarak taşınır. Saf, kayan-pencere O(n). Deterministik
+// (cihaz kimliğine göre sıralı). minFailures<3 → 3; window<=0 → 5dk.
+func AnalyzeSuccessAfterBurst(evs []LogonEvent, minFailures int, window time.Duration) []SuccessFinding {
+	if minFailures < 3 {
+		minFailures = 3
+	}
+	if window <= 0 {
+		window = 5 * time.Minute
+	}
+	byDev := map[string][]LogonEvent{}
+	for _, e := range evs {
+		byDev[e.DeviceID] = append(byDev[e.DeviceID], e)
+	}
+	devs := make([]string, 0, len(byDev))
+	for d := range byDev {
+		devs = append(devs, d)
+	}
+	sort.Strings(devs)
+
+	var out []SuccessFinding
+	for _, dev := range devs {
+		es := byDev[dev]
+		sort.Slice(es, func(i, j int) bool { return es[i].At.Before(es[j].At) })
+		lo, failCount := 0, 0
+		for hi := 0; hi < len(es); hi++ {
+			if !es[hi].Success {
+				failCount++
+			}
+			for es[hi].At.Sub(es[lo].At) > window {
+				if !es[lo].Success {
+					failCount--
+				}
+				lo++
+			}
+			if es[hi].Success && failCount >= minFailures {
+				out = append(out, SuccessFinding{
+					DeviceID: dev, SourceIP: es[hi].SourceIP, FailuresBefore: failCount, At: es[hi].At,
+				})
+				break // cihaz başına ilk başarı yeterli
+			}
+		}
+	}
+	return out
+}
+
 // Analyze, her cihaz için herhangi bir `window` uzunluğundaki kayan pencerede
 // gözlenen AZAMİ başarısız-deneme sayısını hesaplar; bu sayı minAttempts'i aşan
 // cihazları olası kaba-kuvvet olarak döner. Sonuç deterministik (cihaz kimliğine
