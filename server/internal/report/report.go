@@ -28,6 +28,7 @@ type Incident struct {
 type Data struct {
 	GeneratedAt        time.Time      `json:"generated_at"`
 	SchemaVersion      string         `json:"schema_version,omitempty"`
+	TenantID           string         `json:"tenant_id,omitempty"`
 	Title              string         `json:"title"`
 	DevicesTotal       int            `json:"devices_total"`
 	DevicesOnline      int            `json:"devices_online"`

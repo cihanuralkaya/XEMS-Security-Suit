@@ -74,7 +74,11 @@ type Server struct {
 	detector      atomic.Pointer[detect.Engine] // tespit kural kataloğu (görünürlük ucu; canlı hot-reload için atomik)
 	vulnSet       *vuln.Set                     // zafiyet veri kümesi (nil = kapalı); envanterle eşleşir
 	features      map[string]any                // dağıtım koruma-duruşu (opsiyonel özellik bayrakları)
+	tenantID      string                        // dağıtımın kiracı kimliği (rapor atıfı)
 }
+
+// SetTenantID, dağıtımın kiracı kimliğini bağlar (rapor/çıktı atıfı; boş → "default").
+func (s *Server) SetTenantID(id string) { s.tenantID = id }
 
 // SetDetector, tespit kural motorunu bağlar (kural kataloğu ucu için). nil ise
 // yerleşik varsayılan kurallar kullanılır.
@@ -1114,7 +1118,7 @@ func (s *Server) buildReportData(r *http.Request) (report.Data, error) {
 	incs, _ := s.reader.Incidents(r.Context(), 20)
 	c := metrics.Counters()
 	d := report.Data{
-		GeneratedAt: s.now(), SchemaVersion: model.EventSchemaVersion, Title: "Güvenlik Duruş Raporu",
+		GeneratedAt: s.now(), SchemaVersion: model.EventSchemaVersion, TenantID: s.tenantID, Title: "Güvenlik Duruş Raporu",
 		DevicesTotal: sum.DevicesTotal, DevicesOnline: sum.DevicesOnline, DevicesOffline: sum.DevicesOffline,
 		DevicesQuarantined: sum.DevicesQuarantined, NonCompliant: sum.NonCompliantDevices,
 		EventsBySeverity: sum.EventsBySeverity, DevicesByOS: sum.DevicesByOS,

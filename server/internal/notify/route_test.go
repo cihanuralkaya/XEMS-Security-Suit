@@ -141,3 +141,18 @@ func TestEscalatorIgnoresLowSeverity(t *testing.T) {
 		}
 	}
 }
+
+func TestTenantStamper(t *testing.T) {
+	c := &collector{}
+	st := NewTenantStamper("acme", c)
+	st.Notify(Alert{DeviceID: "d1", Severity: "HIGH"})
+	if len(c.got) != 1 || c.got[0].Tenant != "acme" {
+		t.Fatalf("uyarı 'acme' kiracısıyla damgalanmalı, %+v", c.got)
+	}
+	// "default" → damgalama yok (boş kalır).
+	c2 := &collector{}
+	NewTenantStamper("default", c2).Notify(Alert{DeviceID: "d1"})
+	if c2.got[0].Tenant != "" {
+		t.Fatalf("default kiracı damgalanmamalı, %q", c2.got[0].Tenant)
+	}
+}

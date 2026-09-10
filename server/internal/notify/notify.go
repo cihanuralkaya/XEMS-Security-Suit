@@ -47,6 +47,9 @@ type Alert struct {
 	TechniqueID   string `json:"mitre_technique_id,omitempty"`
 	TechniqueName string `json:"mitre_technique,omitempty"`
 	Tactic        string `json:"mitre_tactic,omitempty"`
+	// Tenant, uyarıyı üreten dağıtımın kiracı kimliğidir (çok-kiracılı ortak
+	// downstream — SIEM/analitik — kiracıya göre ayrıştırabilsin). "default" ise boş bırakılır.
+	Tenant string `json:"tenant,omitempty"`
 }
 
 // Notifier, bir uyarıyı (best-effort) iletir.

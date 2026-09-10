@@ -196,6 +196,33 @@ func (e *Escalator) record(a Alert) (Alert, bool) {
 	return esc, true
 }
 
+// TenantStamper, geçen her uyarıya kiracı kimliğini iliştirip hedefe iletir
+// (çok-kiracılı çıktı atıfı). En dışta sarılır ki tüm uyarılar (yükseltilenler
+// dahil) kiracı taşısın.
+type TenantStamper struct {
+	tenant string
+	target Notifier
+}
+
+// NewTenantStamper oluşturur. tenant boş/"default" ise damgalama yapılmaz (uyarılar
+// olduğu gibi iletilir) — tek-kiracılı çıktıda gereksiz alan olmaz.
+func NewTenantStamper(tenant string, target Notifier) *TenantStamper {
+	if tenant == "default" {
+		tenant = ""
+	}
+	return &TenantStamper{tenant: tenant, target: target}
+}
+
+// Notify, uyarıya kiracıyı iliştirip iletir.
+func (t *TenantStamper) Notify(a Alert) {
+	if t.tenant != "" {
+		a.Tenant = t.tenant
+	}
+	if t.target != nil {
+		t.target.Notify(a)
+	}
+}
+
 // itoa, küçük pozitif tamsayı → string (strconv'a bağımlılık olmadan).
 func itoa(n int) string {
 	if n == 0 {

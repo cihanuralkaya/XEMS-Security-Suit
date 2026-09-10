@@ -405,6 +405,10 @@ func run() error {
 		if suppressHolder != nil {
 			alerter = notify.NewSuppressor(alerter, suppressHolder.Windows, metrics.IncAlertSuppressed, nil)
 		}
+		// Kiracı damgası (çok-kiracılı çıktı atıfı): teslim edilen tüm uyarılara kiracı
+		// iliştirilir (SIEM/webhook ortak downstream kiracıya göre ayrıştırabilsin).
+		// "default" ise no-op.
+		alerter = notify.NewTenantStamper(cfg.TenantID, alerter)
 		agentHandler.SetAlerter(alerter)
 	}
 
@@ -596,6 +600,7 @@ func run() error {
 		"tenant_id":             cfg.TenantID,
 		"event_schema_version":  model.EventSchemaVersion,
 	})
+	adminAPI.SetTenantID(cfg.TenantID)
 	if cfg.TenantID != "default" {
 		log.Printf("kiracı (tenant): %s", cfg.TenantID)
 	}

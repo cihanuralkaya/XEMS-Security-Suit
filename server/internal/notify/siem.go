@@ -60,6 +60,9 @@ func formatCEF(a Alert, product, version string) string {
 	if a.Tactic != "" {
 		ext += " cs2Label=MitreTactic cs2=" + cefEscapeExt(a.Tactic)
 	}
+	if a.Tenant != "" {
+		ext += " cs3Label=Tenant cs3=" + cefEscapeExt(a.Tenant)
+	}
 	return fmt.Sprintf("CEF:0|XEMS|%s|%s|%s|%s|%d|%s",
 		cefEscapeHeader(product), cefEscapeHeader(version),
 		cefEscapeHeader(a.Category), cefEscapeHeader(a.Message), sevToCEF(a.Severity), ext)
@@ -76,6 +79,9 @@ func formatLEEF(a Alert, product, version string) string {
 		"\tmsg=" + strings.ReplaceAll(a.Message, "\n", " ")
 	if a.TechniqueID != "" {
 		attrs += "\tmitreTechnique=" + a.TechniqueID
+	}
+	if a.Tenant != "" {
+		attrs += "\ttenant=" + a.Tenant
 	}
 	return fmt.Sprintf("LEEF:2.0|XEMS|%s|%s|%s|%s", product, version, a.Category, attrs)
 }
