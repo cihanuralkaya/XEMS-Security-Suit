@@ -1002,7 +1002,7 @@ func (d *dnsTracker) report(buf *collector.Buffer) {
 				Details: map[string]any{
 					"dns": true, "domain": n, "dga_suspicious": true,
 					"entropy": score.Entropy, "vowel_ratio": score.VowelRatio,
-					"digit_ratio": score.DigitRatio,
+					"digit_ratio": score.DigitRatio, "max_consonant_run": score.MaxConsonantRun,
 				},
 			})
 		} else {
