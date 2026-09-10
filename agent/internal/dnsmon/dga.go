@@ -13,13 +13,14 @@ import (
 
 // DGAScore, bir alan adının DGA-benzerlik ölçümüdür.
 type DGAScore struct {
-	Domain     string
-	Label      string  // skorlanan etiket (ikinci seviye)
-	Entropy    float64 // Shannon entropisi (bit/karakter)
-	VowelRatio float64
-	DigitRatio float64
-	Length     int
-	Suspicious bool
+	Domain          string
+	Label           string  // skorlanan etiket (ikinci seviye)
+	Entropy         float64 // Shannon entropisi (bit/karakter)
+	VowelRatio      float64
+	DigitRatio      float64
+	Length          int
+	MaxConsonantRun int // en uzun ardışık ünsüz dizisi (DGA'da tipik olarak yüksek)
+	Suspicious      bool
 }
 
 // vowels, sesli harf kümesi.
@@ -49,15 +50,35 @@ func ScoreDomain(domain string) DGAScore {
 	}
 	s.VowelRatio = float64(vowelN) / float64(len(clean))
 	s.DigitRatio = float64(digitN) / float64(len(clean))
+	s.MaxConsonantRun = maxConsonantRun(clean)
 
-	// İki muhafazakâr kural (yanlış pozitifi düşük tutmak için birleşik koşullar):
+	// Üç muhafazakâr kural (yanlış pozitifi düşük tutmak için birleşik koşullar):
 	//  1) Uzun + yüksek entropi + düşük sesli-harf oranı (klasik rastgele alan).
 	//  2) Orta uzunluk + rakam yoğun + orta-yüksek entropi (rakam karışımlı DGA).
+	//  3) Uzun + çok uzun ünsüz dizisi (gerçek alanlar 5+ ardışık ünsüz nadiren taşır).
 	if (s.Length >= 10 && s.Entropy >= 3.5 && s.VowelRatio <= 0.30) ||
-		(s.Length >= 8 && s.DigitRatio >= 0.30 && s.Entropy >= 3.0) {
+		(s.Length >= 8 && s.DigitRatio >= 0.30 && s.Entropy >= 3.0) ||
+		(s.Length >= 8 && s.MaxConsonantRun >= 5) {
 		s.Suspicious = true
 	}
 	return s
+}
+
+// maxConsonantRun, verilen (temizlenmiş) etikette en uzun ardışık ünsüz (harf,
+// sesli olmayan) dizisinin uzunluğunu döner. Rakamlar diziyi keser.
+func maxConsonantRun(clean string) int {
+	best, cur := 0, 0
+	for _, r := range clean {
+		if r >= 'a' && r <= 'z' && !strings.ContainsRune(vowels, r) {
+			cur++
+			if cur > best {
+				best = cur
+			}
+		} else {
+			cur = 0
+		}
+	}
+	return best
 }
 
 // secondLevelLabel, "a.b.example.com" → "example" (son noktanın solundaki etiket).

@@ -90,3 +90,23 @@ func TestParseIpconfigDisplayDNS(t *testing.T) {
 		t.Fatalf("beklenen adlar yok: %v", got)
 	}
 }
+
+func TestMaxConsonantRunDGA(t *testing.T) {
+	// Uzun ünsüz dizili DGA (sesli oranı entropi kuralını tetiklemeyebilir) → yakalanmalı.
+	s := ScoreDomain("xjqkbzmp.com")
+	if s.MaxConsonantRun < 5 {
+		t.Fatalf("uzun ünsüz dizisi beklenirdi, %d", s.MaxConsonantRun)
+	}
+	if !s.Suspicious {
+		t.Fatalf("uzun ünsüz dizili alan şüpheli işaretlenmeli: %+v", s)
+	}
+}
+
+func TestNormalDomainNotConsonantFlagged(t *testing.T) {
+	// Gerçek alanlar 5+ ardışık ünsüz taşımaz → kural onları işaretlememeli.
+	for _, d := range []string{"google.com", "microsoft.com", "wikipedia.org", "github.com"} {
+		if s := ScoreDomain(d); s.Suspicious {
+			t.Errorf("%q şüpheli işaretlenmemeliydi: %+v", d, s)
+		}
+	}
+}
