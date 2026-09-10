@@ -228,6 +228,7 @@ func TestDefaultRulesCoverNewEventTypes(t *testing.T) {
 		{"SECURITY", "DLP: hassas veri tespit edildi (kart)", "T1048"},
 		{"SECURITY", "DGA-şüpheli DNS sorgusu: xjq3.com", "T1071"},
 		{"SECURITY", "içerik-tarama eşleşmesi (R1): /tmp/x", "T1105"},
+		{"SECURITY", "olası yanal hareket: 5dk içinde 9 farklı iç hedefe bağlantı", "T1046"},
 	}
 	for _, c := range cases {
 		dets := e.Evaluate(model.Event{Category: c.cat, Severity: "HIGH", Message: c.msg})

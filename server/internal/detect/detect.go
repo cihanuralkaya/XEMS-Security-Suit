@@ -244,5 +244,7 @@ func DefaultRules() []Rule {
 			Contains: []string{"dga"}, Severity: "HIGH", Technique: tAppLayerC2},
 		{ID: "XEMS-0012", Name: "İçerik-tarama (YARA) eşleşmesi", Category: "SECURITY",
 			Contains: []string{"içerik-tarama"}, Severity: "HIGH", Technique: tIngressTool},
+		{ID: "XEMS-0013", Name: "Yanal hareket / iç-ağ tarama", Category: "SECURITY",
+			Contains: []string{"yanal hareket"}, Severity: "HIGH", Technique: tNetworkDiscov},
 	}
 }

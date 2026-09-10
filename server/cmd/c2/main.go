@@ -802,9 +802,31 @@ func run() error {
 						log.Printf("[beacon] cihaz %s: %s", f.DeviceID, ev.Message)
 					}
 				}
+				// Yanal hareket / iç-ağ tarama: aynı conns üzerinde fan-out analizi.
+				// Bir cihaz 5dk penceresinde ≥8 farklı İÇ IP'ye bağlanıyorsa olası
+				// yanal hareket (T1046). Cihaz başına bir kez uyarılır.
+				for _, f := range beacon.AnalyzeFanOut(conns, 8, 5*time.Minute) {
+					key := "fanout|" + f.DeviceID
+					if alerted[key] {
+						continue
+					}
+					alerted[key] = true
+					ev := model.Event{
+						Category: "SECURITY", Severity: "HIGH",
+						Message: fmt.Sprintf("olası yanal hareket: %s içinde %d farklı iç hedefe bağlantı",
+							f.Window.Round(time.Minute), f.DistinctPeers),
+						OccurredAt: time.Now(),
+						Details: fmt.Sprintf(`{"lateral_movement":true,"distinct_peers":%d,"window_sec":%d,"technique":"T1046"}`,
+							f.DistinctPeers, int(f.Window.Seconds())),
+					}
+					if _, err := backend.SaveEvents(ctx, f.DeviceID, []model.Event{ev}); err == nil {
+						liveBus.PublishEvent(f.DeviceID, ev.Severity, ev.Message)
+						log.Printf("[lateral] cihaz %s: %s", f.DeviceID, ev.Message)
+					}
+				}
 			}
 		}()
-		log.Printf("C2 beacon tespiti etkin (her %s, %s pencere)", bInterval, bWindow)
+		log.Printf("C2 beacon + yanal-hareket tespiti etkin (her %s, %s pencere)", bInterval, bWindow)
 	}
 
 	// Bayat-OFFLINE görevi: belirli süredir heartbeat göndermeyen ACTIVE

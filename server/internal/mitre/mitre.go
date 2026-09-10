@@ -79,6 +79,8 @@ func Classify(category, message string) (Technique, bool) {
 			strings.Contains(m, "ioc eşleşmesi") || strings.Contains(m, "periyodik") ||
 			strings.Contains(m, "c2"):
 			return tAppLayerC2, true // C2 / beacon / IoC
+		case strings.Contains(m, "yanal hareket") || strings.Contains(m, "lateral"):
+			return tNetworkDiscover, true // iç-ağ tarama / yanal hareket
 		case strings.Contains(m, "içerik-tarama") || strings.Contains(m, "yara"):
 			return tIngressTool, true // bilinen-kötü içerik (dışarıdan getirilen araç)
 		case strings.Contains(m, "dosya bütünlüğü") || strings.Contains(m, "fim"):
