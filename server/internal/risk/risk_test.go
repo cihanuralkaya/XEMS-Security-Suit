@@ -60,6 +60,26 @@ func TestAggregateSaturates(t *testing.T) {
 	}
 }
 
+func TestIncidentExploitability(t *testing.T) {
+	// Önem arttıkça istismar-edilebilirlik monoton artmalı; CRITICAL en yüksek.
+	c := IncidentExploitability("CRITICAL")
+	h := IncidentExploitability("HIGH")
+	m := IncidentExploitability("MEDIUM")
+	o := IncidentExploitability("INFO")
+	if !(c > h && h > m && m > o) {
+		t.Fatalf("monoton olmalı: crit=%v high=%v med=%v info=%v", c, h, m, o)
+	}
+	if c != 0.6 || o != 0.2 {
+		t.Fatalf("sınır değerleri yanlış: crit=%v info=%v", c, o)
+	}
+	// Aynı diğer faktörlerle, CRITICAL incident skoru HIGH'dan büyük olmalı.
+	sc := Score(Factors{Severity: "CRITICAL", AssetCriticality: 3, Confidence: 0.9, Exploitability: c})
+	sh := Score(Factors{Severity: "HIGH", AssetCriticality: 3, Confidence: 0.9, Exploitability: h})
+	if !(sc > sh) {
+		t.Fatalf("CRITICAL incident skoru (%d) HIGH'dan (%d) büyük olmalı", sc, sh)
+	}
+}
+
 func TestBand(t *testing.T) {
 	cases := map[int]string{95: "CRITICAL", 70: "HIGH", 40: "MEDIUM", 20: "LOW", 5: "INFO"}
 	for score, want := range cases {

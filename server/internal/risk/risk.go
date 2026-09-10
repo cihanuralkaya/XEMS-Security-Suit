@@ -84,6 +84,23 @@ func Aggregate(scores []int) int {
 	return int(clampf(total, 0, 100))
 }
 
+// IncidentExploitability, bir incident'in önem düzeyine göre istismar-edilebilirlik
+// sinyali (0..1) döner: AKTİF, yüksek-önemli tespitler (aktif düşman operasyonu — ör.
+// hesap ele geçirme, C2) düşük-önemli/politika incident'lerinden daha yüksek istismar
+// olasılığı taşır, dolayısıyla filo-riskte daha ağır tartılmalıdır. Saf/testli.
+func IncidentExploitability(severity string) float64 {
+	switch severity {
+	case "CRITICAL":
+		return 0.6
+	case "HIGH":
+		return 0.45
+	case "MEDIUM":
+		return 0.3
+	default:
+		return 0.2
+	}
+}
+
 // Band, sayısal skoru insan-okunur bir risk bandına çevirir (konsol rozeti).
 func Band(score int) string {
 	switch {

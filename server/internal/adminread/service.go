@@ -841,7 +841,7 @@ func (s *Service) FleetRisk(ctx context.Context) (FleetRiskDTO, error) {
 		}
 		sc := risk.Score(risk.Factors{
 			Severity: inc.Severity, AssetCriticality: 3,
-			Confidence: 0.9, Exploitability: 0.3,
+			Confidence: 0.9, Exploitability: risk.IncidentExploitability(inc.Severity),
 		})
 		add(inc.DeviceID, sc, "açık incident ("+inc.Severity+"): "+inc.RuleID)
 	}
