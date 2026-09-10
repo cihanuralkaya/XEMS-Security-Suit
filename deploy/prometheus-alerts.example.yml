@@ -1,0 +1,86 @@
+# XEMS — Prometheus alarm kuralları (örnek) / Prometheus alerting rules (example).
+#
+# XEMS C2 /metrics ucunu (XEMS_METRICS_TOKEN ile) Prometheus'a scrape ettirin, sonra
+# bu kuralları prometheus.yml'de `rule_files` altına ekleyin. Eşikleri ortamınıza göre
+# ayarlayın. Scrape config örneği:
+#
+#   scrape_configs:
+#     - job_name: xems-c2
+#       scheme: https
+#       authorization: { credentials: "<XEMS_METRICS_TOKEN>" }
+#       static_configs: [{ targets: ["c2.sirket.local:8445"] }]
+
+groups:
+  - name: xems-availability
+    rules:
+      - alert: XEMSPipelineStalled
+        # Telemetri alımı 15 dk durdu → ajan/alım yolu sorunu (kör nokta).
+        expr: xems_seconds_since_last_ingest > 900
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "XEMS olay-alımı durmuş görünüyor"
+          description: "Son telemetri alımından {{ $value }} sn geçti."
+
+      - alert: XEMSClusterNotifyFallback
+        # Küme fan-out fallback artıyorsa DB NOTIFY erişiminde sorun var (#10 HA).
+        expr: increase(xems_cluster_notices_total{direction="fallback"}[10m]) > 0
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "XEMS küme NOTIFY fallback'i artıyor"
+          description: "DB LISTEN/NOTIFY erişimini kontrol edin."
+
+  - name: xems-certificates
+    rules:
+      - alert: XEMSCertExpiringSoon
+        # CA/sunucu sertifikası 14 günden az → yenileyin (süre dolması = mTLS kesintisi).
+        expr: xems_cert_expiry_days < 14
+        for: 1h
+        labels: { severity: warning }
+        annotations:
+          summary: "XEMS CA/sunucu sertifikası yakında doluyor"
+          description: "En az kalan gün: {{ $value }}. Sertifikayı yenileyin."
+
+      - alert: XEMSCertExpired
+        expr: xems_cert_expiry_days < 0
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "XEMS CA/sunucu sertifikası SÜRESİ DOLDU"
+          description: "mTLS kesintisi riski — hemen yenileyin."
+
+  - name: xems-security
+    rules:
+      - alert: XEMSLoginBruteForce
+        # Kısa sürede kaba-kuvvet kilidi → admin konsoluna saldırı girişimi.
+        expr: increase(xems_login_lockouts_total[15m]) > 0
+        for: 0m
+        labels: { severity: warning }
+        annotations:
+          summary: "XEMS admin konsoluna kaba-kuvvet girişimi"
+          description: "Son 15 dk içinde {{ $value }} giriş kilidi tetiklendi."
+
+      - alert: XEMSLateralMovement
+        expr: increase(xems_lateral_movement_total[15m]) > 0
+        for: 0m
+        labels: { severity: critical }
+        annotations:
+          summary: "XEMS olası yanal hareket tespiti"
+          description: "Bir uç nokta kısa sürede çok sayıda iç hedefe bağlandı."
+
+      - alert: XEMSHighConfidenceAttackChain
+        expr: increase(xems_chain_fired_total[15m]) > 0
+        for: 0m
+        labels: { severity: critical }
+        annotations:
+          summary: "XEMS yüksek-güvenli saldırı zinciri"
+          description: "Aynı cihazda çok-sinyal korelasyon tetiklendi."
+
+      - alert: XEMSIoCHit
+        expr: increase(xems_ioc_hits_total[10m]) > 0
+        for: 0m
+        labels: { severity: critical }
+        annotations:
+          summary: "XEMS tehdit istihbaratı (IoC) eşleşmesi"
+          description: "Bilinen-kötü bir gösterge bir uç noktada görüldü."
