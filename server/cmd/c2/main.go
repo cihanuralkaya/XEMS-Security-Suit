@@ -617,6 +617,15 @@ func run() error {
 		vulnCount = vs.Size()
 		log.Printf("zafiyet veri kümesi: %d kayıt yüklendi", vulnCount)
 	}
+	// Sertifika ömrü (admin görünürlüğü): CA + sunucu sertifikalarının EN AZ kalan günü.
+	// Konsol düşük değerde uyarır (sessiz süre-dolması = mTLS kesintisi).
+	certMinDays := 9999
+	for _, p := range [][]byte{caCertPEM, serverCertPEM} {
+		if d, err := security.CertDaysRemaining(p, time.Now()); err == nil && d < certMinDays {
+			certMinDays = d
+		}
+	}
+
 	// Dağıtım koruma-duruşu (admin görünürlüğü: /api/features + konsol sistem kartı).
 	adminAPI.SetFeatures(map[string]any{
 		"alerting_enabled":      alertingOn,
@@ -631,6 +640,7 @@ func run() error {
 		"wipe_dual_control":     wipeDual,
 		"tenant_id":             cfg.TenantID,
 		"event_schema_version":  model.EventSchemaVersion,
+		"cert_expiry_days":      certMinDays,
 	})
 	adminAPI.SetTenantID(cfg.TenantID)
 	if cfg.TenantID != "default" {

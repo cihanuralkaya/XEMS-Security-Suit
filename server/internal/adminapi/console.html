@@ -1800,6 +1800,10 @@
       box.appendChild(featRow("Kalıcı depo (PostgreSQL)", !!f.persistence, f.persistence?"":"bellek-içi demo"));
       box.appendChild(featRow("Yatay ölçekleme (çok-düğüm)", !!f.cluster_enabled, f.cluster_enabled?"LISTEN/NOTIFY fan-out":"tek düğüm"));
       box.appendChild(featRow("Yapısal loglama (JSON)", (f.log_format==="json"), "biçim: "+(f.log_format||"text")));
+      // Sertifika geçerliliği: kalan gün > 30 ise sağlıklı; azsa/süresi dolmuşsa uyarı.
+      var cd=(typeof f.cert_expiry_days==="number")?f.cert_expiry_days:9999;
+      box.appendChild(featRow("Sertifika geçerliliği (CA/sunucu)", cd>30,
+        cd>=9000?"—":(cd<0?("SÜRESİ DOLDU — "+(-cd)+" gün önce!"):(cd+" gün kaldı"+(cd<=30?" — yenileyin":"")))));
     }).catch(function(){ box.innerHTML="<div class='empty' style='padding:10px'>Bu görünüm yalnız ADMIN rolüne açıktır.</div>"; });
   }
   function renderEventRate(ingested){
