@@ -14,17 +14,23 @@ import (
 	"time"
 )
 
-// Attempt, tek bir başarısız oturum-açma denemesidir (kaynak + zaman).
+// Attempt, tek bir başarısız oturum-açma denemesidir (kaynak + zaman). SourceIP ve
+// TargetUser opsiyoneldir (Windows EventData zenginleştirmesinden gelir).
 type Attempt struct {
-	DeviceID string
-	At       time.Time
+	DeviceID   string
+	At         time.Time
+	SourceIP   string // opsiyonel — saldırgan IP (4625 IpAddress)
+	TargetUser string // opsiyonel — hedeflenen hesap (4625 TargetUserName)
 }
 
 // Finding, olası bir kaba-kuvvet/püskürtme bulgusudur.
 type Finding struct {
-	DeviceID string        // kaynak ana bilgisayar
-	Count    int           // penceredeki AZAMİ başarısız deneme sayısı
-	Window   time.Duration // değerlendirme penceresi
+	DeviceID        string        // kaynak ana bilgisayar
+	Count           int           // penceredeki AZAMİ başarısız deneme sayısı
+	Window          time.Duration // değerlendirme penceresi
+	DistinctSources int           // farklı saldırgan IP sayısı
+	DistinctTargets int           // hedeflenen farklı hesap sayısı
+	TopSource       string        // en çok görülen saldırgan IP (öznitelik)
 }
 
 // Analyze, her cihaz için herhangi bir `window` uzunluğundaki kayan pencerede
@@ -38,9 +44,9 @@ func Analyze(attempts []Attempt, minAttempts int, window time.Duration) []Findin
 	if window <= 0 {
 		window = 5 * time.Minute
 	}
-	byDev := map[string][]time.Time{}
+	byDev := map[string][]Attempt{}
 	for _, a := range attempts {
-		byDev[a.DeviceID] = append(byDev[a.DeviceID], a.At)
+		byDev[a.DeviceID] = append(byDev[a.DeviceID], a)
 	}
 
 	devs := make([]string, 0, len(byDev))
@@ -51,20 +57,42 @@ func Analyze(attempts []Attempt, minAttempts int, window time.Duration) []Findin
 
 	var out []Finding
 	for _, dev := range devs {
-		ts := byDev[dev]
-		sort.Slice(ts, func(i, j int) bool { return ts[i].Before(ts[j]) })
+		as := byDev[dev]
+		sort.Slice(as, func(i, j int) bool { return as[i].At.Before(as[j].At) })
 		best, lo := 0, 0
-		for hi := 0; hi < len(ts); hi++ {
-			for ts[hi].Sub(ts[lo]) > window {
+		for hi := 0; hi < len(as); hi++ {
+			for as[hi].At.Sub(as[lo].At) > window {
 				lo++
 			}
 			if n := hi - lo + 1; n > best {
 				best = n
 			}
 		}
-		if best >= minAttempts {
-			out = append(out, Finding{DeviceID: dev, Count: best, Window: window})
+		if best < minAttempts {
+			continue
 		}
+		// Öznitelik: cihaz için (batch = tek pencere) farklı kaynak IP / hedef hesap
+		// sayıları ve en sık saldırgan IP. Çok sayıda hedef → parola-püskürtme sinyali.
+		srcCount := map[string]int{}
+		targets := map[string]bool{}
+		for _, a := range as {
+			if a.SourceIP != "" {
+				srcCount[a.SourceIP]++
+			}
+			if a.TargetUser != "" {
+				targets[a.TargetUser] = true
+			}
+		}
+		top, topN := "", 0
+		for ip, n := range srcCount {
+			if n > topN || (n == topN && ip < top) {
+				top, topN = ip, n
+			}
+		}
+		out = append(out, Finding{
+			DeviceID: dev, Count: best, Window: window,
+			DistinctSources: len(srcCount), DistinctTargets: len(targets), TopSource: top,
+		})
 	}
 	return out
 }

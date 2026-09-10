@@ -983,7 +983,16 @@ func run() error {
 					m := strings.ToLower(e.Message)
 					if strings.Contains(m, "failed logon") || strings.Contains(m, "oturum açma başarısız") ||
 						strings.Contains(m, "pre-authentication failed") {
-						attempts = append(attempts, bruteforce.Attempt{DeviceID: e.DeviceID, At: e.CreatedAt})
+						var d struct {
+							SrcIP      string `json:"src_ip"`
+							TargetUser string `json:"target_user"`
+						}
+						if len(e.Details) > 0 {
+							_ = json.Unmarshal(e.Details, &d)
+						}
+						attempts = append(attempts, bruteforce.Attempt{
+							DeviceID: e.DeviceID, At: e.CreatedAt, SourceIP: d.SrcIP, TargetUser: d.TargetUser,
+						})
 					}
 				}
 				for _, f := range bruteforce.Analyze(attempts, bfMin, bfWindow) {
@@ -993,13 +1002,22 @@ func run() error {
 					}
 					bfAlerted[key] = true
 					metrics.IncBruteForce()
+					// Çok sayıda farklı hedef hesap → parola-püskürtme; tek hesap → kaba-kuvvet.
+					kind := "kaba-kuvvet"
+					if f.DistinctTargets >= 5 {
+						kind = "parola-püskürtme"
+					}
+					attr := ""
+					if f.TopSource != "" {
+						attr = fmt.Sprintf(" (kaynak IP %s, %d farklı hesap)", f.TopSource, f.DistinctTargets)
+					}
 					ev := model.Event{
 						Category: "SECURITY", Severity: "HIGH",
-						Message: fmt.Sprintf("olası kaba-kuvvet/parola-püskürtme: %s içinde %d başarısız oturum açma",
-							f.Window.Round(time.Minute), f.Count),
+						Message: fmt.Sprintf("olası %s: %s içinde %d başarısız oturum açma%s",
+							kind, f.Window.Round(time.Minute), f.Count, attr),
 						OccurredAt: time.Now(),
-						Details: fmt.Sprintf(`{"brute_force":true,"failed_logons":%d,"window_sec":%d,"technique":"T1110"}`,
-							f.Count, int(f.Window.Seconds())),
+						Details: fmt.Sprintf(`{"brute_force":true,"failed_logons":%d,"window_sec":%d,"distinct_sources":%d,"distinct_targets":%d,"top_source":%q,"technique":"T1110"}`,
+							f.Count, int(f.Window.Seconds()), f.DistinctSources, f.DistinctTargets, f.TopSource),
 					}
 					if _, err := backend.SaveEvents(ctx, f.DeviceID, []model.Event{ev}); err == nil {
 						liveBus.PublishEvent(f.DeviceID, ev.Severity, ev.Message)

@@ -45,6 +45,31 @@ func TestAnalyzeWindowResets(t *testing.T) {
 	}
 }
 
+func TestAnalyzeAttribution(t *testing.T) {
+	base := time.Date(2026, 3, 10, 9, 0, 0, 0, time.UTC)
+	// Aynı kaynak IP, 3 farklı hedef hesap → püskürtme öznitelikleri.
+	att := []Attempt{
+		{DeviceID: "dc", At: base, SourceIP: "9.9.9.9", TargetUser: "alice"},
+		{DeviceID: "dc", At: base.Add(1 * time.Minute), SourceIP: "9.9.9.9", TargetUser: "bob"},
+		{DeviceID: "dc", At: base.Add(2 * time.Minute), SourceIP: "9.9.9.9", TargetUser: "carol"},
+		{DeviceID: "dc", At: base.Add(3 * time.Minute), SourceIP: "8.8.8.8", TargetUser: "alice"},
+	}
+	got := Analyze(att, 3, 5*time.Minute)
+	if len(got) != 1 {
+		t.Fatalf("1 bulgu beklenirdi, %d", len(got))
+	}
+	f := got[0]
+	if f.TopSource != "9.9.9.9" {
+		t.Errorf("en sık kaynak 9.9.9.9 olmalı, %q", f.TopSource)
+	}
+	if f.DistinctSources != 2 {
+		t.Errorf("2 farklı kaynak beklenirdi, %d", f.DistinctSources)
+	}
+	if f.DistinctTargets != 3 {
+		t.Errorf("3 farklı hedef hesap beklenirdi, %d", f.DistinctTargets)
+	}
+}
+
 func TestAnalyzeDeterministicOrder(t *testing.T) {
 	base := time.Now()
 	var att []Attempt
