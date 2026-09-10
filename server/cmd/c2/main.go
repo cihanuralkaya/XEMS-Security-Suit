@@ -39,6 +39,7 @@ import (
 	"xems.corp/suite/server/internal/correlate"
 	"xems.corp/suite/server/internal/db"
 	"xems.corp/suite/server/internal/detect"
+	"xems.corp/suite/server/internal/dnstunnel"
 	"xems.corp/suite/server/internal/enroll"
 	"xems.corp/suite/server/internal/eventbus"
 	"xems.corp/suite/server/internal/ioc"
@@ -879,6 +880,72 @@ func run() error {
 			}
 		}()
 		log.Printf("C2 beacon + yanal-hareket tespiti etkin (her %s, %s pencere)", bInterval, bWindow)
+	}
+
+	// DNS tünelleme / DNS üzerinden sızdırma: agent DNS telemetrisinde (NETWORK_DISCOVERY,
+	// dns=true) bir cihaz TEK üst alanın ÇOK SAYIDA farklı alt alanını kısa sürede
+	// sorguluyorsa olası DNS-tüneli (veri kaçırma). XEMS_DNSTUNNEL_DISABLE ile kapatılır.
+	if os.Getenv("XEMS_DNSTUNNEL_DISABLE") == "" {
+		dtInterval := getdurEnv("XEMS_DNSTUNNEL_INTERVAL", 10*time.Minute)
+		dtWindow := getdurEnv("XEMS_DNSTUNNEL_WINDOW", 5*time.Minute)
+		dtMin := 20
+		if n := atoiEnv("XEMS_DNSTUNNEL_MIN"); n > 0 {
+			dtMin = n
+		}
+		dtAlerted := map[string]bool{}
+		go func() {
+			t := time.NewTicker(dtInterval)
+			defer t.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+				}
+				evs, err := readSvc.QueryEvents(ctx, adminread.EventFilter{
+					Category: "NETWORK_DISCOVERY", Since: time.Now().Add(-dtWindow), Limit: 20000,
+				})
+				if err != nil {
+					continue
+				}
+				queries := make([]dnstunnel.Query, 0, len(evs))
+				for _, e := range evs {
+					var d struct {
+						DNS    bool   `json:"dns"`
+						Domain string `json:"domain"`
+					}
+					if len(e.Details) > 0 {
+						_ = json.Unmarshal(e.Details, &d)
+					}
+					if d.DNS && d.Domain != "" {
+						queries = append(queries, dnstunnel.Query{DeviceID: e.DeviceID, Domain: d.Domain, At: e.CreatedAt})
+					}
+				}
+				for _, f := range dnstunnel.Analyze(queries, dtMin, dtWindow) {
+					key := "dnstunnel|" + f.DeviceID + "|" + f.Parent
+					if dtAlerted[key] {
+						continue
+					}
+					dtAlerted[key] = true
+					ev := model.Event{
+						Category: "SECURITY", Severity: "HIGH",
+						Message: fmt.Sprintf("olası DNS tünelleme: %s altında %s içinde %d farklı alt alan",
+							f.Parent, f.Window.Round(time.Minute), f.DistinctSubdomains),
+						OccurredAt: time.Now(),
+						Details: fmt.Sprintf(`{"dns_tunnel":true,"parent":%q,"distinct_subdomains":%d,"window_sec":%d,"technique":"T1071.004"}`,
+							f.Parent, f.DistinctSubdomains, int(f.Window.Seconds())),
+					}
+					if _, err := backend.SaveEvents(ctx, f.DeviceID, []model.Event{ev}); err == nil {
+						liveBus.PublishEvent(f.DeviceID, ev.Severity, ev.Message)
+						socAlerter.Notify(notify.Alert{DeviceID: f.DeviceID, Category: "SECURITY", Severity: "HIGH",
+							Message: ev.Message, OccurredAt: ev.OccurredAt, TechniqueID: "T1071.004",
+							TechniqueName: "DNS", Tactic: "Command and Control"})
+						log.Printf("[dnstunnel] cihaz %s: %s", f.DeviceID, ev.Message)
+					}
+				}
+			}
+		}()
+		log.Printf("DNS tünelleme tespiti etkin (her %s, %s pencere, eşik %d)", dtInterval, dtWindow, dtMin)
 	}
 
 	// Sertifika ömür-sonu izleme: sunucu/CA sertifikaları uzun-ömürlü ve OTO-YENİLENMEZ
