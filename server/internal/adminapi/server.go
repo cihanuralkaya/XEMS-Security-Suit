@@ -36,6 +36,7 @@ import (
 	"xems.corp/suite/server/internal/mitre"
 	"xems.corp/suite/server/internal/model"
 	"xems.corp/suite/server/internal/notify"
+	"xems.corp/suite/server/internal/ratelimit"
 	"xems.corp/suite/server/internal/report"
 	"xems.corp/suite/server/internal/security"
 	"xems.corp/suite/server/internal/vuln"
@@ -51,27 +52,28 @@ type AuthStore interface {
 
 // Server, admin HTTP API'sidir.
 type Server struct {
-	adminSvc     *admin.Service
-	reader       *adminread.Service
-	auth         AuthStore
-	sessions     *security.SessionSigner
-	ttl          time.Duration
-	now          func() time.Time
-	stream       *eventbus.Bus
-	health       func(context.Context) error
-	loginLim     *loginLimiter
-	notice       string
-	dummyHash    string // SEC-004: bilinmeyen e-postada sabit-zaman için sahte Argon2 hash
-	sseConns     int64  // SEC-007: aktif SSE bağlantı sayısı (atomik)
-	auditVerify  func(context.Context) error
-	auditExpKey  ed25519.PrivateKey            // ayarlıysa /api/audit/export imzalı manifest üretir (#16)
-	maintWindows func() []notify.Window        // ayarlıysa /api/maintenance bakım pencerelerini döner (#18)
-	metricsToken string                        // ayarlıysa /metrics bu Bearer token ile açılır; boşsa uç kapalı
-	ingestToken  string                        // ayarlıysa POST /api/ingest bu Bearer token ile açılır (#21)
-	ingestSink   EventIngestor                 // harici log alımı için olay yazma yolu
-	detector     atomic.Pointer[detect.Engine] // tespit kural kataloğu (görünürlük ucu; canlı hot-reload için atomik)
-	vulnSet      *vuln.Set                     // zafiyet veri kümesi (nil = kapalı); envanterle eşleşir
-	features     map[string]any                // dağıtım koruma-duruşu (opsiyonel özellik bayrakları)
+	adminSvc      *admin.Service
+	reader        *adminread.Service
+	auth          AuthStore
+	sessions      *security.SessionSigner
+	ttl           time.Duration
+	now           func() time.Time
+	stream        *eventbus.Bus
+	health        func(context.Context) error
+	loginLim      *loginLimiter
+	notice        string
+	dummyHash     string // SEC-004: bilinmeyen e-postada sabit-zaman için sahte Argon2 hash
+	sseConns      int64  // SEC-007: aktif SSE bağlantı sayısı (atomik)
+	auditVerify   func(context.Context) error
+	auditExpKey   ed25519.PrivateKey            // ayarlıysa /api/audit/export imzalı manifest üretir (#16)
+	maintWindows  func() []notify.Window        // ayarlıysa /api/maintenance bakım pencerelerini döner (#18)
+	metricsToken  string                        // ayarlıysa /metrics bu Bearer token ile açılır; boşsa uç kapalı
+	ingestToken   string                        // ayarlıysa POST /api/ingest bu Bearer token ile açılır (#21)
+	ingestSink    EventIngestor                 // harici log alımı için olay yazma yolu
+	ingestLimiter *ratelimit.Limiter            // /api/ingest IP-başına hız sınırı (nil = kapalı)
+	detector      atomic.Pointer[detect.Engine] // tespit kural kataloğu (görünürlük ucu; canlı hot-reload için atomik)
+	vulnSet       *vuln.Set                     // zafiyet veri kümesi (nil = kapalı); envanterle eşleşir
+	features      map[string]any                // dağıtım koruma-duruşu (opsiyonel özellik bayrakları)
 }
 
 // SetDetector, tespit kural motorunu bağlar (kural kataloğu ucu için). nil ise
@@ -102,6 +104,10 @@ type EventIngestor interface {
 func (s *Server) SetIngest(sink EventIngestor, token string) {
 	s.ingestSink, s.ingestToken = sink, token
 }
+
+// SetIngestRateLimit, /api/ingest için IP-başına hız sınırlayıcı bağlar (DoS/sel
+// koruması). nil ise sınırlama kapalıdır.
+func (s *Server) SetIngestRateLimit(l *ratelimit.Limiter) { s.ingestLimiter = l }
 
 // SetMetricsToken, Prometheus /metrics ucunu verilen statik Bearer token ile
 // etkinleştirir. Boş bırakılırsa uç tamamen kapalıdır (cihaz sayıları gibi
@@ -471,6 +477,11 @@ func (s *Server) handleIngest(w http.ResponseWriter, r *http.Request) {
 	}
 	if subtle.ConstantTimeCompare([]byte(bearer(r)), []byte(s.ingestToken)) != 1 {
 		writeErr(w, http.StatusUnauthorized, "geçersiz ingest token")
+		return
+	}
+	// Hız sınırı (DoS/sel koruması): istemci IP başına token-bucket. Aşılırsa 429.
+	if s.ingestLimiter != nil && !s.ingestLimiter.Allow(clientIP(r)) {
+		writeErr(w, http.StatusTooManyRequests, "hız sınırı aşıldı")
 		return
 	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, 4<<20))

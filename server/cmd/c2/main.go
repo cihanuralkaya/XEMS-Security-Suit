@@ -43,6 +43,7 @@ import (
 	"xems.corp/suite/server/internal/model"
 	"xems.corp/suite/server/internal/notify"
 	"xems.corp/suite/server/internal/policypush"
+	"xems.corp/suite/server/internal/ratelimit"
 	"xems.corp/suite/server/internal/report"
 	"xems.corp/suite/server/internal/response"
 	"xems.corp/suite/server/internal/retention"
@@ -519,7 +520,16 @@ func run() error {
 	// CEF logları gönderebilir; normalize edilip olay yoluna yazılır.
 	if it := os.Getenv("XEMS_INGEST_TOKEN"); it != "" {
 		adminAPI.SetIngest(backend, it)
-		log.Println("harici log alımı etkin: POST /api/ingest (JSON + CEF)")
+		// Hız sınırı (DoS/sel koruması): XEMS_INGEST_RATE_PER_SEC (IP-başına, varsayılan
+		// 50/sn, tavan 2x). 0 → sınırsız.
+		rate := 50.0
+		if n := atoiEnv("XEMS_INGEST_RATE_PER_SEC"); n > 0 {
+			rate = float64(n)
+		}
+		if rate > 0 {
+			adminAPI.SetIngestRateLimit(ratelimit.New(rate, rate*2, nil))
+		}
+		log.Printf("harici log alımı etkin: POST /api/ingest (JSON + CEF), hız sınırı %.0f/sn/IP", rate)
 	}
 	adminAPI.SetDetector(detector) // tespit kural kataloğu (ingest ile aynı motor)
 
