@@ -75,6 +75,13 @@ LEEF:2.0|Palo Alto|PAN-OS|10.2|threat|x09|sev=8	src=1.2.3.4	msg=malware	devTime=
 
 Metin gövdesini `Content-Type: text/plain` ile gönderin (satır-başına bir kayıt).
 
+> **İpucu — çevrimdışı doğrulama:** shipper çıktınızı canlıya bağlamadan önce
+> `logcheck` CLI ile XEMS'in nasıl ayrıştırdığını görün (ağ/sunucu gerekmez):
+> ```bash
+> echo 'CEF:0|V|P|1|s|Malware|9|src=1.2.3.4' | go run ./server/cmd/logcheck
+> cat winlog.json | go run ./server/cmd/logcheck -winlog
+> ```
+
 ### Windows olay günlüğü
 
 Windows güvenlik olayları EventID + kanala göre sınıflandırılır (ör. 4625 başarısız
