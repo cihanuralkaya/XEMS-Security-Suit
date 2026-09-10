@@ -7,6 +7,9 @@ package notify
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -56,8 +59,16 @@ type WebhookNotifier struct {
 	url    string
 	minSev int
 	format string // "json" (varsayılan) veya "slack" (Slack/Teams incoming webhook)
+	secret []byte // ayarlıysa gövde HMAC-SHA256 ile imzalanır (X-XEMS-Signature)
 	client *http.Client
 	ch     chan Alert
+}
+
+// SetHMACSecret, giden webhook gövdesini HMAC-SHA256 ile imzalamayı etkinleştirir.
+// Alıcı, paylaşılan sırla imzayı doğrulayarak uyarının GERÇEKTEN XEMS'ten geldiğini
+// (sahte uyarı enjeksiyonu değil) doğrular. Boş sır → imzalama kapalı.
+func (n *WebhookNotifier) SetHMACSecret(secret string) {
+	n.secret = []byte(secret)
 }
 
 // Option sabitleri.
@@ -159,6 +170,12 @@ func (n *WebhookNotifier) post(a Alert) {
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
+	// İmzalama etkinse: gövdenin HMAC-SHA256'sını başlığa ekle (alıcı doğrular).
+	if len(n.secret) > 0 {
+		mac := hmac.New(sha256.New, n.secret)
+		mac.Write(body)
+		req.Header.Set("X-XEMS-Signature", "sha256="+hex.EncodeToString(mac.Sum(nil)))
+	}
 	resp, err := n.client.Do(req)
 	if err != nil {
 		log.Printf("notify: webhook POST başarısız: %v", err)

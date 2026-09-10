@@ -1,7 +1,11 @@
 package notify
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -96,5 +100,59 @@ func TestSevRankOrdering(t *testing.T) {
 	if !(sevRank("CRITICAL") > sevRank("HIGH") && sevRank("HIGH") > sevRank("MEDIUM") &&
 		sevRank("MEDIUM") > sevRank("LOW") && sevRank("LOW") > sevRank("INFO") && sevRank("INFO") > sevRank("bilinmeyen")) {
 		t.Fatal("önem düzeyi sıralaması yanlış")
+	}
+}
+
+func TestWebhookHMACSignature(t *testing.T) {
+	const secret = "topsecret"
+	gotSig := make(chan string, 2)
+	gotBody := make(chan []byte, 2)
+	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		gotBody <- b
+		gotSig <- r.Header.Get("X-XEMS-Signature")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	n, err := NewWebhookNotifier(ts.URL, "HIGH", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	n.client = ts.Client()
+	n.SetHMACSecret(secret)
+	n.Notify(Alert{DeviceID: "d1", Severity: "CRITICAL", Message: "test"})
+
+	select {
+	case sig := <-gotSig:
+		body := <-gotBody
+		mac := hmac.New(sha256.New, []byte(secret))
+		mac.Write(body)
+		want := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+		if sig != want {
+			t.Fatalf("imza uyuşmuyor: got %q want %q", sig, want)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("imzalı webhook 2 sn içinde teslim edilmedi")
+	}
+}
+
+func TestWebhookNoSignatureWhenUnset(t *testing.T) {
+	gotSig := make(chan string, 2)
+	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotSig <- r.Header.Get("X-XEMS-Signature")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+	n, _ := NewWebhookNotifier(ts.URL, "HIGH", "")
+	n.client = ts.Client()
+	n.Notify(Alert{DeviceID: "d1", Severity: "CRITICAL", Message: "test"})
+	select {
+	case sig := <-gotSig:
+		if sig != "" {
+			t.Fatalf("sır yokken imza başlığı olmamalı, %q", sig)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("webhook teslim edilmedi")
 	}
 }

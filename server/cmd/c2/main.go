@@ -325,6 +325,12 @@ func run() error {
 		if err != nil {
 			return err
 		}
+		// İmzalama (opsiyonel): XEMS_ALERT_WEBHOOK_SECRET ayarlıysa giden gövde
+		// HMAC-SHA256 ile imzalanır (X-XEMS-Signature) — alıcı sahte uyarıyı ayırt eder.
+		if sec := os.Getenv("XEMS_ALERT_WEBHOOK_SECRET"); sec != "" {
+			alerter.SetHMACSecret(sec)
+			log.Println("dış uyarı: webhook HMAC imzalama etkin")
+		}
 		// Yönlendirme (#15): XEMS_ALERT_CATEGORIES / XEMS_ALERT_TECHNIQUES ayarlıysa
 		// webhook'a YALNIZ eşleşen uyarılar gider (kategori/ATT&CK tekniği süzgeci).
 		cats := splitCSVEnv("XEMS_ALERT_CATEGORIES")
