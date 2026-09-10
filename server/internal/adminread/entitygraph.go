@@ -64,7 +64,8 @@ func entityFromEvent(category string, details map[string]any) (typ, value string
 			return "ip", v, true
 		}
 	case "SECURITY", "POLICY_VIOLATION":
-		if v := get("domain"); v != "" {
+		// domain (DGA/IoC) veya parent (DNS tüneli üst alanı) → alan düğümü.
+		if v := get("domain", "parent"); v != "" {
 			return "domain", v, true
 		}
 		if v := get("path"); v != "" {
