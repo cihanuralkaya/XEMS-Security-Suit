@@ -577,7 +577,11 @@ func run() error {
 		"persistence":           cfg.DatabaseURL != "",
 		"cluster_enabled":       clusterOn,
 		"wipe_dual_control":     wipeDual,
+		"tenant_id":             cfg.TenantID,
 	})
+	if cfg.TenantID != "default" {
+		log.Printf("kiracı (tenant): %s", cfg.TenantID)
+	}
 	// Zaman aşımları: yavaş-istemci (slowloris) DoS'una karşı bağlantı ömrünü
 	// sınırla. WriteTimeout KASITLI olarak ayarlanmadı — /api/stream (SSE)
 	// uzun-ömürlü bir yanıttır ve WriteTimeout onu keserdi. ReadHeaderTimeout

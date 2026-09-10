@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"xems.corp/suite/server/internal/tenant"
 )
 
 // Config, C2 sunucusunun çalışma-zamanı ayarlarıdır.
@@ -52,6 +54,10 @@ type Config struct {
 
 	// İmzalanan istemci sertifikalarının ömrü (kısa ömür + yenileme modeli).
 	ClientCertTTL time.Duration
+
+	// TenantID, bu dağıtımın kiracı kimliğidir (çok-kiracılı temel; Faz 1).
+	// XEMS_TENANT_ID; belirtilmezse "default" (tek-kiracılı, geriye uyumlu).
+	TenantID string
 }
 
 // Load, ortam değişkenlerinden Config üretir ve doğrular.
@@ -136,6 +142,13 @@ func Load() (*Config, error) {
 	if c.LoginMaxAttempts < 1 {
 		return nil, fmt.Errorf("config: XEMS_LOGIN_MAX_ATTEMPTS >= 1 olmalı, %d verildi", c.LoginMaxAttempts)
 	}
+
+	// Kiracı kimliği (çok-kiracılı temel; boşsa "default"). Geçersizse başlatma durur.
+	tid, err := tenant.Normalize(os.Getenv("XEMS_TENANT_ID"))
+	if err != nil {
+		return nil, fmt.Errorf("config: XEMS_TENANT_ID geçersiz: %w", err)
+	}
+	c.TenantID = string(tid)
 
 	// XEMS_DATABASE_URL boşsa sunucu bellek-içi DEMO deposuyla başlar (kalıcılık yok).
 	return c, nil
