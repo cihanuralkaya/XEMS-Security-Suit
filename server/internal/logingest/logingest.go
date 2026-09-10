@@ -158,7 +158,7 @@ func NormalizeCEF(line string, now time.Time) (Record, error) {
 			Category:   "SECURITY",
 			Severity:   cefSeverity(sev),
 			Message:    "[" + source + "] " + strings.TrimSpace(name),
-			OccurredAt: now,
+			OccurredAt: parseFlexTime(cefExtField(details, "rt"), now), // CEF rt (olay zamanı)
 		},
 	}
 	if details != "" {
@@ -167,6 +167,44 @@ func NormalizeCEF(line string, now time.Time) (Record, error) {
 		rec.Event.Details = string(b)
 	}
 	return rec, nil
+}
+
+// cefExtField, CEF uzantı dizesinden (boşlukla ayrılmış key=value) bir anahtarın
+// değerini döner. CEF değerleri boşluk içerebildiğinden yalnız boşluksuz değerler
+// (rt gibi zaman damgaları tipik olarak öyledir) güvenilir çıkarılır.
+func cefExtField(ext, key string) string {
+	for _, tok := range strings.Fields(ext) {
+		if k, v, ok := strings.Cut(tok, "="); ok && k == key {
+			return v
+		}
+	}
+	return ""
+}
+
+// parseFlexTime, esnek zaman damgalarını (CEF rt / LEEF devTime) çözer: epoch
+// (>1e11 → ms, aksi halde sn), RFC3339/Nano ya da yaygın CEF/LEEF tarih düzenleri.
+// Çözülemezse fallback döner.
+func parseFlexTime(s string, fallback time.Time) time.Time {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return fallback
+	}
+	if n, err := strconv.ParseInt(s, 10, 64); err == nil {
+		if n > 1e11 { // epoch millis
+			return time.UnixMilli(n).UTC()
+		}
+		return time.Unix(n, 0).UTC() // epoch saniye
+	}
+	for _, layout := range []string{
+		time.RFC3339Nano, time.RFC3339,
+		"Jan 02 2006 15:04:05.000", "Jan 02 2006 15:04:05",
+		"2006-01-02 15:04:05",
+	} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t
+		}
+	}
+	return fallback
 }
 
 // NormalizeLEEF, bir LEEF (QRadar) satırını olay kaydına çevirir. Biçim:
@@ -209,7 +247,7 @@ func NormalizeLEEF(line string, now time.Time) (Record, error) {
 			Category:   "SECURITY",
 			Severity:   cefSeverity(sev), // LEEF sev de sayısal (CEF gibi) ya da metinsel olabilir
 			Message:    "[" + source + "] " + strings.TrimSpace(name),
-			OccurredAt: now,
+			OccurredAt: parseFlexTime(leefDevTime(kv), now), // LEEF devTime (olay zamanı)
 		},
 	}
 	if len(kv) > 0 {
@@ -217,6 +255,15 @@ func NormalizeLEEF(line string, now time.Time) (Record, error) {
 		rec.Event.Details = string(b)
 	}
 	return rec, nil
+}
+
+// leefDevTime, LEEF özniteliklerinden olay zaman damgasını (devTime) döner
+// (büyük/küçük harf toleranslı: devTime / devtime).
+func leefDevTime(kv map[string]string) string {
+	if v := kv["devTime"]; v != "" {
+		return v
+	}
+	return kv["devtime"]
 }
 
 // parseLEEFAttrs, ayraçla ayrılmış key=value öznitelik dizesini haritaya çevirir.

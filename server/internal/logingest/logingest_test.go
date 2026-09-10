@@ -104,6 +104,37 @@ func TestCEFSeverityScale(t *testing.T) {
 	}
 }
 
+func TestCEFEventTimeRT(t *testing.T) {
+	// CEF rt = epoch millis → OccurredAt.
+	line := `CEF:0|V|P|1|sig|Name|5|src=1.2.3.4 rt=1767322845000`
+	rec, err := NormalizeCEF(line, now)
+	if err != nil {
+		t.Fatalf("NormalizeCEF: %v", err)
+	}
+	want := time.UnixMilli(1767322845000).UTC()
+	if !rec.Event.OccurredAt.Equal(want) {
+		t.Fatalf("OccurredAt rt'den gelmeli, %v beklenen %v", rec.Event.OccurredAt, want)
+	}
+	// rt yoksa alım zamanına düşer.
+	rec, _ = NormalizeCEF(`CEF:0|V|P|1|sig|Name|5|src=1.2.3.4`, now)
+	if !rec.Event.OccurredAt.Equal(now) {
+		t.Fatalf("rt yoksa now olmalı, %v", rec.Event.OccurredAt)
+	}
+}
+
+func TestLEEFEventTimeDevTime(t *testing.T) {
+	// LEEF devTime = RFC3339 → OccurredAt.
+	line := "LEEF:1.0|V|P|1|evt|sev=5\tmsg=x\tdevTime=2026-01-02T03:04:05Z"
+	rec, err := NormalizeLEEF(line, now)
+	if err != nil {
+		t.Fatalf("NormalizeLEEF: %v", err)
+	}
+	want := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	if !rec.Event.OccurredAt.Equal(want) {
+		t.Fatalf("OccurredAt devTime'dan gelmeli, %v beklenen %v", rec.Event.OccurredAt, want)
+	}
+}
+
 func TestNormalizeLEEF(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	// LEEF 1.0, tab-delimited attrs.
