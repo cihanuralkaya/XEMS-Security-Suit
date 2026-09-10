@@ -2126,7 +2126,8 @@
     Promise.all([
       api("/api/devices/"+encodeURIComponent(id)),
       soft(api("/api/events?device_id="+encodeURIComponent(id)+"&limit=15")),
-      soft(api("/api/devices/"+encodeURIComponent(id)+"/artifacts"))
+      soft(api("/api/devices/"+encodeURIComponent(id)+"/artifacts")),
+      soft(api("/api/devices/"+encodeURIComponent(id)+"/attack-story?limit=200"))
     ]).then(function(res){
       if(state.sel!==id) return; // seçim değiştiyse eski yanıtı yazma
       var d=res[0].device_detail; if(!d) return;
@@ -2190,6 +2191,19 @@
         swHtml="<div style='max-height:200px;overflow:auto'>"+shown+"</div>"+
           (moreN>0?("<div class='mini' style='color:var(--faint)'>… ve "+moreN+" tane daha</div>"):"");
       }
+      // Saldırı hikâyesi (kill-chain): aşama rozetleri + son adımlar.
+      var story=res[3]||{}, stages=(story.stages)||[], steps=(story.steps)||[];
+      var storyHtml="";
+      if(stages.length){
+        var badges=stages.map(function(s){ return "<span class='mono' style='font-size:10.5px;padding:1px 6px;border:1px solid var(--line);border-radius:10px;background:var(--panel2)'>"+esc(s)+"</span>"; }).join(" ");
+        var lastSteps=steps.slice(-6).map(function(st){
+          return "<div class='mini' style='display:flex;gap:8px;align-items:baseline;padding:2px 0'>"+
+            sevDot(st.severity)+"<span class='mono' style='color:var(--faint);min-width:70px'>"+esc(st.stage||"")+"</span>"+
+            "<span style='flex:1'>"+esc(st.message||"")+"</span></div>";
+        }).join("");
+        storyHtml="<div style='display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px'>"+badges+"</div>"+lastSteps+
+          (story.max_severity?("<div class='mini' style='color:var(--faint);margin-top:4px'>en yüksek önem: "+esc(story.max_severity)+"</div>"):"");
+      }
       // Toplanan artefaktlar (adli/IR): indirilebilir dosya listesi.
       var arts=(res[2]&&res[2].artifacts)||[];
       var artHtml="";
@@ -2205,6 +2219,7 @@
         "<h4>Sistem</h4><div class='mini'>"+sysLine+"</div>"+
         (resHtml?("<h4>Kaynak kullanımı</h4>"+resHtml):"")+
         (compHtml?("<h4>Uyum durumu</h4>"+compHtml):"")+
+        (storyHtml?("<h4>Saldırı hikâyesi (kill-chain)</h4>"+storyHtml):"")+
         (swHtml?("<h4>Yüklü yazılım ("+swCount+")</h4>"+swHtml):"")+
         (neighHtml?("<h4>Ağ keşfi — komşular ("+nk.length+")</h4>"+neighHtml):"")+
         (artHtml?("<h4>Toplanan dosyalar ("+arts.length+")</h4>"+artHtml):"")+
