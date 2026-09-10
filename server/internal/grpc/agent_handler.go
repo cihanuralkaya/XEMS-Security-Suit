@@ -355,6 +355,7 @@ func (h *AgentHandler) ReportEvents(stream xemsv1.AgentService_ReportEventsServe
 							sig = e.Category
 						}
 						if fired, signals := h.chain.Observe(deviceID, sig, e.OccurredAt); fired {
+							metrics.IncChainFired()
 							metrics.IncAlertRaised()
 							h.alerter.Notify(notify.Alert{
 								DeviceID:   deviceID,

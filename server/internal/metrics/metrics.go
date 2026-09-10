@@ -33,6 +33,8 @@ var (
 	clusterPublished atomic.Int64
 	clusterReceived  atomic.Int64
 	clusterFallback  atomic.Int64
+	chainFired       atomic.Int64 // çok-sinyal yüksek-güvenli saldırı zinciri tetiklemeleri
+	lastIngestUnix   atomic.Int64 // son olay-alımının Unix saniyesi (boru-hattı canlılığı)
 )
 
 // buildVersion, xems_build_info etiketinde raporlanan sürümdür.
@@ -63,6 +65,7 @@ func Counters() map[string]int64 {
 		"cluster_published": clusterPublished.Load(),
 		"cluster_received":  clusterReceived.Load(),
 		"cluster_fallback":  clusterFallback.Load(),
+		"chain_fired":       chainFired.Load(),
 	}
 }
 
@@ -73,12 +76,17 @@ func UptimeSeconds() int64 { return int64(time.Since(startTime).Seconds()) }
 func IncLoginSuccess() { loginSuccess.Add(1) }
 func IncLoginFailure() { loginFailure.Add(1) }
 
-// AddEventsIngested, kabul edilen telemetri olayı sayacını artırır.
+// AddEventsIngested, kabul edilen telemetri olayı sayacını artırır ve son-alım
+// zaman damgasını günceller (boru-hattı canlılık gauge'ı için).
 func AddEventsIngested(n int) {
 	if n > 0 {
 		eventsIngested.Add(int64(n))
+		lastIngestUnix.Store(time.Now().Unix())
 	}
 }
+
+// IncChainFired, çok-sinyal yüksek-güvenli saldırı-zinciri tetikleme sayacını artırır.
+func IncChainFired() { chainFired.Add(1) }
 
 // AddDetections, kural-eşleşmeli tespit sayacını artırır (sunucu-taraflı motor).
 func AddDetections(n int) {
@@ -163,6 +171,20 @@ func Write(w io.Writer, s Snapshot) {
 	fmt.Fprintf(w, "xems_cluster_notices_total{direction=\"published\"} %d\n", clusterPublished.Load())
 	fmt.Fprintf(w, "xems_cluster_notices_total{direction=\"received\"} %d\n", clusterReceived.Load())
 	fmt.Fprintf(w, "xems_cluster_notices_total{direction=\"fallback\"} %d\n", clusterFallback.Load())
+
+	fmt.Fprintf(w, "# HELP xems_chain_fired_total Çok-sinyal yüksek-güvenli saldırı zinciri tetiklemeleri.\n")
+	fmt.Fprintf(w, "# TYPE xems_chain_fired_total counter\n")
+	fmt.Fprintf(w, "xems_chain_fired_total %d\n", chainFired.Load())
+
+	// Boru-hattı canlılığı: son olay-alımından bu yana geçen saniye. Uzun süre
+	// artıyorsa ajan/alım yolu durmuş olabilir (ops alarmı için ideal gauge).
+	fmt.Fprintf(w, "# HELP xems_seconds_since_last_ingest Son telemetri alımından bu yana saniye (-1 = hiç).\n")
+	fmt.Fprintf(w, "# TYPE xems_seconds_since_last_ingest gauge\n")
+	if li := lastIngestUnix.Load(); li > 0 {
+		fmt.Fprintf(w, "xems_seconds_since_last_ingest %d\n", time.Now().Unix()-li)
+	} else {
+		fmt.Fprintf(w, "xems_seconds_since_last_ingest -1\n")
+	}
 
 	fmt.Fprintf(w, "# HELP xems_devices Cihaz sayıları (duruma göre).\n")
 	fmt.Fprintf(w, "# TYPE xems_devices gauge\n")
