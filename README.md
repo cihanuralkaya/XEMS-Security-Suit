@@ -34,8 +34,20 @@ Tek dil: **Go**. Ajan ↔ C2 iletişimi **gRPC + mTLS** (TLS 1.3).
 >   kaba-kuvvet koruması, admin 2FA (TOTP), mTLS sunucu SPKI pinning, sıkılaştırılmış
 >   güvenlik başlıkları (HSTS/CSP nonce).
 > - **Tespit & müdahale:** MITRE ATT&CK eşleme, sunucu-taraflı tespit kuralları
->   (Sigma-benzeri), IoC tehdit istihbaratı, davranışsal anomali, SOAR
->   otomatik-karantina, SOC webhook uyarı, Prometheus `/metrics`.
+>   (Sigma-benzeri) + **Detection-as-Code** yaşam-döngüsü + **Sigma içe aktarma**,
+>   saf-Go **YARA-tarzı içerik tarama** (imzalı kurallar), IoC tehdit istihbaratı
+>   (güven/kaynak), davranışsal anomali, C2 beacon tespiti, SOAR otomatik-karantina,
+>   SOC webhook uyarı (**yönlendirme + yükseltme + HMAC imza**), SIEM (CEF/LEEF),
+>   Prometheus `/metrics`.
+> - **SOC istihbaratı:** çok-sinyal **korelasyon** (yüksek-güven saldırı zinciri),
+>   çok-faktörlü **risk skorlama**, **saldırı hikâyesi** (kill-chain), **varlık grafı**,
+>   **incident zaman çizelgesi**, **MTTD/MTTR** trendleri, **UEBA** (ayrıcalıklı-kullanıcı
+>   davranış analitiği), uyum çerçevesi eşleme (**CIS/NIST/ISO 27001/KVKK**), bakım/
+>   bastırma pencereleri.
+> - **Tedarik zinciri güvenliği (CI):** `govulncheck` (bağımlılık CVE), **fuzzing**
+>   (kritik ayrıştırıcılar), **SBOM** (CycloneDX), gosec; hız sınırlama, kurcalama-
+>   kanıtlı imzalı denetim dışa aktarımı, imzalı çevrimdışı offboard, çok-kiracılı
+>   çıktı atıfı.
 > - **KVKK:** at-rest şifreleme + partition-bazlı saklama; **veri sahibi hakları**
 >   (erişim/dışa aktarma + silme, denetim korunur).
 > - **Konsol:** gömülü tek-sayfa SOC paneli — cihazlar/olaylar/politikalar/yöneticiler,
@@ -142,8 +154,19 @@ Single language: **Go**. Agent ↔ C2 communication over **gRPC + mTLS** (TLS 1.
 >   brute-force protection, admin 2FA (TOTP), mTLS server SPKI pinning, hardened
 >   security headers (HSTS/CSP nonce).
 > - **Detection & response:** MITRE ATT&CK mapping, server-side detection rules
->   (Sigma-like), IoC threat intelligence, behavioral anomaly detection, SOAR
->   auto-quarantine, SOC webhook alerting, Prometheus `/metrics`.
+>   (Sigma-like) + **Detection-as-Code** lifecycle + **Sigma import**, pure-Go
+>   **YARA-style content scanning** (signed rules), IoC threat intelligence
+>   (confidence/source), behavioral anomaly detection, C2 beacon detection, SOAR
+>   auto-quarantine, SOC webhook alerting (**routing + escalation + HMAC signing**),
+>   SIEM (CEF/LEEF), Prometheus `/metrics`.
+> - **SOC intelligence:** multi-signal **correlation** (high-confidence attack chains),
+>   multi-factor **risk scoring**, **attack story** (kill-chain), **entity graph**,
+>   **incident timeline**, **MTTD/MTTR** trends, **UEBA** (privileged-user behavior
+>   analytics), compliance-framework mapping (**CIS/NIST/ISO 27001/KVKK**), maintenance/
+>   suppression windows.
+> - **Supply-chain security (CI):** `govulncheck` (dependency CVEs), **fuzzing**
+>   (critical parsers), **SBOM** (CycloneDX), gosec; rate limiting, tamper-evident
+>   signed audit export, signed offline offboarding, multi-tenant output attribution.
 > - **Data protection (KVKK/GDPR-style):** at-rest encryption + partition-based
 >   retention; **data-subject rights** (access/export + erasure, audit preserved).
 > - **Console:** embedded single-page SOC dashboard — devices/events/policies/admins,
