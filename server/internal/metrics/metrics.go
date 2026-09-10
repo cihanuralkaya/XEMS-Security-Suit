@@ -37,6 +37,7 @@ var (
 	lastIngestUnix   atomic.Int64 // son olay-alımının Unix saniyesi (boru-hattı canlılığı)
 	lateralMovement  atomic.Int64 // yanal-hareket (netconn fan-out) tespitleri
 	dnsTunnel        atomic.Int64 // DNS tünelleme tespitleri
+	bruteForce       atomic.Int64 // kaba-kuvvet / parola-püskürtme tespitleri
 	savedSearchHits  atomic.Int64 // zamanlanmış kayıtlı-arama eşleşmeleri
 	loginLockouts    atomic.Int64 // kaba-kuvvet kilidi tetiklemeleri (admin girişi)
 )
@@ -78,6 +79,7 @@ func Counters() map[string]int64 {
 		"chain_fired":       chainFired.Load(),
 		"lateral_movement":  lateralMovement.Load(),
 		"dns_tunnel":        dnsTunnel.Load(),
+		"brute_force":       bruteForce.Load(),
 		"saved_search_hits": savedSearchHits.Load(),
 		"login_lockouts":    loginLockouts.Load(),
 	}
@@ -107,6 +109,9 @@ func IncLateralMovement() { lateralMovement.Add(1) }
 
 // IncDNSTunnel, DNS tünelleme tespit sayacını artırır.
 func IncDNSTunnel() { dnsTunnel.Add(1) }
+
+// IncBruteForce, kaba-kuvvet / parola-püskürtme tespit sayacını artırır.
+func IncBruteForce() { bruteForce.Add(1) }
 
 // AddSavedSearchHits, zamanlanmış kayıtlı-arama eşleşme sayacını artırır.
 func AddSavedSearchHits(n int) {
@@ -216,6 +221,10 @@ func Write(w io.Writer, s Snapshot) {
 	fmt.Fprintf(w, "# HELP xems_dns_tunnel_total DNS tünelleme tespitleri.\n")
 	fmt.Fprintf(w, "# TYPE xems_dns_tunnel_total counter\n")
 	fmt.Fprintf(w, "xems_dns_tunnel_total %d\n", dnsTunnel.Load())
+
+	fmt.Fprintf(w, "# HELP xems_brute_force_total Kaba-kuvvet / parola-püskürtme tespitleri.\n")
+	fmt.Fprintf(w, "# TYPE xems_brute_force_total counter\n")
+	fmt.Fprintf(w, "xems_brute_force_total %d\n", bruteForce.Load())
 
 	fmt.Fprintf(w, "# HELP xems_saved_search_hits_total Zamanlanmış kayıtlı-arama eşleşmeleri.\n")
 	fmt.Fprintf(w, "# TYPE xems_saved_search_hits_total counter\n")

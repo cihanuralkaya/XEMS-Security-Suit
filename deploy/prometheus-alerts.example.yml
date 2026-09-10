@@ -77,6 +77,14 @@ groups:
           summary: "XEMS olası yanal hareket tespiti"
           description: "Bir uç nokta kısa sürede çok sayıda iç hedefe bağlandı."
 
+      - alert: XEMSEndpointBruteForce
+        expr: increase(xems_brute_force_total[15m]) > 0
+        for: 0m
+        labels: { severity: critical }
+        annotations:
+          summary: "XEMS olası kaba-kuvvet / parola-püskürtme"
+          description: "Bir kaynak ana bilgisayarda kısa pencerede çok sayıda başarısız oturum açma (Windows 4625/4771)."
+
       - alert: XEMSHighConfidenceAttackChain
         expr: increase(xems_chain_fired_total[15m]) > 0
         for: 0m

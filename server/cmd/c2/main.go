@@ -34,6 +34,7 @@ import (
 	"xems.corp/suite/server/internal/adminapi"
 	"xems.corp/suite/server/internal/adminread"
 	"xems.corp/suite/server/internal/beacon"
+	"xems.corp/suite/server/internal/bruteforce"
 	"xems.corp/suite/server/internal/cluster"
 	"xems.corp/suite/server/internal/config"
 	"xems.corp/suite/server/internal/correlate"
@@ -947,6 +948,70 @@ func run() error {
 			}
 		}()
 		log.Printf("DNS tünelleme tespiti etkin (her %s, %s pencere, eşik %d)", dtInterval, dtWindow, dtMin)
+	}
+
+	// Kaba-kuvvet / parola-püskürtme tespiti (T1110): Windows olay günlüğü alımından
+	// gelen başarısız-oturum-açma olayları (4625 failed logon, 4771 pre-auth failed)
+	// tek bir kaynak ana bilgisayarda kısa pencerede yoğunlaşırsa tek bir yüksek-önemli
+	// kampanya bulgusuna toplanır. Tek tek olaylar düşük önemlidir; seri (burst) önemlidir.
+	// XEMS_BRUTEFORCE_DISABLE ile kapatılır.
+	if os.Getenv("XEMS_BRUTEFORCE_DISABLE") == "" {
+		bfInterval := getdurEnv("XEMS_BRUTEFORCE_INTERVAL", 10*time.Minute)
+		bfWindow := getdurEnv("XEMS_BRUTEFORCE_WINDOW", 5*time.Minute)
+		bfMin := 10
+		if n := atoiEnv("XEMS_BRUTEFORCE_MIN"); n > 0 {
+			bfMin = n
+		}
+		bfAlerted := map[string]bool{}
+		go func() {
+			t := time.NewTicker(bfInterval)
+			defer t.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+				}
+				evs, err := readSvc.QueryEvents(ctx, adminread.EventFilter{
+					Category: "SECURITY", Since: time.Now().Add(-bfWindow), Limit: 20000,
+				})
+				if err != nil {
+					continue
+				}
+				attempts := make([]bruteforce.Attempt, 0, len(evs))
+				for _, e := range evs {
+					m := strings.ToLower(e.Message)
+					if strings.Contains(m, "failed logon") || strings.Contains(m, "oturum açma başarısız") ||
+						strings.Contains(m, "pre-authentication failed") {
+						attempts = append(attempts, bruteforce.Attempt{DeviceID: e.DeviceID, At: e.CreatedAt})
+					}
+				}
+				for _, f := range bruteforce.Analyze(attempts, bfMin, bfWindow) {
+					key := "bruteforce|" + f.DeviceID
+					if bfAlerted[key] {
+						continue
+					}
+					bfAlerted[key] = true
+					metrics.IncBruteForce()
+					ev := model.Event{
+						Category: "SECURITY", Severity: "HIGH",
+						Message: fmt.Sprintf("olası kaba-kuvvet/parola-püskürtme: %s içinde %d başarısız oturum açma",
+							f.Window.Round(time.Minute), f.Count),
+						OccurredAt: time.Now(),
+						Details: fmt.Sprintf(`{"brute_force":true,"failed_logons":%d,"window_sec":%d,"technique":"T1110"}`,
+							f.Count, int(f.Window.Seconds())),
+					}
+					if _, err := backend.SaveEvents(ctx, f.DeviceID, []model.Event{ev}); err == nil {
+						liveBus.PublishEvent(f.DeviceID, ev.Severity, ev.Message)
+						socAlerter.Notify(notify.Alert{DeviceID: f.DeviceID, Category: "SECURITY", Severity: "HIGH",
+							Message: ev.Message, OccurredAt: ev.OccurredAt, TechniqueID: "T1110",
+							TechniqueName: "Brute Force", Tactic: "Credential Access"})
+						log.Printf("[bruteforce] cihaz %s: %s", f.DeviceID, ev.Message)
+					}
+				}
+			}
+		}()
+		log.Printf("Kaba-kuvvet tespiti etkin (her %s, %s pencere, eşik %d)", bfInterval, bfWindow, bfMin)
 	}
 
 	// Sertifika ömür-sonu izleme: sunucu/CA sertifikaları uzun-ömürlü ve OTO-YENİLENMEZ
