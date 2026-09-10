@@ -353,6 +353,10 @@ func run() error {
 	// XEMS_ALERT_MIN_SEVERITY (varsayılan HIGH).
 	alertingOn, iocCount, autoRespOn, siemOn := false, 0, false, false
 	var notifiers []notify.Notifier
+	// socAlerter, sunucu-taraflı arka plan tespitlerinin (beacon, yanal hareket) de
+	// SOC uyarı yoluna (webhook/SIEM) ulaşması için paylaşılan alerter'dır. Yapılandırma
+	// yoksa noop (boş Multi). Nihai (sarılmış) alerter aşağıda atanır.
+	var socAlerter notify.Notifier = notify.NewMulti()
 	if hook := os.Getenv("XEMS_ALERT_WEBHOOK_URL"); hook != "" {
 		alerter, err := notify.NewWebhookNotifier(hook, getenv("XEMS_ALERT_MIN_SEVERITY", "HIGH"), os.Getenv("XEMS_ALERT_FORMAT"))
 		if err != nil {
@@ -442,6 +446,7 @@ func run() error {
 		// "default" ise no-op.
 		alerter = notify.NewTenantStamper(cfg.TenantID, alerter)
 		agentHandler.SetAlerter(alerter)
+		socAlerter = alerter // sunucu-taraflı tespitler de aynı yoldan uyarır
 	}
 
 	// Tehdit istihbaratı (IoC): XEMS_IOC_FILE ayarlıysa bilinen-kötü göstergeler
@@ -812,6 +817,9 @@ func run() error {
 					}
 					if _, err := backend.SaveEvents(ctx, f.DeviceID, []model.Event{ev}); err == nil {
 						liveBus.PublishEvent(f.DeviceID, ev.Severity, ev.Message)
+						socAlerter.Notify(notify.Alert{DeviceID: f.DeviceID, Category: "SECURITY", Severity: "HIGH",
+							Message: ev.Message, OccurredAt: ev.OccurredAt, TechniqueID: "T1071",
+							TechniqueName: "Application Layer Protocol", Tactic: "Command and Control"})
 						log.Printf("[beacon] cihaz %s: %s", f.DeviceID, ev.Message)
 					}
 				}
@@ -835,6 +843,9 @@ func run() error {
 					}
 					if _, err := backend.SaveEvents(ctx, f.DeviceID, []model.Event{ev}); err == nil {
 						liveBus.PublishEvent(f.DeviceID, ev.Severity, ev.Message)
+						socAlerter.Notify(notify.Alert{DeviceID: f.DeviceID, Category: "SECURITY", Severity: "HIGH",
+							Message: ev.Message, OccurredAt: ev.OccurredAt, TechniqueID: "T1046",
+							TechniqueName: "Network Service Discovery", Tactic: "Discovery"})
 						log.Printf("[lateral] cihaz %s: %s", f.DeviceID, ev.Message)
 					}
 				}
