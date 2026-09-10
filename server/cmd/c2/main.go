@@ -927,6 +927,7 @@ func run() error {
 						continue
 					}
 					dtAlerted[key] = true
+					metrics.IncDNSTunnel()
 					ev := model.Event{
 						Category: "SECURITY", Severity: "HIGH",
 						Message: fmt.Sprintf("olası DNS tünelleme: %s altında %s içinde %d farklı alt alan",

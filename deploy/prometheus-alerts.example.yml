@@ -61,6 +61,14 @@ groups:
           summary: "XEMS admin konsoluna kaba-kuvvet girişimi"
           description: "Son 15 dk içinde {{ $value }} giriş kilidi tetiklendi."
 
+      - alert: XEMSDNSTunnel
+        expr: increase(xems_dns_tunnel_total[15m]) > 0
+        for: 0m
+        labels: { severity: critical }
+        annotations:
+          summary: "XEMS olası DNS tünelleme / sızdırma"
+          description: "Bir uç nokta tek alan altında çok sayıda alt alan sorguladı."
+
       - alert: XEMSLateralMovement
         expr: increase(xems_lateral_movement_total[15m]) > 0
         for: 0m
