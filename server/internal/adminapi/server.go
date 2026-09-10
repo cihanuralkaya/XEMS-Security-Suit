@@ -13,10 +13,12 @@ import (
 	"crypto/subtle"
 	_ "embed"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"strconv"
@@ -264,7 +266,64 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/notice", s.handleNotice)  // KVKK aydınlatma (public)
 	mux.HandleFunc("GET /metrics", s.handleMetrics)    // Prometheus (statik token ile)
 	mux.HandleFunc("POST /api/ingest", s.handleIngest) // harici log alımı (statik token ile, #21)
-	return securityHeaders(mux)
+	return requestLog(securityHeaders(mux))
+}
+
+// statusWriter, yanıt durum kodunu yakalar (erişim logu için). SSE'yi bozmamak
+// için http.Flusher'ı geçirir.
+type statusWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *statusWriter) WriteHeader(code int) {
+	w.status = code
+	w.ResponseWriter.WriteHeader(code)
+}
+
+// Flush, alttaki yazıcı destekliyorsa akışı boşaltır (/api/stream SSE için kritik).
+func (w *statusWriter) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+// safeRequestID, gelen X-Request-ID'yi LOG-ENJEKSİYONUNA karşı temizler: yalnız
+// [A-Za-z0-9._-], en fazla 64 karakter; geçersizse yeni bir kimlik üretilir.
+func safeRequestID(in string) string {
+	if in != "" && len(in) <= 64 {
+		ok := true
+		for i := 0; i < len(in); i++ {
+			c := in[i]
+			if !(c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '.' || c == '_' || c == '-') {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			return in
+		}
+	}
+	b := make([]byte, 8)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+// requestLog, her istek için bir korelasyon kimliği (X-Request-ID) üretir/iletir ve
+// tek bir yapısal erişim-logu satırı yazar (yöntem, yol, durum, süre, rid). Dağıtık
+// izlemenin (tracing) bağımlılıksız ilk adımı: istekler loglarda korele edilebilir.
+// Sağlık uçları (yüksek-frekanslı prob) loglanmaz.
+func requestLog(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rid := safeRequestID(r.Header.Get("X-Request-ID"))
+		w.Header().Set("X-Request-ID", rid)
+		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
+		start := time.Now()
+		next.ServeHTTP(sw, r)
+		if r.URL.Path != "/healthz" && r.URL.Path != "/readyz" {
+			log.Printf("[access] %s %s %d %dms rid=%s", r.Method, r.URL.Path, sw.status, time.Since(start).Milliseconds(), rid)
+		}
+	})
 }
 
 // securityHeaders, tüm yanıtlara temel sertleştirme başlıkları ekler:

@@ -1304,3 +1304,27 @@ func TestBulkActionDryRunAndApply(t *testing.T) {
 		t.Fatalf("2 prod cihazı karantinaya alınmalıydı: %v", store.commands)
 	}
 }
+
+func TestSafeRequestID(t *testing.T) {
+	// Geçerli kimlik olduğu gibi korunur.
+	if got := safeRequestID("abc-123.def_456"); got != "abc-123.def_456" {
+		t.Fatalf("geçerli kimlik korunmalı, %q", got)
+	}
+	// Log-enjeksiyonu (newline) → temizlenir (yeni kimlik üretilir, girdi kullanılmaz).
+	inj := "ok\nFAKE [access] injected"
+	if got := safeRequestID(inj); got == inj || len(got) != 16 {
+		t.Fatalf("enjeksiyonlu kimlik reddedilip yeni üretilmeli, %q", got)
+	}
+	// Boş → üretilir (16 hex).
+	if got := safeRequestID(""); len(got) != 16 {
+		t.Fatalf("boş kimlik → 16 hex üretilmeli, %q", got)
+	}
+	// Aşırı uzun → reddedilir.
+	long := ""
+	for i := 0; i < 100; i++ {
+		long += "a"
+	}
+	if got := safeRequestID(long); len(got) != 16 {
+		t.Fatalf("aşırı uzun kimlik reddedilmeli, %q", got)
+	}
+}
