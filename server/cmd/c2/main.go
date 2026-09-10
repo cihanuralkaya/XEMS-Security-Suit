@@ -364,16 +364,6 @@ func run() error {
 		corrWindow = d
 	}
 	agentHandler.SetCorrelator(correlate.New(corrWindow, backend))
-	// Sunucu-taraflı korelatör: arka plan analizörlerinin (beacon, yanal hareket,
-	// DNS-tüneli, kaba-kuvvet) tespitleri de İZLENEN incident'lere dönüşsün — böylece
-	// vaka yönetimi (sorumlu/not) ve filo-risk bunları görür (yalnız olay+alarm değil).
-	// Ajan yolundan ayrı bir örnek (anahtar çakışmasını önler).
-	srvCorr := correlate.New(corrWindow, backend)
-	trackIncident := func(dev, ruleID, tech, sev, msg string, at time.Time) {
-		if dev != "" {
-			_, _ = srvCorr.Observe(ctx, dev, ruleID, tech, sev, msg)
-		}
-	}
 	// Çok-sinyal korelasyon: aynı cihazda XEMS_CHAIN_WINDOW (varsayılan 15dk) içinde
 	// XEMS_CHAIN_THRESHOLD (varsayılan 3) FARKLI kill-chain sinyali birikirse
 	// yüksek-güvenli saldırı-zinciri uyarısı üretilir. 0 eşik → kapalı.
@@ -797,6 +787,51 @@ func run() error {
 			}
 		}()
 		log.Printf("zamanlanmış tehdit-avı etkin: kayıtlı aramalar her %s", hi)
+	}
+
+	// Sunucu-taraflı korelatör + zincir dedektörü: arka plan analizörlerinin (beacon,
+	// yanal hareket, DNS-tüneli, kaba-kuvvet) tespitleri de İZLENEN incident'lere dönüşür
+	// (vaka yönetimi + filo-risk) VE çok-sinyal saldırı zincirini besler — böylece TEK bir
+	// cihazda farklı analizörlerin (ör. kaba-kuvvet + beacon + yanal hareket) birleşimi
+	// yüksek-güvenli zincir uyarısı tetikler. Ajan yolundan ayrı örnekler (çakışma önlenir).
+	srvCorr := correlate.New(corrWindow, backend)
+	var srvChain *correlate.ChainDetector
+	if chainThreshold > 0 {
+		srvChain = correlate.NewChainDetector(chainWindow, chainThreshold, nil)
+	}
+	// srvTactic, sunucu-taraflı teknik ID'sini kill-chain sinyaline (MITRE taktik) eşler.
+	srvTactic := map[string]string{
+		"T1071": "Command and Control", "T1071.004": "Command and Control",
+		"T1046": "Discovery", "T1110": "Credential Access",
+	}
+	trackIncident := func(dev, ruleID, tech, sev, msg string, at time.Time) {
+		if dev == "" {
+			return
+		}
+		_, _ = srvCorr.Observe(ctx, dev, ruleID, tech, sev, msg) // izlenen incident
+		if srvChain == nil {
+			return
+		}
+		sig := srvTactic[tech]
+		if sig == "" {
+			sig = tech
+		}
+		if fired, signals := srvChain.Observe(dev, sig, at); fired {
+			metrics.IncChainFired()
+			metrics.IncAlertRaised()
+			cev := model.Event{
+				Category: "SECURITY", Severity: "CRITICAL",
+				Message:    "yüksek-güvenli saldırı zinciri (sunucu-taraflı çok-sinyal): " + strings.Join(signals, " + "),
+				OccurredAt: at,
+				Details:    `{"attack_chain":true,"source":"server-side"}`,
+			}
+			if _, err := backend.SaveEvents(ctx, dev, []model.Event{cev}); err == nil {
+				liveBus.PublishEvent(dev, cev.Severity, cev.Message)
+			}
+			socAlerter.Notify(notify.Alert{DeviceID: dev, Category: "SECURITY", Severity: "CRITICAL",
+				Message: cev.Message, OccurredAt: at})
+			log.Printf("[chain] cihaz %s: %s", dev, cev.Message)
+		}
 	}
 
 	// C2 beacon tespiti (#8): periyodik olarak netconn geçmişini analiz eder;
