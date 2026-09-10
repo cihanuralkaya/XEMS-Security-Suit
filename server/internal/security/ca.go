@@ -92,6 +92,27 @@ func parseCertPEM(p []byte) (*x509.Certificate, error) {
 	return x509.ParseCertificate(block.Bytes)
 }
 
+// CertExpiry, bir PEM sertifikanın (ilk CERTIFICATE bloğu) son geçerlilik tarihini
+// (NotAfter) döner. Sunucu/CA sertifikası ömür-sonu izleme için (ajan sertifikaları
+// kısa-ömürlü + oto-yenilenir; sunucu/CA yenilenmez → sessiz süre dolması KESİNTİdir).
+func CertExpiry(pemBytes []byte) (time.Time, error) {
+	c, err := parseCertPEM(pemBytes)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return c.NotAfter, nil
+}
+
+// CertDaysRemaining, verilen ana göre sertifikanın son geçerliliğine kalan TAM gün
+// sayısını döner (geçmişse negatif).
+func CertDaysRemaining(pemBytes []byte, now time.Time) (int, error) {
+	na, err := CertExpiry(pemBytes)
+	if err != nil {
+		return 0, err
+	}
+	return int(na.Sub(now).Hours() / 24), nil
+}
+
 func parsePrivateKeyPEM(p []byte) (crypto.Signer, error) {
 	block, _ := pem.Decode(p)
 	if block == nil {

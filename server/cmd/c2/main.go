@@ -829,6 +829,47 @@ func run() error {
 		log.Printf("C2 beacon + yanal-hareket tespiti etkin (her %s, %s pencere)", bInterval, bWindow)
 	}
 
+	// Sertifika ömür-sonu izleme: sunucu/CA sertifikaları uzun-ömürlü ve OTO-YENİLENMEZ
+	// (ajan sertifikaları kısa-ömürlü + oto-yenilenir). Sessiz süre dolması KESİNTİdir.
+	// Başlangıçta + günlük olarak kalan gün kontrol edilir; eşik altındaysa UYARI loglanır
+	// (JSON log → SIEM). XEMS_CERT_EXPIRY_WARN_DAYS (varsayılan 30).
+	certWarnDays := 30
+	if n := atoiEnv("XEMS_CERT_EXPIRY_WARN_DAYS"); n > 0 {
+		certWarnDays = n
+	}
+	checkCerts := func() {
+		for _, c := range []struct {
+			name string
+			pem  []byte
+		}{
+			{"CA", caCertPEM}, {"sunucu", serverCertPEM},
+		} {
+			d, err := security.CertDaysRemaining(c.pem, time.Now())
+			if err != nil {
+				continue
+			}
+			switch {
+			case d < 0:
+				log.Printf("[cert] UYARI: %s sertifikası SÜRESİ DOLMUŞ (%d gün önce) — yenileyin!", c.name, -d)
+			case d <= certWarnDays:
+				log.Printf("[cert] UYARI: %s sertifikasının süresi %d gün içinde doluyor — yenileyin", c.name, d)
+			}
+		}
+	}
+	checkCerts() // başlangıçta bir kez
+	go func() {
+		t := time.NewTicker(24 * time.Hour)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				checkCerts()
+			}
+		}
+	}()
+
 	// Bayat-OFFLINE görevi: belirli süredir heartbeat göndermeyen ACTIVE
 	// cihazları OFFLINE işaretle (durum sütunu ve özet sayaçları güvenilir
 	// olsun). Eşik (~90 sn) heartbeat aralığının birkaç katıdır; her 1 dk taranır.
