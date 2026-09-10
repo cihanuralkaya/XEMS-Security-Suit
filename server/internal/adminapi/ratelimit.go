@@ -51,7 +51,9 @@ func (l *loginLimiter) allowed(key string) (bool, time.Duration) {
 }
 
 // recordFailure, başarısız bir denemeyi kaydeder; eşik aşılırsa kilitler.
-func (l *loginLimiter) recordFailure(key string) {
+// recordFailure, başarısız bir denemeyi kaydeder; eşik aşılırsa kilitler. Bu
+// denemeyle YENİ bir kilit başladıysa true döner (kaba-kuvvet uyarısı için).
+func (l *loginLimiter) recordFailure(key string) (justLocked bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := l.now()
@@ -64,6 +66,8 @@ func (l *loginLimiter) recordFailure(key string) {
 	if r.count >= l.max {
 		r.lockedUntil = now.Add(l.window)
 	}
+	// Eşiği TAM olarak bu denemede aştıysa YENİ kilit (bir kez uyar).
+	return r.count == l.max
 }
 
 // recordSuccess, başarılı girişte istemcinin sayacını temizler.

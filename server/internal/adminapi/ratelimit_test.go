@@ -52,3 +52,19 @@ func TestLoginLimiterSuccessResets(t *testing.T) {
 		t.Fatal("başarılı giriş sonrası sayaç sıfırlanmalı, kilitlenmemeliydi")
 	}
 }
+
+func TestRecordFailureReportsNewLockout(t *testing.T) {
+	l := newLoginLimiter(3, time.Minute)
+	if l.recordFailure("ip") { // 1
+		t.Fatal("1. denemede kilit olmamalı")
+	}
+	if l.recordFailure("ip") { // 2
+		t.Fatal("2. denemede kilit olmamalı")
+	}
+	if !l.recordFailure("ip") { // 3 → eşik → YENİ kilit
+		t.Fatal("3. denemede yeni kilit bildirilmeliydi")
+	}
+	if l.recordFailure("ip") { // 4 → zaten kilitli, tekrar bildirme
+		t.Fatal("zaten kilitliyken tekrar bildirilmemeli")
+	}
+}

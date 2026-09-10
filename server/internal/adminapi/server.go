@@ -337,6 +337,17 @@ func requestLog(next http.Handler) http.Handler {
 	})
 }
 
+// loginFailed, başarısız bir giriş denemesini kaydeder (metrik + limiter) ve bu
+// denemeyle YENİ bir kaba-kuvvet kilidi başladıysa UYARI loglar + kilit metriğini
+// artırır (SIEM: admin konsoluna kaba-kuvvet girişimi tespiti).
+func (s *Server) loginFailed(key, email string) {
+	metrics.IncLoginFailure()
+	if s.loginLim.recordFailure(key) {
+		metrics.IncLoginLockout()
+		log.Printf("[auth] UYARI: kaba-kuvvet kilidi — istemci %s (hedef hesap %q)", key, email)
+	}
+}
+
 // securityHeaders, tüm yanıtlara temel sertleştirme başlıkları ekler:
 // MIME-sniffing kapalı, clickjacking (iframe) reddi, referrer sızıntısı yok.
 func securityHeaders(next http.Handler) http.Handler {
@@ -430,15 +441,13 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		// SEC-004: bilinmeyen/pasif e-postada da Argon2 maliyetini öde (sabit-zaman;
 		// kullanıcı numaralandırma yan-kanalını kapatır). Sonuç yok sayılır.
 		_, _ = security.VerifyPassword(s.dummyHash, req.Password)
-		s.loginLim.recordFailure(key)
-		metrics.IncLoginFailure()
+		s.loginFailed(key, req.Email)
 		writeErr(w, http.StatusUnauthorized, "geçersiz kimlik bilgileri")
 		return
 	}
 	ok, err := security.VerifyPassword(hash, req.Password)
 	if err != nil || !ok {
-		s.loginLim.recordFailure(key)
-		metrics.IncLoginFailure()
+		s.loginFailed(key, req.Email)
 		writeErr(w, http.StatusUnauthorized, "geçersiz kimlik bilgileri")
 		return
 	}
@@ -457,8 +466,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if !security.VerifyTOTP(secret, req.Code, s.now()) {
-				s.loginLim.recordFailure(key)
-				metrics.IncLoginFailure()
+				s.loginFailed(key, req.Email)
 				writeErr(w, http.StatusUnauthorized, "geçersiz doğrulama kodu")
 				return
 			}

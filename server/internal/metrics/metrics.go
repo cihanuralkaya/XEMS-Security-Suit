@@ -37,6 +37,7 @@ var (
 	lastIngestUnix   atomic.Int64 // son olay-alımının Unix saniyesi (boru-hattı canlılığı)
 	lateralMovement  atomic.Int64 // yanal-hareket (netconn fan-out) tespitleri
 	savedSearchHits  atomic.Int64 // zamanlanmış kayıtlı-arama eşleşmeleri
+	loginLockouts    atomic.Int64 // kaba-kuvvet kilidi tetiklemeleri (admin girişi)
 )
 
 // certExpiryDays, CA+sunucu sertifikalarının EN AZ kalan günü (gauge). Sentinel 9999
@@ -76,6 +77,7 @@ func Counters() map[string]int64 {
 		"chain_fired":       chainFired.Load(),
 		"lateral_movement":  lateralMovement.Load(),
 		"saved_search_hits": savedSearchHits.Load(),
+		"login_lockouts":    loginLockouts.Load(),
 	}
 }
 
@@ -107,6 +109,9 @@ func AddSavedSearchHits(n int) {
 		savedSearchHits.Add(int64(n))
 	}
 }
+
+// IncLoginLockout, kaba-kuvvet kilidi (admin girişi) tetikleme sayacını artırır.
+func IncLoginLockout() { loginLockouts.Add(1) }
 
 // SetCertExpiryDays, CA+sunucu sertifikalarının EN AZ kalan gününü (gauge) ayarlar.
 func SetCertExpiryDays(d int) { certExpiryDays.Store(int64(d)) }
@@ -206,6 +211,10 @@ func Write(w io.Writer, s Snapshot) {
 	fmt.Fprintf(w, "# HELP xems_saved_search_hits_total Zamanlanmış kayıtlı-arama eşleşmeleri.\n")
 	fmt.Fprintf(w, "# TYPE xems_saved_search_hits_total counter\n")
 	fmt.Fprintf(w, "xems_saved_search_hits_total %d\n", savedSearchHits.Load())
+
+	fmt.Fprintf(w, "# HELP xems_login_lockouts_total Kaba-kuvvet kilidi (admin girişi) tetiklemeleri.\n")
+	fmt.Fprintf(w, "# TYPE xems_login_lockouts_total counter\n")
+	fmt.Fprintf(w, "xems_login_lockouts_total %d\n", loginLockouts.Load())
 
 	// Sertifika ömrü (gauge): CA+sunucu sertifikalarının EN AZ kalan günü. Prometheus
 	// alarmı için ideal (ör. < 14 → uyarı). Negatif = süresi dolmuş.
