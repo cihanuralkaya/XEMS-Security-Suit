@@ -408,6 +408,21 @@
     </div>
 
     <div class="card" data-view="overview">
+      <div class="head"><h2>📊 Risk &amp; Uyum <span class="count" id="risk-score">—</span></h2>
+        <span class="sp"></span><span class="mono" style="color:var(--faint);font-size:11px">çok-faktörlü</span></div>
+      <div class="body">
+        <p class="hint" style="margin:0 0 8px">Açık incident, uyum ihlali ve karantina durumundan hesaplanan filo riski; uyum çerçeveleri; tespit/yanıt süreleri.</p>
+        <div id="risk-summary" style="margin-bottom:8px"></div>
+        <div class="lbl" style="margin:6px 0 4px">En riskli cihazlar</div>
+        <div id="risk-devices" style="display:flex;flex-direction:column;gap:5px"></div>
+        <div class="lbl" style="margin:10px 0 4px">Uyum çerçeveleri</div>
+        <div id="fw-list" style="display:flex;flex-direction:column;gap:5px"></div>
+        <div class="lbl" style="margin:10px 0 4px">Tespit/Yanıt süreleri</div>
+        <div id="trend-summary" class="mono" style="font-size:12px;color:var(--muted)"></div>
+      </div>
+    </div>
+
+    <div class="card" data-view="overview">
       <div class="head"><h2>🔥 En Çok Olay Üreten Cihazlar <span class="count" id="topdev-count">0</span></h2>
         <span class="sp"></span><span class="mono" style="color:var(--faint);font-size:11px">son olaylardan · triyaj</span></div>
       <div class="body">
@@ -1614,6 +1629,7 @@
       renderStats(); renderSeverity(); renderOSInventory(); renderTopDevices(); renderComplianceCard(); renderTactics(); renderDevices(); renderEvents(); renderAudit();
       renderTokens(); renderAdmins(); renderPolicies(); setLive(true);
       loadActivity(); loadPendingWipes(); loadIncidents(); loadCoverage();
+      loadRisk(); loadFrameworks(); loadTrends();
       if(state.sel) loadDetail(state.sel);
     }).catch(function(e){ setLive(false); });
   }
@@ -1917,6 +1933,50 @@
           "<span class='mono' style='color:var(--muted)'>"+n+"</span></div>";
       }).join("") : "<span class='hint'>veri yok</span>";
     }).catch(function(){ if(pctEl) pctEl.textContent="—"; });
+  }
+  // riskDur: saniyeyi okunabilir süreye çevirir (MTTD/MTTR özeti için).
+  function riskDur(s){ if(s<60) return s+"sn"; if(s<3600) return Math.round(s/60)+"dk"; return (s/3600).toFixed(1)+"sa"; }
+  // loadRisk: çok-faktörlü filo riski + en riskli cihazlar. Sonuç kullanıcı-görünür
+  // HTML olduğundan tüm alanlar esc()'ten geçer.
+  function loadRisk(){
+    var s=$("risk-summary"), d=$("risk-devices"), sc=$("risk-score"); if(!s) return;
+    return api("/api/risk").then(function(r){
+      var score=r.fleet_score||0, band=r.fleet_band||"INFO";
+      if(sc) sc.textContent=score;
+      var col=score>=80?"var(--crit)":(score>=60?"var(--warn)":"var(--ok,#10b981)");
+      var b=r.bands||{};
+      s.innerHTML="<span style='font-size:22px;font-weight:700;color:"+col+"'>"+score+"</span> / 100 · <span class='sev "+esc(band)+"'>"+esc(band)+"</span> · "+
+        Object.keys(b).map(function(k){return esc(k)+":"+b[k];}).join(" · ");
+      var devs=(r.devices||[]).filter(function(x){return (x.score||0)>0;}).slice(0,5);
+      d.innerHTML = devs.length ? devs.map(function(x){
+        return "<div style='display:flex;align-items:center;gap:8px;font-size:12px'>"+
+          "<span style='min-width:130px'>"+esc(deviceName(x.device_id||x.hostname||""))+"</span>"+
+          "<span class='sev "+esc(x.band||"")+"'>"+(x.score||0)+"</span>"+
+          "<span class='hint' style='flex:1'>"+esc((x.drivers||[]).slice(0,2).join("; "))+"</span></div>";
+      }).join("") : "<span class='hint'>risk sürücüsü yok</span>";
+    }).catch(function(){ if(sc) sc.textContent="—"; });
+  }
+  // loadFrameworks: filo duruşunu uyum çerçevelerine (CIS/NIST/ISO/KVKK) eşler.
+  function loadFrameworks(){
+    var el=$("fw-list"); if(!el) return;
+    return api("/api/compliance/frameworks").then(function(r){
+      var fws=(r&&r.frameworks)||[];
+      el.innerHTML = fws.length ? fws.map(function(f){
+        var p=f.score_pct||0, col=p>=90?"var(--ok,#10b981)":(p>=70?"var(--warn)":"var(--crit)");
+        return "<div style='display:flex;align-items:center;gap:8px;font-size:12px'>"+
+          "<span style='min-width:130px'>"+esc(f.framework||"")+"</span>"+
+          "<span style='flex:1;height:8px;background:var(--line);border-radius:4px;overflow:hidden'><span style='display:block;height:100%;width:"+p+"%;background:"+col+"'></span></span>"+
+          "<span class='mono' style='color:var(--muted)'>%"+p+"</span></div>";
+      }).join("") : "<span class='hint'>veri yok</span>";
+    }).catch(function(){});
+  }
+  // loadTrends: MTTD (tespit gecikmesi) + MTTR (yanıt süresi) 7 günlük özeti.
+  function loadTrends(){
+    var el=$("trend-summary"); if(!el) return;
+    return api("/api/metrics/trends?days=7").then(function(r){
+      var mttd=Math.round(r.mttd_seconds||0), mttr=Math.round(r.mttr_seconds||0);
+      el.textContent="MTTD ~"+riskDur(mttd)+" ("+(r.detect_n||0)+" örnek) · MTTR ~"+riskDur(mttr)+" ("+(r.respond_n||0)+" örnek) · son "+(r.window_days||7)+" gün";
+    }).catch(function(){ el.textContent="—"; });
   }
   // loadIncidents: korelasyonla gruplanmış olayları (incident) yükler. Sonuç
   // kullanıcı-görünür HTML olduğundan tüm alanlar esc()'ten geçer.

@@ -77,6 +77,11 @@ for _ in $(seq 1 50); do
   sleep 0.2
 done
 [ "$ready" = 1 ] && pass "C2 dinliyor (:$ADMIN_PORT)" || { fail "C2 başlamadı"; cat "$WORK/c2.log"; exit 1; }
+# Konsol yeni istihbarat panelini (Risk & Uyum) içeriyor mu (delivered-but-invisible önlemi).
+# NOT: konsol ~155KB; grep -q boruyu erken kapatıp curl'e SIGPIPE verir ve pipefail
+# ile boru başarısız görünür — bu yüzden gövde önce değişkene alınır.
+console_html="$(curl -sk "$B/")"
+case "$console_html" in *'id="risk-summary"'*) pass "konsol Risk & Uyum panelini sunuyor";; *) fail "konsolda risk paneli yok";; esac
 
 echo "[3/6] Giriş + enrollment token"
 TOK="$(curl -sk "$B/api/login" -X POST -H 'Content-Type: application/json' \
