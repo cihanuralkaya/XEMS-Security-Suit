@@ -130,7 +130,7 @@ ile görebilirsiniz.
 
 Bkz. [docs/architecture.md](docs/architecture.md) — fazlara bölünmüş plan.
 İnceleme bulguları ve karşılığında alınan kararlar [docs/threat-model.md](docs/threat-model.md)
-içinde.
+içinde. Harici log alımı entegrasyonu için [docs/INGEST.md](docs/INGEST.md).
 
 ---
 
@@ -249,3 +249,4 @@ Layers**) or via `GET /api/features`.
 
 See [docs/architecture.md](docs/architecture.md) — a phased plan. Review findings
 and the decisions taken in response are in [docs/threat-model.md](docs/threat-model.md).
+For external log ingest integration, see [docs/INGEST.md](docs/INGEST.md).
