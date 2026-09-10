@@ -125,6 +125,32 @@ proto üret + `go vet` + `go test ./...` + smoke test + çapraz derleme (artifac
 | Dosya bütünlüğü izleme (FIM) — ajan | ✅ | `agent/internal/fim` (SHA-256), agent main | birim |
 | Ajan öz-tasdiki (takas/yama ikili tespiti) | ✅ | proto, `grpc`, `db`, `memstore`, agent | birim (kurcalama teşhisi) |
 
+## V2 yetenekleri (2026-09 eklemeleri)
+
+Aşağıdakiler ilk matristen sonra eklendi; hepsi test + smoke + CI yeşil.
+
+- **SOC istihbaratı:** çok-faktörlü **risk skorlama** (`/api/risk`), **saldırı hikâyesi**
+  (kill-chain, `/api/devices/{id}/attack-story`), **varlık grafı** (`/graph`), **incident
+  zaman çizelgesi**, **MTTD/MTTR** trendleri (`/api/metrics/trends`), **UEBA** (yönetici
+  davranış analitiği, `/api/ueba/admins`), uyum çerçevesi eşleme (**CIS/NIST/ISO/KVKK**,
+  `/api/compliance/frameworks`).
+- **Tespit:** çok-sinyal **korelasyon** (yüksek-güven zincir), **yanal hareket** (netconn
+  fan-out, T1046), **DNS tünelleme** (T1071.004), geliştirilmiş **DGA** (ünsüz-dizisi),
+  **Sigma içe aktarma**, **YARA-tarzı içerik tarama**, Detection-as-Code yaşam-döngüsü,
+  genişletilmiş MITRE kataloğu + 14 yerleşik kural.
+- **İmzalı içerik (kurcalamaya karşı):** TÜM yüklenebilir içerik (YARA, tespit kuralı,
+  IoC, anomali modeli, OTA, offline offboard, denetim dışa aktarımı) Ed25519 imzalanabilir.
+- **Alarm & teslim:** bildirim **yönlendirme + yükseltme**, **webhook HMAC imza**, sürekli
+  **tehdit-avı** (kayıtlı aramalar), zamanlanmış **rapor webhook teslimi**, sunucu-taraflı
+  tespitlerin SOC uyarı yoluna bağlanması.
+- **Alım (SIEM):** JSON + **CEF** + **LEEF** (QRadar) giden log alımı, hız sınırlama.
+- **Ops/dayanıklılık:** **sertifika ömür-sonu izleme** (log + `/api/features` + metrik),
+  **kaba-kuvvet kilidi sinyali**, genişletilmiş Prometheus metrikleri + hazır **alarm
+  kuralları** (`deploy/prometheus-alerts.example.yml`), istek korelasyon kimliği + erişim logu.
+- **Platform:** çok-kiracılı temel (kimlik + çıktı atıfı), kanonik olay şema sürümü.
+- **Tedarik zinciri güvenliği (CI):** `govulncheck` + **fuzzing** + **SBOM** + gosec
+  (4 gerçek CVE düzeltildi); dağıtım sertleştirme (`deploy/HARDENING.md`).
+
 ## İlk inceleme bulguları — karşılıklar
 
 Bkz. `docs/threat-model.md`. Özet: kırık şema düzeltildi, şifreli-log yerine
@@ -314,6 +340,33 @@ proto generation + `go vet` + `go test ./...` + smoke test + cross-compilation.
 | Alert correlation + auto-incident grouping | done | `server/internal/correlate`, grpc, db, console | unit + smoke |
 | File Integrity Monitoring (FIM) — agent | done | `agent/internal/fim` (SHA-256), agent main | unit |
 | Agent self-attestation (swapped/patched binary detection) | done | proto, `grpc`, `db`, `memstore`, agent | unit (tamper detection) |
+
+## V2 capabilities (2026-09 additions)
+
+Added after the initial matrix; all tests + smoke + CI green.
+
+- **SOC intelligence:** multi-factor **risk scoring** (`/api/risk`), **attack story**
+  (kill-chain, `/api/devices/{id}/attack-story`), **entity graph** (`/graph`), **incident
+  timeline**, **MTTD/MTTR** trends (`/api/metrics/trends`), **UEBA** (admin behavior
+  analytics, `/api/ueba/admins`), compliance-framework mapping (**CIS/NIST/ISO/KVKK**,
+  `/api/compliance/frameworks`).
+- **Detection:** multi-signal **correlation** (high-confidence chain), **lateral movement**
+  (netconn fan-out, T1046), **DNS tunneling** (T1071.004), improved **DGA** (consonant-run),
+  **Sigma import**, **YARA-style content scanning**, Detection-as-Code lifecycle, expanded
+  MITRE catalog + 14 built-in rules.
+- **Signed content (tamper-resistant):** ALL loadable content (YARA, detection rules, IoC,
+  anomaly model, OTA, offline offboard, audit export) is Ed25519-signable.
+- **Alerting & delivery:** notification **routing + escalation**, **webhook HMAC signing**,
+  continuous **threat hunting** (saved searches), scheduled **report webhook delivery**,
+  server-side detections wired into the SOC alert path.
+- **Ingest (SIEM):** JSON + **CEF** + **LEEF** (QRadar) inbound; rate limiting.
+- **Ops/resilience:** **certificate-expiry monitoring** (log + `/api/features` + metric),
+  **brute-force lockout signal**, expanded Prometheus metrics + ready-made **alert rules**
+  (`deploy/prometheus-alerts.example.yml`), request correlation IDs + access logs.
+- **Platform:** multi-tenancy foundation (identity + output attribution), canonical event
+  schema version.
+- **Supply-chain security (CI):** `govulncheck` + **fuzzing** + **SBOM** + gosec (fixed 4
+  real CVEs); deployment hardening (`deploy/HARDENING.md`).
 
 ## Initial review findings - responses
 
