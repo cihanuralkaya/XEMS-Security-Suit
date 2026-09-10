@@ -349,6 +349,28 @@ func TestNormalizeWinEventEventTime(t *testing.T) {
 	}
 }
 
+func TestNormalizeWinEventDeepNesting(t *testing.T) {
+	// Aşırı iç içe JSON: winFlatten derinlik sınırı yığın taşmadan durmalı (DoS savunma).
+	var b strings.Builder
+	b.WriteString(`{"event_id":4625,"channel":"Security","computer_name":"h","n":`)
+	depth := 5000
+	for i := 0; i < depth; i++ {
+		b.WriteString(`{"n":`)
+	}
+	b.WriteString(`1`)
+	for i := 0; i < depth; i++ {
+		b.WriteString(`}`)
+	}
+	b.WriteString(`}`)
+	recs, err := NormalizeWinEvent([]byte(b.String()), now)
+	if err != nil || len(recs) != 1 {
+		t.Fatalf("derin JSON panik/hata olmadan normalize edilmeli: %v %d", err, len(recs))
+	}
+	if recs[0].Event.Severity != "MEDIUM" { // 4625 hâlâ sınıflanır
+		t.Fatalf("üst-düzey alanlar hâlâ çıkarılmalı, %q", recs[0].Event.Severity)
+	}
+}
+
 func TestNormalizeWinEventBad(t *testing.T) {
 	if _, err := NormalizeWinEvent([]byte(`{"message":"no id"}`), now); err == nil {
 		t.Fatal("event_id yoksa hata döndürmeli")

@@ -541,7 +541,7 @@ func NormalizeWinEvent(data []byte, now time.Time) ([]Record, error) {
 	out := make([]Record, 0, len(objs))
 	for i, m := range objs {
 		flat := map[string]any{}
-		winFlatten(m, flat)
+		winFlatten(m, flat, 0)
 		id := winInt(flat, "event_id", "eventid", "eventidentifier")
 		if id == 0 {
 			return nil, fmt.Errorf("logingest: winlog kaydı #%d event_id yok", i)
@@ -606,10 +606,19 @@ var winEnrichKeys = map[string][]string{
 	"command_line": {"commandline", "command_line"},
 }
 
+// maxWinDepth, winFlatten özyineleme derinliği üst sınırıdır (ağ-yüzeyli girdiye karşı
+// savunma-derinliği: aşırı iç içe JSON'da yığın taşmasını önler). Gerçek Windows olay
+// şekilleri birkaç seviye derindir; 64 fazlasıyla yeterlidir.
+const maxWinDepth = 64
+
 // winFlatten, iç içe Windows JSON şekillerini (winlog, Event, System, EventData)
 // tek düzey haritaya düzleştirir; anahtarlar küçük harfe indirilir (son-yazan kazanır).
 // Render-XML EventData Data[] dizisi ({@Name,#text} çiftleri) de düzleştirilir.
-func winFlatten(m map[string]any, out map[string]any) {
+// depth, özyineleme derinliğidir; maxWinDepth aşılırsa daha derine inilmez.
+func winFlatten(m map[string]any, out map[string]any, depth int) {
+	if depth >= maxWinDepth {
+		return
+	}
 	for k, v := range m {
 		lk := strings.ToLower(strings.TrimSpace(k))
 		switch child := v.(type) {
@@ -621,7 +630,7 @@ func winFlatten(m map[string]any, out map[string]any) {
 			if nm, ok := child["@Name"]; ok && lk == "provider" {
 				out["provider_name"] = nm
 			}
-			winFlatten(child, out) // iç içe alanları da yukarı taşı
+			winFlatten(child, out, depth+1) // iç içe alanları da yukarı taşı
 		case []any:
 			// Render-XML EventData: [{"@Name":"TargetUserName","#text":"bob"}, ...].
 			for _, el := range child {
@@ -634,7 +643,7 @@ func winFlatten(m map[string]any, out map[string]any) {
 						out[strings.ToLower(strings.TrimSpace(nm))] = t
 					}
 				} else {
-					winFlatten(em, out)
+					winFlatten(em, out, depth+1)
 				}
 			}
 		default:
