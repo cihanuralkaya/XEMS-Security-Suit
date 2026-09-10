@@ -38,6 +38,7 @@ var (
 	lateralMovement  atomic.Int64 // yanal-hareket (netconn fan-out) tespitleri
 	dnsTunnel        atomic.Int64 // DNS tünelleme tespitleri
 	bruteForce       atomic.Int64 // kaba-kuvvet / parola-püskürtme tespitleri
+	bruteForceWin    atomic.Int64 // BAŞARILI kaba-kuvvet (hesap ele geçirme) tespitleri
 	savedSearchHits  atomic.Int64 // zamanlanmış kayıtlı-arama eşleşmeleri
 	loginLockouts    atomic.Int64 // kaba-kuvvet kilidi tetiklemeleri (admin girişi)
 )
@@ -80,6 +81,7 @@ func Counters() map[string]int64 {
 		"lateral_movement":  lateralMovement.Load(),
 		"dns_tunnel":        dnsTunnel.Load(),
 		"brute_force":       bruteForce.Load(),
+		"brute_force_win":   bruteForceWin.Load(),
 		"saved_search_hits": savedSearchHits.Load(),
 		"login_lockouts":    loginLockouts.Load(),
 	}
@@ -112,6 +114,9 @@ func IncDNSTunnel() { dnsTunnel.Add(1) }
 
 // IncBruteForce, kaba-kuvvet / parola-püskürtme tespit sayacını artırır.
 func IncBruteForce() { bruteForce.Add(1) }
+
+// IncBruteForceSuccess, BAŞARILI kaba-kuvvet (olası hesap ele geçirme) sayacını artırır.
+func IncBruteForceSuccess() { bruteForceWin.Add(1) }
 
 // AddSavedSearchHits, zamanlanmış kayıtlı-arama eşleşme sayacını artırır.
 func AddSavedSearchHits(n int) {
@@ -225,6 +230,10 @@ func Write(w io.Writer, s Snapshot) {
 	fmt.Fprintf(w, "# HELP xems_brute_force_total Kaba-kuvvet / parola-püskürtme tespitleri.\n")
 	fmt.Fprintf(w, "# TYPE xems_brute_force_total counter\n")
 	fmt.Fprintf(w, "xems_brute_force_total %d\n", bruteForce.Load())
+
+	fmt.Fprintf(w, "# HELP xems_brute_force_success_total Başarılı kaba-kuvvet (olası hesap ele geçirme) tespitleri.\n")
+	fmt.Fprintf(w, "# TYPE xems_brute_force_success_total counter\n")
+	fmt.Fprintf(w, "xems_brute_force_success_total %d\n", bruteForceWin.Load())
 
 	fmt.Fprintf(w, "# HELP xems_saved_search_hits_total Zamanlanmış kayıtlı-arama eşleşmeleri.\n")
 	fmt.Fprintf(w, "# TYPE xems_saved_search_hits_total counter\n")

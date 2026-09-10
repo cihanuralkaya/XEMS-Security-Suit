@@ -1049,6 +1049,7 @@ func run() error {
 						continue
 					}
 					bfAlerted[key] = true
+					metrics.IncBruteForceSuccess()
 					attr := ""
 					if f.SourceIP != "" {
 						attr = fmt.Sprintf(" (kaynak IP %s)", f.SourceIP)

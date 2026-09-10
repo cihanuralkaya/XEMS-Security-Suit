@@ -85,6 +85,14 @@ groups:
           summary: "XEMS olası kaba-kuvvet / parola-püskürtme"
           description: "Bir kaynak ana bilgisayarda kısa pencerede çok sayıda başarısız oturum açma (Windows 4625/4771)."
 
+      - alert: XEMSAccountCompromise
+        expr: increase(xems_brute_force_success_total[15m]) > 0
+        for: 0m
+        labels: { severity: critical }
+        annotations:
+          summary: "XEMS olası HESAP ELE GEÇİRME (başarılı kaba-kuvvet)"
+          description: "Bir ana bilgisayarda başarısız-oturum serisinin ardından başarılı oturum açma gözlendi (T1110)."
+
       - alert: XEMSHighConfidenceAttackChain
         expr: increase(xems_chain_fired_total[15m]) > 0
         for: 0m
