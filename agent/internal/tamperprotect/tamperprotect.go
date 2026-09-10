@@ -23,6 +23,18 @@ type Posture struct {
 	KernelDriverName string   `json:"kernel_driver_name"` // varsa sürücü adı
 	Level            string   `json:"level"`              // "none" | "userland" | "kernel"
 	Summary          string   `json:"summary"`            // insan-okur özet (olay mesajı)
+	// Aşağıdakiler yalnız çekirdek sürücüsü YÜKLÜ ve iletişim portu erişilebilirse
+	// (DriverStatus) doldurulur — "diskte mevcut"tan "yüklü + filtreliyor"a yükseltir.
+	KernelActive    bool   `json:"kernel_active,omitempty"`     // sürücü yüklü + filtreliyor mu
+	KernelDeniedOps uint64 `json:"kernel_denied_ops,omitempty"` // çekirdekte engellenen kurcalama sayısı
+}
+
+// TamperEvent, çekirdek sürücüsünün ilettiği tek bir kurcalama-engelleme olayıdır
+// (StreamTamperEvents ile alınır). Platform-bağımsız tanımlı (Windows-dışında kullanılmaz).
+type TamperEvent struct {
+	Kind     uint32 // XEMSFLT_EVENT_KIND (inc/xemsflt_ioctl.h)
+	ActorPID uint32 // kurcalamayı deneyen süreç
+	Target   string // hedef yol ya da "protected-process"
 }
 
 // Defenses, hangi userland savunmalarının etkin olduğunu belirtir (ajan main'den gelir).

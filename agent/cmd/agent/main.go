@@ -454,12 +454,22 @@ func run() error {
 		SelfAttest: selfHash != "",
 		SignedOTA:  os.Getenv("XEMS_UPDATE_PUBKEY") != "",
 	}, kdPresent, kdName)
+	// Sürücü diskte mevcutsa, iletişim portundan CANLI durumu sorgula (yüklü mü,
+	// filtreliyor mu, kaç kurcalama engellendi) — "mevcut"tan "aktif"e yükseltir.
+	if posture.KernelDriver {
+		if kActive, kDenied, derr := tamperprotect.DriverStatus(); derr == nil {
+			posture.KernelActive = kActive
+			posture.KernelDeniedOps = kDenied
+		}
+	}
 	postureSev := "INFO"
 	if posture.Level == "none" {
 		postureSev = "LOW" // hiç kurcalama koruması yok → güvenlik-duruşu uyarısı
 	}
 	buf.Add(collector.Event{Category: "SECURITY", Severity: postureSev, Message: posture.Summary, OccurredAt: time.Now(),
-		Details: map[string]any{"tamper_level": posture.Level, "userland": posture.Userland, "kernel_driver": posture.KernelDriver}})
+		Details: map[string]any{"tamper_level": posture.Level, "userland": posture.Userland,
+			"kernel_driver": posture.KernelDriver, "kernel_active": posture.KernelActive,
+			"kernel_denied_ops": posture.KernelDeniedOps}})
 
 	// Uyum durumu: başlangıçta disk şifreleme kontrol edilir ve raporlanır. Şifreleme
 	// KAPALIYSA güvenlik-duruşu ihlali (SECURITY/MEDIUM); açık/bilinmiyor bilgi amaçlı.

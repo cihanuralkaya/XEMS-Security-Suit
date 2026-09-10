@@ -1,0 +1,17 @@
+# WDK/MSBuild build outputs — never commit compiled/signed driver artifacts.
+# The real signed xemsflt.sys comes from the WHQL pipeline, never from git.
+x64/
+ARM64/
+Debug/
+Release/
+*.sys
+*.pdb
+*.obj
+*.cer
+*.pfx
+*.cat
+*.log
+*.tmp
+Package/
+DriverTest/
+_build/

@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- WDK/MSBuild project producing xemsflt.sys. Built by the WDK/EWDK ONLY,
+     never by the Go CI. DEV builds rely on build.ps1 + sign-dev.ps1 for
+     test-signing; production signing is a separate WHQL pipeline. -->
+<Project DefaultTargets="Build" ToolsVersion="15.0"
+         xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration><Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration><Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{5F3C5C4E-2D67-4A31-8E58-A86DFF51B860}</ProjectGuid>
+    <TargetVersion>Windows10</TargetVersion>
+    <DriverType>WDM</DriverType>
+    <Configuration>Release</Configuration>
+    <Platform>x64</Platform>
+    <RootNamespace>xemsflt</RootNamespace>
+  </PropertyGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+
+  <PropertyGroup>
+    <!-- DEV: rely on build.ps1/sign-dev.ps1 for test-signing. Do NOT enable
+         production/EV signing here; that is a separate pipeline step. -->
+    <SignMode>Off</SignMode>
+    <DriverTargetPlatform>Universal</DriverTargetPlatform>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ClCompile Include="src\xemsflt.c" />
+    <ClCompile Include="src\obcallbacks.c" />
+    <ClCompile Include="src\protect.c" />
+    <ClCompile Include="src\comms.c" />
+    <ClInclude Include="src\xemsflt.h" />
+    <ClInclude Include="inc\xemsflt_ioctl.h" />
+    <Inf Include="xemsflt.inf" />
+  </ItemGroup>
+
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <WppEnabled>false</WppEnabled>
+    </ClCompile>
+  </ItemDefinitionGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

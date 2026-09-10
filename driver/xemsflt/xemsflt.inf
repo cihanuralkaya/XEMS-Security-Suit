@@ -1,0 +1,56 @@
+;
+; xemsflt.inf - XEMS tamper-protection MiniFilter
+; StartType=3 (demand) and ErrorControl=1 are deliberate: the driver is opt-in
+; and a load failure NEVER blocks Windows boot.
+;
+[Version]
+Signature   = "$Windows NT$"
+Class       = "ActivityMonitor"
+ClassGuid   = {b86dff51-a31d-4f34-8e58-5f3c5c4e2d67}   ; FSFilter Activity Monitor
+Provider    = %ProviderName%
+DriverVer   =
+CatalogFile = xemsflt.cat
+PnpLockdown = 1
+
+[DestinationDirs]
+DefaultDestDir      = 12            ; %SystemRoot%\System32\drivers
+XemsFlt.DriverFiles = 12
+
+[DefaultInstall.NTamd64]
+OptionDesc = %ServiceDesc%
+CopyFiles  = XemsFlt.DriverFiles
+
+[DefaultInstall.NTamd64.Services]
+AddService = %ServiceName%,,XemsFlt.Service
+
+[XemsFlt.Service]
+DisplayName    = %ServiceName%
+Description    = %ServiceDesc%
+ServiceBinary  = %12%\xemsflt.sys
+Dependencies   = "FltMgr"
+ServiceType    = 2                  ; SERVICE_FILE_SYSTEM_DRIVER
+StartType      = 3                  ; SERVICE_DEMAND_START (opt-in; not boot)
+ErrorControl   = 1                  ; SERVICE_ERROR_NORMAL (never block boot)
+LoadOrderGroup = "FSFilter Activity Monitor"
+AddReg         = XemsFlt.AddRegistry
+
+[XemsFlt.AddRegistry]
+HKR,"Instances","DefaultInstance",0x00000000,%InstanceName%
+HKR,"Instances\"%InstanceName%,"Altitude",0x00000000,"385200"   ; PLACEHOLDER altitude
+HKR,"Instances\"%InstanceName%,"Flags",0x00010001,0x0
+
+[XemsFlt.DriverFiles]
+xemsflt.sys
+
+[SourceDisksFiles]
+xemsflt.sys = 1
+
+[SourceDisksNames]
+1 = %DiskName%
+
+[Strings]
+ProviderName = "XEMS Security"
+ServiceName  = "xemsflt"
+ServiceDesc  = "XEMS Tamper-Protection MiniFilter"
+InstanceName = "XemsFlt Instance"
+DiskName     = "XEMS Driver Install Disk"
