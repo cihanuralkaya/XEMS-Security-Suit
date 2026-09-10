@@ -77,8 +77,9 @@ func Classify(category, message string) (Technique, bool) {
 			return tExfilAltProto, true // veri sızdırma (DLP)
 		case strings.Contains(m, "dga") || strings.Contains(m, "beacon") ||
 			strings.Contains(m, "ioc eşleşmesi") || strings.Contains(m, "periyodik") ||
+			strings.Contains(m, "dns tünelleme") || strings.Contains(m, "dns tunnel") ||
 			strings.Contains(m, "c2"):
-			return tAppLayerC2, true // C2 / beacon / IoC
+			return tAppLayerC2, true // C2 / beacon / IoC / DNS tüneli
 		case strings.Contains(m, "yanal hareket") || strings.Contains(m, "lateral"):
 			return tNetworkDiscover, true // iç-ağ tarama / yanal hareket
 		case strings.Contains(m, "içerik-tarama") || strings.Contains(m, "yara"):

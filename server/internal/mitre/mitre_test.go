@@ -24,6 +24,7 @@ func TestClassify(t *testing.T) {
 		{"SECURITY", "içerik-tarama eşleşmesi (R1): /tmp/x", "T1105", true},
 		{"SECURITY", "dosya bütünlüğü değişikliği (deleted): /etc/passwd", "T1070", true},
 		{"SECURITY", "olası yanal hareket: 5dk içinde 9 farklı iç hedefe bağlantı", "T1046", true},
+		{"SECURITY", "olası DNS tünelleme: evil.com altında 5dk içinde 25 farklı alt alan", "T1071", true},
 		{"SECURITY", "ajan öz-tasdik ihlali", "T1562", true},
 		{"SYSTEM", "ajan başladı", "", false},
 		{"AGENT_UPDATE", "güncellendi", "", false},

@@ -277,5 +277,7 @@ func DefaultRules() []Rule {
 			Contains: []string{"içerik-tarama"}, Severity: "HIGH", Technique: tIngressTool},
 		{ID: "XEMS-0013", Name: "Yanal hareket / iç-ağ tarama", Category: "SECURITY",
 			Contains: []string{"yanal hareket"}, Severity: "HIGH", Technique: tNetworkDiscov},
+		{ID: "XEMS-0014", Name: "DNS tünelleme / veri sızdırma", Category: "SECURITY",
+			Contains: []string{"dns tünelleme"}, Severity: "HIGH", Technique: tAppLayerC2},
 	}
 }
