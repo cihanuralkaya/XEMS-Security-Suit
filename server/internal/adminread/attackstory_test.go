@@ -18,6 +18,8 @@ func TestClassifyStage(t *testing.T) {
 		{"SECURITY", "DLP: hassas veri tespit edildi", "Exfiltration"},
 		{"SECURITY", "ajan kurcalama tespit edildi", "Defense Evasion"},
 		{"SECURITY", "cihaz karantinaya alındı", "Impact"},
+		{"SECURITY", "olası yanal hareket: 9 iç hedef", "Discovery"},
+		{"SECURITY", "olası DNS tünelleme: evil.com 25 alt alan", "Command & Control"},
 		{"SECURITY", "genel güvenlik olayı", "Detection"},
 	}
 	for _, c := range cases {

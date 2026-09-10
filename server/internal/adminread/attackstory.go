@@ -57,8 +57,10 @@ func classifyStage(category, message string) (string, int) {
 	switch {
 	case contains("dlp", "hassas veri", "veri sızıntısı"):
 		return stage("Exfiltration")
-	case contains("dga", "ioc eşleşmesi", "beacon", "c2", "periyodik"):
+	case contains("dga", "ioc eşleşmesi", "beacon", "c2", "periyodik", "dns tünelleme", "dns tunnel"):
 		return stage("Command & Control")
+	case contains("yanal hareket", "lateral"):
+		return stage("Discovery")
 	case contains("kurcalama", "tamper", "öz-tasdik", "self-attest", "imza geçersiz", "devre dışı"):
 		return stage("Defense Evasion")
 	case contains("wipe", "karantina", "quarantine", "fidye", "ransom"):
