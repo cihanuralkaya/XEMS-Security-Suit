@@ -270,8 +270,9 @@ func NormalizeSyslog(line string, now time.Time) (Record, error) {
 	sev := syslogSeverity(pri % 8)
 
 	source, msg := "syslog", strings.TrimSpace(rest)
+	occurred := now
 	fields := strings.Fields(rest)
-	// RFC5424: ilk alan sürüm ("1"); HOSTNAME=fields[2], APP-NAME=fields[3].
+	// RFC5424: ilk alan sürüm ("1"); TIMESTAMP=fields[1], HOSTNAME=fields[2], APP-NAME=fields[3].
 	if len(fields) >= 5 && fields[0] == "1" {
 		host := deNil(fields[2])
 		app := deNil(fields[3])
@@ -279,6 +280,15 @@ func NormalizeSyslog(line string, now time.Time) (Record, error) {
 			source = host
 		} else if app != "" {
 			source = app
+		}
+		// TIMESTAMP (RFC3339): olayın gerçek zamanı — zaman çizelgesi doğruluğu.
+		if ts := deNil(fields[1]); ts != "" {
+			for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
+				if t, err := time.Parse(layout, ts); err == nil {
+					occurred = t
+					break
+				}
+			}
 		}
 		// MSG: MSGID(+SD) sonrası; SD karmaşık olabilir → pragmatik: 6. alandan sonrası.
 		if i := nthFieldIndex(rest, 6); i >= 0 {
@@ -299,7 +309,7 @@ func NormalizeSyslog(line string, now time.Time) (Record, error) {
 			Category:   "SECURITY",
 			Severity:   sev,
 			Message:    "[" + source + "] " + msg,
-			OccurredAt: now,
+			OccurredAt: occurred,
 		},
 	}, nil
 }
@@ -528,7 +538,7 @@ func NormalizeWinEvent(data []byte, now time.Time) ([]Record, error) {
 				Category:   cat,
 				Severity:   sev,
 				Message:    msg,
-				OccurredAt: now,
+				OccurredAt: winTime(flat, now), // olayın GERÇEK zamanı (varsa); yoksa alım zamanı
 				Details:    string(det),
 			},
 		})
@@ -586,6 +596,24 @@ func winFlatten(m map[string]any, out map[string]any) {
 			}
 		}
 	}
+}
+
+// winTime, Windows olayının GERÇEK oluşma zamanını düzleştirilmiş haritadan çıkarır
+// (winlogbeat "@timestamp", ECS "event.created", render-XML TimeCreated "@systemtime").
+// RFC3339/RFC3339Nano denenir; çözülemezse alım zamanı (fallback) döner. Bu, saldırı
+// hikâyesi ve olay zaman çizelgesinin alım gecikmesinden değil gerçek olay saatinden
+// sıralanmasını sağlar.
+func winTime(flat map[string]any, fallback time.Time) time.Time {
+	s := winStr(flat, "@timestamp", "@systemtime", "systemtime", "timecreated", "event_created", "eventtime")
+	if s == "" {
+		return fallback
+	}
+	for _, layout := range []string{time.RFC3339Nano, time.RFC3339, "2006-01-02T15:04:05.000000000Z", "2006-01-02 15:04:05"} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t
+		}
+	}
+	return fallback
 }
 
 // winStr, düzleştirilmiş haritada aday anahtarların ilk boş-olmayan string değerini döner.

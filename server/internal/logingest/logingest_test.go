@@ -161,6 +161,11 @@ func TestNormalizeSyslog5424(t *testing.T) {
 	if !strings.Contains(rec.Event.Message, "fw01") || !strings.Contains(rec.Event.Message, "port scan detected") {
 		t.Fatalf("host + mesaj taşımalı, %q", rec.Event.Message)
 	}
+	// RFC5424 TIMESTAMP → OccurredAt (alım zamanı değil).
+	wantT := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
+	if !rec.Event.OccurredAt.Equal(wantT) {
+		t.Fatalf("OccurredAt syslog TIMESTAMP'tan gelmeli, %v beklenen %v", rec.Event.OccurredAt, wantT)
+	}
 }
 
 func TestNormalizeSyslog3164Severity(t *testing.T) {
@@ -286,6 +291,30 @@ func TestNormalizeWinEventEnrichment(t *testing.T) {
 	if !strings.Contains(recs[0].Event.Details, `"target_user":"root"`) ||
 		!strings.Contains(recs[0].Event.Details, `"src_ip":"1.2.3.4"`) {
 		t.Fatalf("Data[] zenginleştirme eksik, %q", recs[0].Event.Details)
+	}
+}
+
+func TestNormalizeWinEventEventTime(t *testing.T) {
+	// winlogbeat @timestamp → OccurredAt gerçek olay zamanı olmalı (alım zamanı değil).
+	data := []byte(`{"@timestamp":"2026-01-02T03:04:05Z","winlog":{"event_id":4625,"channel":"Security","computer_name":"h"},"message":"m"}`)
+	recs, err := NormalizeWinEvent(data, now)
+	if err != nil || len(recs) != 1 {
+		t.Fatalf("event-time normalize: %v %d", err, len(recs))
+	}
+	want := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	if !recs[0].Event.OccurredAt.Equal(want) {
+		t.Fatalf("OccurredAt @timestamp'tan gelmeli, %v beklenen %v", recs[0].Event.OccurredAt, want)
+	}
+	// Render-XML TimeCreated @SystemTime.
+	xml := []byte(`{"Event":{"System":{"EventID":"1102","Channel":"Security","Computer":"a","TimeCreated":{"@SystemTime":"2026-01-02T03:04:05Z"}}}}`)
+	recs, _ = NormalizeWinEvent(xml, now)
+	if len(recs) != 1 || !recs[0].Event.OccurredAt.Equal(want) {
+		t.Fatalf("SystemTime çözülmeli, %+v", recs[0].Event.OccurredAt)
+	}
+	// Zaman damgası yoksa alım zamanına düşer.
+	recs, _ = NormalizeWinEvent([]byte(`{"EventID":7045,"Channel":"System","Hostname":"h"}`), now)
+	if len(recs) != 1 || !recs[0].Event.OccurredAt.Equal(now) {
+		t.Fatalf("zaman damgası yoksa alım zamanı (now) olmalı, %v", recs[0].Event.OccurredAt)
 	}
 }
 
