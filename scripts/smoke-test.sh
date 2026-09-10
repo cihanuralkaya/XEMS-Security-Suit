@@ -34,12 +34,19 @@ pass "c2, agent, gencerts derlendi"
 MODE="bellek-içi"
 if [ -n "${XEMS_DATABASE_URL:-}" ]; then
   MODE="PostgreSQL"
-  command -v psql >/dev/null 2>&1 || { echo "psql gerekli (DB modu)"; exit 1; }
+  # PSQL komutu dışarıdan verilebilir (ör. CI'da postgres servis konteynerindeki
+  # psql'i kullanmak için "docker exec -i <cid> psql"); varsayılan host psql'i.
+  PSQL="${PSQL:-psql}"
+  if [ "$PSQL" = "psql" ]; then
+    command -v psql >/dev/null 2>&1 || { echo "psql gerekli (DB modu)"; exit 1; }
+  fi
   echo "[2/6] PostgreSQL: şema yükle + admin tohumla"
-  psql "$XEMS_DATABASE_URL" -v ON_ERROR_STOP=1 -q -f db/schema.sql \
+  # Şemayı stdin ile ver (-f yerine): docker-exec sarmalayıcısıyla da çalışır
+  # (dosya host'ta, psql konteynerde olabilir).
+  $PSQL "$XEMS_DATABASE_URL" -v ON_ERROR_STOP=1 -q < db/schema.sql \
     && pass "şema yüklendi (db/schema.sql)" || { fail "şema yüklenemedi"; exit 1; }
   go run ./tools/adminseed -email admin@local -password smoke1234 -role ADMIN -name Smoke \
-    | tail -n +2 | psql "$XEMS_DATABASE_URL" -v ON_ERROR_STOP=1 -q \
+    | tail -n +2 | $PSQL "$XEMS_DATABASE_URL" -v ON_ERROR_STOP=1 -q \
     && pass "yönetici tohumlandı (Argon2id)" || fail "admin tohumlanamadı"
 fi
 

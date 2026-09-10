@@ -54,9 +54,7 @@ jobs:
 
   db-test:
     name: DB yolu (PostgreSQL)
-    # ubuntu-22.04'e sabitlendi: ubuntu-latest (24.04) imaj güncellemesi
-    # postgresql-client apt kurulumunu bozdu (bilinen-iyi 22.04'te stabil).
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     needs: test
     services:
       postgres:
@@ -87,20 +85,18 @@ jobs:
           go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
       - name: Proto üret
         run: make proto
-      - name: psql istemcisi
-        # apt ayna hıçkırıklarına karşı dayanıklı: 3 kez dene (geçici CI infra hatası).
-        run: |
-          for i in 1 2 3; do
-            sudo apt-get update && sudo apt-get install -y postgresql-client && exit 0
-            echo "apt denemesi $i başarısız, yeniden deneniyor..."; sleep 10
-          done
-          echo "postgresql-client kurulamadı (apt)"; exit 1
       # smoke-test.sh, XEMS_DATABASE_URL görünce şemayı yükler, admin tohumlar ve
-      # tüm zinciri GERÇEK PostgreSQL'e karşı çalıştırır (pgx yolu).
+      # tüm zinciri GERÇEK PostgreSQL'e karşı çalıştırır (pgx yolu). psql'i apt ile
+      # kurmak yerine postgres SERVİS KONTEYNERİNDEKİ psql'i docker-exec ile kullanır
+      # (apt bağımlılığı yok — runner apt aynalarına dayanıklı).
       - name: DB uçtan uca smoke test
         env:
           XEMS_DATABASE_URL: postgres://xems:xems@localhost:5432/xems?sslmode=disable
-        run: bash scripts/smoke-test.sh
+        run: |
+          PGCID="$(docker ps --filter ancestor=postgres:16 --format '{{.ID}}' | head -1)"
+          if [ -z "$PGCID" ]; then echo "postgres servis konteyneri bulunamadı"; exit 1; fi
+          export PSQL="docker exec -i $PGCID psql"
+          bash scripts/smoke-test.sh
 
   security:
     name: Güvenlik (govulncheck + fuzz + SBOM)
