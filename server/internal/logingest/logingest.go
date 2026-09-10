@@ -510,9 +510,18 @@ func NormalizeWinEvent(data []byte, now time.Time) ([]Record, error) {
 		if orig != "" {
 			msg += ": " + orig
 		}
-		det, _ := json.Marshal(map[string]any{
+		detail := map[string]any{
 			"event_id": id, "channel": channel, "provider": provider, "computer": computer,
-		})
+		}
+		// EventData zenginleştirme: triyaj için en yararlı alanları Details'e taşı
+		// (hedef hesap, kaynak IP, oturum türü, hizmet/süreç). winFlatten bunları
+		// winlogbeat "event_data", nxlog düz ve render-XML Data[] şekillerinden çıkarır.
+		for out, keys := range winEnrichKeys {
+			if v := winStr(flat, keys...); v != "" {
+				detail[out] = v
+			}
+		}
+		det, _ := json.Marshal(detail)
 		out = append(out, Record{
 			DeviceID: SourceUUID(source),
 			Event: model.Event{
@@ -527,8 +536,22 @@ func NormalizeWinEvent(data []byte, now time.Time) ([]Record, error) {
 	return out, nil
 }
 
+// winEnrichKeys, Details'e taşınacak EventData alanlarını (çıktı adı → aday kaynak
+// anahtarlar) tanımlar. Anahtarlar küçük harf (winFlatten küçük-harfe indirir).
+var winEnrichKeys = map[string][]string{
+	"target_user":  {"targetusername", "target_user_name"},
+	"subject_user": {"subjectusername", "subject_user_name"},
+	"src_ip":       {"ipaddress", "ip_address", "source_network_address"},
+	"workstation":  {"workstationname", "workstation_name"},
+	"logon_type":   {"logontype", "logon_type"},
+	"service_name": {"servicename", "service_name"},
+	"process_name": {"processname", "process_name", "newprocessname"},
+	"command_line": {"commandline", "command_line"},
+}
+
 // winFlatten, iç içe Windows JSON şekillerini (winlog, Event, System, EventData)
 // tek düzey haritaya düzleştirir; anahtarlar küçük harfe indirilir (son-yazan kazanır).
+// Render-XML EventData Data[] dizisi ({@Name,#text} çiftleri) de düzleştirilir.
 func winFlatten(m map[string]any, out map[string]any) {
 	for k, v := range m {
 		lk := strings.ToLower(strings.TrimSpace(k))
@@ -542,6 +565,21 @@ func winFlatten(m map[string]any, out map[string]any) {
 				out["provider_name"] = nm
 			}
 			winFlatten(child, out) // iç içe alanları da yukarı taşı
+		case []any:
+			// Render-XML EventData: [{"@Name":"TargetUserName","#text":"bob"}, ...].
+			for _, el := range child {
+				em, ok := el.(map[string]any)
+				if !ok {
+					continue
+				}
+				if nm, ok := em["@Name"].(string); ok {
+					if t, ok := em["#text"]; ok {
+						out[strings.ToLower(strings.TrimSpace(nm))] = t
+					}
+				} else {
+					winFlatten(em, out)
+				}
+			}
 		default:
 			if _, exists := out[lk]; !exists || out[lk] == nil {
 				out[lk] = v

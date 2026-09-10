@@ -265,6 +265,30 @@ func TestNormalizeWinEventRenderedXML(t *testing.T) {
 	}
 }
 
+func TestNormalizeWinEventEnrichment(t *testing.T) {
+	// winlogbeat event_data (iç içe map) → Details'e taşınan triyaj alanları.
+	data := []byte(`{"winlog":{"event_id":4625,"channel":"Security","computer_name":"WS-01","event_data":{"TargetUserName":"admin","IpAddress":"10.0.0.9","LogonType":"3"}},"message":"failed logon"}`)
+	recs, err := NormalizeWinEvent(data, now)
+	if err != nil || len(recs) != 1 {
+		t.Fatalf("enrichment normalize: %v %d", err, len(recs))
+	}
+	for _, want := range []string{`"target_user":"admin"`, `"src_ip":"10.0.0.9"`, `"logon_type":"3"`} {
+		if !strings.Contains(recs[0].Event.Details, want) {
+			t.Fatalf("details %s içermeli, %q", want, recs[0].Event.Details)
+		}
+	}
+	// Render-XML EventData Data[] dizisi ({@Name,#text}) → aynı zenginleştirme.
+	xml := []byte(`{"Event":{"System":{"EventID":"4625","Channel":"Security","Computer":"AUD"},"EventData":{"Data":[{"@Name":"TargetUserName","#text":"root"},{"@Name":"IpAddress","#text":"1.2.3.4"}]}}}`)
+	recs, err = NormalizeWinEvent(xml, now)
+	if err != nil || len(recs) != 1 {
+		t.Fatalf("render-XML EventData normalize: %v %d", err, len(recs))
+	}
+	if !strings.Contains(recs[0].Event.Details, `"target_user":"root"`) ||
+		!strings.Contains(recs[0].Event.Details, `"src_ip":"1.2.3.4"`) {
+		t.Fatalf("Data[] zenginleştirme eksik, %q", recs[0].Event.Details)
+	}
+}
+
 func TestNormalizeWinEventBad(t *testing.T) {
 	if _, err := NormalizeWinEvent([]byte(`{"message":"no id"}`), now); err == nil {
 		t.Fatal("event_id yoksa hata döndürmeli")
