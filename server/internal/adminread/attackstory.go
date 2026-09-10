@@ -32,15 +32,17 @@ type AttackStoryDTO struct {
 
 // killChain, aşama → sıra (rank). Düşük rank önce gelir (erken kill-chain).
 var killChain = map[string]int{
-	"Initial Access":    1,
-	"Execution":         2,
-	"Persistence":       3,
-	"Defense Evasion":   4,
-	"Discovery":         5,
-	"Command & Control": 6,
-	"Exfiltration":      7,
-	"Impact":            8,
-	"Detection":         9, // sınıflandırılamayan güvenlik olayı
+	"Initial Access":       1,
+	"Execution":            2,
+	"Persistence":          3,
+	"Privilege Escalation": 4,
+	"Defense Evasion":      5,
+	"Credential Access":    6,
+	"Discovery":            7,
+	"Command & Control":    8,
+	"Exfiltration":         9,
+	"Impact":               10,
+	"Detection":            11, // sınıflandırılamayan güvenlik olayı
 }
 
 // classifyStage, bir olayı (kategori + mesaj) bir kill-chain aşamasına eşler.
@@ -61,7 +63,15 @@ func classifyStage(category, message string) (string, int) {
 		return stage("Command & Control")
 	case contains("yanal hareket", "lateral"):
 		return stage("Discovery")
-	case contains("kurcalama", "tamper", "öz-tasdik", "self-attest", "imza geçersiz", "devre dışı"):
+	case contains("kaba-kuvvet", "brute", "failed logon", "oturum açma başarısız", "pre-authentication failed"):
+		return stage("Credential Access")
+	case contains("gruba üye eklendi", "security-enabled group", "privilege escalation"):
+		return stage("Privilege Escalation")
+	case contains("hizmet kuruldu", "service installed", "scheduled task", "zamanlanmış görev", "account created", "hesap oluştur"):
+		return stage("Persistence")
+	case contains("createremotethread", "process injection", "kod enjeksiyon",
+		"audit log cleared", "event log cleared", "denetim günlüğü temizlendi", "olay günlüğü temizlendi",
+		"kurcalama", "tamper", "öz-tasdik", "self-attest", "imza geçersiz", "devre dışı"):
 		return stage("Defense Evasion")
 	case contains("wipe", "karantina", "quarantine", "fidye", "ransom"):
 		return stage("Impact")

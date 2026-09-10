@@ -29,6 +29,24 @@ func TestClassifyStage(t *testing.T) {
 	}
 }
 
+func TestClassifyStageWindows(t *testing.T) {
+	cases := []struct{ cat, msg, want string }{
+		{"SECURITY", "[WS] EventID 4625 oturum açma başarısız (failed logon)", "Credential Access"},
+		{"SECURITY", "olası kaba-kuvvet/parola-püskürtme: 5dk içinde 12 başarısız oturum açma", "Credential Access"},
+		{"SECURITY", "[DC] EventID 4728 güvenlik-etkin global gruba üye eklendi (privilege escalation)", "Privilege Escalation"},
+		{"SECURITY", "[SRV] EventID 7045 yeni hizmet kuruldu (service installed persistence)", "Persistence"},
+		{"SECURITY", "[SRV] EventID 4698 zamanlanmış görev oluşturuldu", "Persistence"},
+		{"SECURITY", "[DC] EventID 4720 kullanıcı hesap oluşturuldu", "Persistence"},
+		{"SECURITY", "[WS] EventID 8 CreateRemoteThread (Sysmon process injection)", "Defense Evasion"},
+		{"SECURITY", "[DC] EventID 1102 denetim günlüğü temizlendi (audit log cleared)", "Defense Evasion"},
+	}
+	for _, c := range cases {
+		if got, _ := classifyStage(c.cat, c.msg); got != c.want {
+			t.Errorf("classifyStage(%q,%q)=%q beklenen %q", c.cat, c.msg, got, c.want)
+		}
+	}
+}
+
 func TestBuildAttackStoryOrdersAndFilters(t *testing.T) {
 	base := time.Date(2026, 3, 10, 9, 0, 0, 0, time.UTC)
 	events := []EventDTO{
