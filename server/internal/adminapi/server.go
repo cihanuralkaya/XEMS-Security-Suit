@@ -478,6 +478,23 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"token": token})
 }
 
+// isWinlogBody, JSON gövdesinin Windows olay günlüğü şekli olup olmadığını sezer
+// (winlogbeat "winlog"/"event_id", nxlog "EventID", render-XML "Event.System").
+// XEMS-yerel JSON şeması (source+message) YANLIŞLIKLA winlog'a yönlendirilmesin diye
+// yalnız ayırt edici Windows imlerine bakar.
+func isWinlogBody(body []byte) bool {
+	s := string(body)
+	if len(s) > 4096 { // yalnız baş kısma bak (imler baştadır)
+		s = s[:4096]
+	}
+	for _, marker := range []string{`"winlog"`, `"event_id"`, `"EventID"`, `"System"`} {
+		if strings.Contains(s, marker) {
+			return true
+		}
+	}
+	return false
+}
+
 // handleIngest, HARİCİ kaynaklardan (güvenlik duvarı, bulut, SIEM) gelen logları
 // alır, XEMS olay modeline normalize eder ve olay yoluna yazar (#21 SIEM alımı).
 // ingestToken ayarlı değilse uç KAPALIDIR (404). Ayarlıysa doğru Bearer token
@@ -505,7 +522,13 @@ func (s *Server) handleIngest(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	var records []logingest.Record
 	if strings.Contains(r.Header.Get("Content-Type"), "application/json") {
-		records, err = logingest.NormalizeJSON(body, now)
+		// Windows olay günlüğü JSON'u (winlogbeat/nxlog): açık ?format=winlog ya da
+		// gövdede Windows olay imleri varsa WinEvent normalize et; aksi halde XEMS JSON.
+		if r.URL.Query().Get("format") == "winlog" || isWinlogBody(body) {
+			records, err = logingest.NormalizeWinEvent(body, now)
+		} else {
+			records, err = logingest.NormalizeJSON(body, now)
+		}
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return

@@ -348,6 +348,243 @@ func nthFieldIndex(s string, n int) int {
 	return -1
 }
 
+// winClass, tek bir Windows olay kimliğinin sınıflandırmasıdır.
+type winClass struct {
+	cat, sev, name string
+}
+
+// winCatalog, İYİ-BİLİNEN Windows güvenlik/sistem/Sysmon/PowerShell olay
+// kimliklerini XEMS kategori+önem + insan-okur ada eşler. EDR görünürlüğü:
+// winlogbeat/nxlog gibi standart log-shipper'lar bu olayları HTTP ile iletir.
+// Adlar İngilizce anahtar kelime taşır (aşağı-akış MITRE/tespit kuralları için).
+var winCatalog = map[int]winClass{
+	// --- Security kanalı ---
+	1102: {"SECURITY", "CRITICAL", "denetim günlüğü temizlendi (audit log cleared)"},
+	4624: {"SECURITY", "INFO", "başarılı oturum açma (logon)"},
+	4625: {"SECURITY", "MEDIUM", "oturum açma başarısız (failed logon)"},
+	4634: {"SECURITY", "INFO", "oturum kapatma (logoff)"},
+	4648: {"SECURITY", "MEDIUM", "açık kimlik bilgisiyle oturum (explicit credentials logon)"},
+	4672: {"SECURITY", "MEDIUM", "özel ayrıcalıklar atandı (special privileges assigned)"},
+	4688: {"PROCESS", "INFO", "yeni süreç oluşturuldu (process creation)"},
+	4697: {"SECURITY", "HIGH", "hizmet kuruldu (service installed persistence)"},
+	4698: {"SECURITY", "HIGH", "zamanlanmış görev oluşturuldu (scheduled task created persistence)"},
+	4699: {"SECURITY", "MEDIUM", "zamanlanmış görev silindi (scheduled task deleted)"},
+	4700: {"SECURITY", "LOW", "zamanlanmış görev etkinleştirildi (scheduled task enabled)"},
+	4701: {"SECURITY", "LOW", "zamanlanmış görev devre dışı (scheduled task disabled)"},
+	4702: {"SECURITY", "LOW", "zamanlanmış görev güncellendi (scheduled task updated)"},
+	4719: {"SECURITY", "HIGH", "sistem denetim politikası değişti (audit policy changed defense evasion)"},
+	4720: {"SECURITY", "HIGH", "kullanıcı hesabı oluşturuldu (user account created)"},
+	4722: {"SECURITY", "MEDIUM", "kullanıcı hesabı etkinleştirildi (account enabled)"},
+	4723: {"SECURITY", "MEDIUM", "parola değiştirme girişimi (password change attempt)"},
+	4724: {"SECURITY", "MEDIUM", "parola sıfırlama girişimi (password reset attempt)"},
+	4725: {"SECURITY", "LOW", "kullanıcı hesabı devre dışı (account disabled)"},
+	4726: {"SECURITY", "MEDIUM", "kullanıcı hesabı silindi (account deleted)"},
+	4728: {"SECURITY", "HIGH", "güvenlik-etkin global gruba üye eklendi (privilege escalation)"},
+	4732: {"SECURITY", "HIGH", "güvenlik-etkin yerel gruba üye eklendi (privilege escalation)"},
+	4756: {"SECURITY", "HIGH", "güvenlik-etkin evrensel gruba üye eklendi (privilege escalation)"},
+	4738: {"SECURITY", "LOW", "kullanıcı hesabı değişti (account changed)"},
+	4740: {"SECURITY", "MEDIUM", "kullanıcı hesabı kilitlendi (account locked out)"},
+	4767: {"SECURITY", "LOW", "kullanıcı hesabı kilidi açıldı (account unlocked)"},
+	4768: {"SECURITY", "INFO", "Kerberos TGT istendi (authentication ticket requested)"},
+	4769: {"SECURITY", "INFO", "Kerberos hizmet bileti istendi (service ticket requested)"},
+	4771: {"SECURITY", "MEDIUM", "Kerberos ön-kimlik doğrulama başarısız (pre-authentication failed)"},
+	4776: {"SECURITY", "INFO", "kimlik bilgisi doğrulama (credential validation)"},
+	4798: {"SECURITY", "LOW", "kullanıcı yerel grup üyeliği sıralandı (group enumeration recon)"},
+	4799: {"SECURITY", "LOW", "güvenlik-etkin yerel grup sıralandı (group enumeration recon)"},
+	4964: {"SECURITY", "MEDIUM", "özel gruba atanmış oturum açma (special groups logon)"},
+	5140: {"NETWORK_CONN", "INFO", "ağ paylaşımına erişildi (network share accessed)"},
+	5145: {"SECURITY", "LOW", "paylaşım nesnesi erişim denetimi (share object checked)"},
+	// --- System kanalı ---
+	104:  {"SECURITY", "CRITICAL", "olay günlüğü temizlendi (event log cleared defense evasion)"},
+	6005: {"SYSTEM", "INFO", "olay günlüğü hizmeti başlatıldı (event log started)"},
+	6006: {"SYSTEM", "INFO", "olay günlüğü hizmeti durduruldu (event log stopped)"},
+	7036: {"SYSTEM", "INFO", "hizmet durumu değişti (service state changed)"},
+	7040: {"SECURITY", "MEDIUM", "hizmet başlangıç türü değişti (service start type changed)"},
+	7045: {"SECURITY", "HIGH", "yeni hizmet kuruldu (service installed persistence)"},
+	// --- Sysmon (Microsoft-Windows-Sysmon/Operational) ---
+	// NOT: Sysmon ID'leri Security ile çakışır → kanal Sysmon ise winSysmon kullanılır.
+	// --- PowerShell (Microsoft-Windows-PowerShell/Operational) ---
+	// NOT: 4103/4104 kanal PowerShell ise winPowerShell kullanılır.
+	// --- WMI-Activity ---
+	5861: {"SECURITY", "HIGH", "WMI kalıcı olay tüketicisi (permanent event consumer persistence)"},
+}
+
+// winSysmon, Sysmon kanalı olay kimlikleri (Security kanalıyla çakıştığından ayrı).
+var winSysmon = map[int]winClass{
+	1:  {"PROCESS", "INFO", "süreç oluşturma (Sysmon process create)"},
+	2:  {"SECURITY", "MEDIUM", "dosya oluşturma zamanı değiştirildi (timestomp defense evasion)"},
+	3:  {"NETWORK_CONN", "INFO", "ağ bağlantısı (Sysmon network connection)"},
+	5:  {"PROCESS", "INFO", "süreç sonlandı (Sysmon process terminated)"},
+	7:  {"SECURITY", "LOW", "imaj yüklendi (Sysmon image loaded)"},
+	8:  {"SECURITY", "HIGH", "CreateRemoteThread (Sysmon process injection)"},
+	10: {"SECURITY", "MEDIUM", "süreç erişimi (Sysmon process access)"},
+	11: {"SYSTEM", "INFO", "dosya oluşturuldu (Sysmon file create)"},
+	12: {"SECURITY", "LOW", "kayıt defteri nesnesi eklendi/silindi (Sysmon registry)"},
+	13: {"SECURITY", "LOW", "kayıt defteri değeri ayarlandı (Sysmon registry set)"},
+	14: {"SECURITY", "LOW", "kayıt defteri anahtarı yeniden adlandırıldı (Sysmon registry)"},
+	22: {"NETWORK_CONN", "INFO", "DNS sorgusu (Sysmon DNS query)"},
+	23: {"SECURITY", "LOW", "dosya silindi (Sysmon file delete)"},
+}
+
+// winPowerShell, PowerShell operasyonel kanalı olay kimlikleri.
+var winPowerShell = map[int]winClass{
+	4103: {"PROCESS", "LOW", "PowerShell işlem hattı yürütmesi (pipeline execution)"},
+	4104: {"PROCESS", "MEDIUM", "PowerShell betik bloğu günlüğü (script block logging)"},
+}
+
+// WinEventClass, bir Windows olay kimliği + kanaldan XEMS kategori, önem ve
+// insan-okur ad döner. Bilinmeyen kimlikler kanala göre güvenli varsayılana düşer
+// (known=false). SAF fonksiyon (test edilebilir).
+func WinEventClass(eventID int, channel string) (cat, sev, name string, known bool) {
+	ch := strings.ToLower(channel)
+	switch {
+	case strings.Contains(ch, "sysmon"):
+		if c, ok := winSysmon[eventID]; ok {
+			return c.cat, c.sev, c.name, true
+		}
+	case strings.Contains(ch, "powershell"):
+		if c, ok := winPowerShell[eventID]; ok {
+			return c.cat, c.sev, c.name, true
+		}
+	}
+	if c, ok := winCatalog[eventID]; ok {
+		return c.cat, c.sev, c.name, true
+	}
+	// Bilinmeyen: kanala göre güvenli varsayılan.
+	switch {
+	case strings.Contains(ch, "security"):
+		return "SECURITY", "INFO", "", false
+	case strings.Contains(ch, "sysmon"):
+		return "SECURITY", "INFO", "", false
+	case strings.Contains(ch, "powershell"):
+		return "PROCESS", "INFO", "", false
+	default:
+		return "SYSTEM", "INFO", "", false
+	}
+}
+
+// NormalizeWinEvent, Windows olay günlüğü JSON'unu (winlogbeat iç içe "winlog",
+// nxlog düz, ya da render-edilmiş XML "Event.System" şekilleri) olay kayıtlarına
+// çevirir. Olay kimliği + kanala göre kategori/önem sınıflandırılır (WinEventClass).
+// EDR görünürlüğü: standart Windows log-shipper'ları /api/ingest'e JSON iletir.
+func NormalizeWinEvent(data []byte, now time.Time) ([]Record, error) {
+	trimmed := strings.TrimSpace(string(data))
+	var objs []map[string]any
+	if strings.HasPrefix(trimmed, "[") {
+		if err := json.Unmarshal(data, &objs); err != nil {
+			return nil, fmt.Errorf("logingest: winlog JSON dizi çözülemedi: %w", err)
+		}
+	} else {
+		var one map[string]any
+		if err := json.Unmarshal(data, &one); err != nil {
+			return nil, fmt.Errorf("logingest: winlog JSON çözülemedi: %w", err)
+		}
+		objs = []map[string]any{one}
+	}
+	out := make([]Record, 0, len(objs))
+	for i, m := range objs {
+		flat := map[string]any{}
+		winFlatten(m, flat)
+		id := winInt(flat, "event_id", "eventid", "eventidentifier")
+		if id == 0 {
+			return nil, fmt.Errorf("logingest: winlog kaydı #%d event_id yok", i)
+		}
+		channel := winStr(flat, "channel")
+		cat, sev, name, _ := WinEventClass(id, channel)
+		computer := winStr(flat, "computer_name", "computer", "hostname", "host")
+		provider := winStr(flat, "provider_name", "sourcename", "provider")
+		source := strings.TrimSpace(computer)
+		if source == "" {
+			source = "winlog"
+		}
+		orig := winStr(flat, "message", "rendered_message", "renderingmessage")
+		if len(orig) > 500 { // çok uzun render mesajlarını kırp
+			orig = orig[:500] + "…"
+		}
+		orig = strings.TrimSpace(strings.ReplaceAll(orig, "\n", " "))
+		label := name
+		if label == "" {
+			label = "Windows olayı"
+		}
+		msg := fmt.Sprintf("[%s] EventID %d %s", source, id, label)
+		if orig != "" {
+			msg += ": " + orig
+		}
+		det, _ := json.Marshal(map[string]any{
+			"event_id": id, "channel": channel, "provider": provider, "computer": computer,
+		})
+		out = append(out, Record{
+			DeviceID: SourceUUID(source),
+			Event: model.Event{
+				Category:   cat,
+				Severity:   sev,
+				Message:    msg,
+				OccurredAt: now,
+				Details:    string(det),
+			},
+		})
+	}
+	return out, nil
+}
+
+// winFlatten, iç içe Windows JSON şekillerini (winlog, Event, System, EventData)
+// tek düzey haritaya düzleştirir; anahtarlar küçük harfe indirilir (son-yazan kazanır).
+func winFlatten(m map[string]any, out map[string]any) {
+	for k, v := range m {
+		lk := strings.ToLower(strings.TrimSpace(k))
+		switch child := v.(type) {
+		case map[string]any:
+			// #text / @Name gibi öznitelik-sarmalı skalerler: değeri anahtara ata.
+			if t, ok := child["#text"]; ok {
+				out[lk] = t
+			}
+			if nm, ok := child["@Name"]; ok && lk == "provider" {
+				out["provider_name"] = nm
+			}
+			winFlatten(child, out) // iç içe alanları da yukarı taşı
+		default:
+			if _, exists := out[lk]; !exists || out[lk] == nil {
+				out[lk] = v
+			}
+		}
+	}
+}
+
+// winStr, düzleştirilmiş haritada aday anahtarların ilk boş-olmayan string değerini döner.
+func winStr(flat map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := flat[k]; ok {
+			if s := fmt.Sprintf("%v", v); s != "" && s != "<nil>" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+// winInt, düzleştirilmiş haritada aday anahtarların ilk çözülebilir tamsayısını döner.
+func winInt(flat map[string]any, keys ...string) int {
+	for _, k := range keys {
+		v, ok := flat[k]
+		if !ok {
+			continue
+		}
+		switch n := v.(type) {
+		case float64:
+			return int(n)
+		case json.Number:
+			if x, err := n.Int64(); err == nil {
+				return int(x)
+			}
+		case string:
+			if x, err := strconv.Atoi(strings.TrimSpace(n)); err == nil {
+				return x
+			}
+		}
+	}
+	return 0
+}
+
 // cefSeverity, CEF 0-10 önem ölçeğini XEMS önem düzeyine eşler.
 func cefSeverity(s string) string {
 	n, err := strconv.Atoi(strings.TrimSpace(s))

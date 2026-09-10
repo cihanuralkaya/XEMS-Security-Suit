@@ -182,3 +182,94 @@ func TestNormalizeSyslogBad(t *testing.T) {
 		}
 	}
 }
+
+func TestWinEventClass(t *testing.T) {
+	cases := []struct {
+		id       int
+		ch       string
+		cat, sev string
+		known    bool
+	}{
+		{4625, "Security", "SECURITY", "MEDIUM", true},                        // failed logon
+		{1102, "Security", "SECURITY", "CRITICAL", true},                      // audit log cleared
+		{4720, "Security", "SECURITY", "HIGH", true},                          // account created
+		{7045, "System", "SECURITY", "HIGH", true},                            // service installed
+		{4688, "Security", "PROCESS", "INFO", true},                           // process creation
+		{1, "Microsoft-Windows-Sysmon/Operational", "PROCESS", "INFO", true},  // Sysmon proc create
+		{8, "Microsoft-Windows-Sysmon/Operational", "SECURITY", "HIGH", true}, // CreateRemoteThread
+		{4104, "Microsoft-Windows-PowerShell/Operational", "PROCESS", "MEDIUM", true},
+		{1, "Security", "SECURITY", "INFO", false}, // ID 1 Security kanalında → bilinmeyen (Sysmon değil)
+		{99999, "Security", "SECURITY", "INFO", false},
+		{99999, "System", "SYSTEM", "INFO", false},
+	}
+	for _, c := range cases {
+		cat, sev, _, known := WinEventClass(c.id, c.ch)
+		if cat != c.cat || sev != c.sev || known != c.known {
+			t.Errorf("WinEventClass(%d,%q)=(%q,%q,%v) beklenen (%q,%q,%v)",
+				c.id, c.ch, cat, sev, known, c.cat, c.sev, c.known)
+		}
+	}
+}
+
+func TestNormalizeWinEventWinlogbeat(t *testing.T) {
+	// winlogbeat iç içe "winlog" şekli.
+	data := []byte(`{"winlog":{"event_id":4625,"channel":"Security","computer_name":"WS-01","provider_name":"Microsoft-Windows-Security-Auditing"},"message":"An account failed to log on.\nSubject: ..."}`)
+	recs, err := NormalizeWinEvent(data, now)
+	if err != nil || len(recs) != 1 {
+		t.Fatalf("winlogbeat normalize: %v %d", err, len(recs))
+	}
+	if recs[0].Event.Category != "SECURITY" || recs[0].Event.Severity != "MEDIUM" {
+		t.Fatalf("4625 sınıflandırma yanlış: %+v", recs[0].Event)
+	}
+	if !strings.Contains(recs[0].Event.Message, "WS-01") || !strings.Contains(recs[0].Event.Message, "4625") {
+		t.Fatalf("mesaj host+id taşımalı, %q", recs[0].Event.Message)
+	}
+	if recs[0].DeviceID != SourceUUID("WS-01") {
+		t.Fatal("device id computer_name'den türetilmeli")
+	}
+	if !strings.Contains(recs[0].Event.Details, "Security") {
+		t.Fatalf("details kanalı taşımalı, %q", recs[0].Event.Details)
+	}
+}
+
+func TestNormalizeWinEventNxlogArray(t *testing.T) {
+	// nxlog düz şekil, dizi; ikinci kayıt Sysmon.
+	data := []byte(`[
+	  {"EventID":7045,"Channel":"System","Hostname":"SRV-DC","Message":"A service was installed"},
+	  {"EventID":8,"Channel":"Microsoft-Windows-Sysmon/Operational","Hostname":"SRV-DC","Message":"CreateRemoteThread detected"}
+	]`)
+	recs, err := NormalizeWinEvent(data, now)
+	if err != nil || len(recs) != 2 {
+		t.Fatalf("nxlog dizi normalize: %v %d", err, len(recs))
+	}
+	if recs[0].Event.Severity != "HIGH" || recs[1].Event.Severity != "HIGH" {
+		t.Fatalf("7045/Sysmon8 HIGH olmalı: %q %q", recs[0].Event.Severity, recs[1].Event.Severity)
+	}
+	if recs[1].Event.Category != "SECURITY" {
+		t.Fatalf("Sysmon 8 SECURITY olmalı, %q", recs[1].Event.Category)
+	}
+}
+
+func TestNormalizeWinEventRenderedXML(t *testing.T) {
+	// wevtutil/EVTX render-XML → JSON: iç içe Event.System, EventID {#text}.
+	data := []byte(`{"Event":{"System":{"EventID":{"#text":"1102","Qualifiers":"0"},"Channel":"Security","Computer":"AUDIT-01"}}}`)
+	recs, err := NormalizeWinEvent(data, now)
+	if err != nil || len(recs) != 1 {
+		t.Fatalf("render-XML normalize: %v %d", err, len(recs))
+	}
+	if recs[0].Event.Severity != "CRITICAL" {
+		t.Fatalf("1102 CRITICAL olmalı, %q", recs[0].Event.Severity)
+	}
+	if recs[0].DeviceID != SourceUUID("AUDIT-01") {
+		t.Fatal("device id Computer'dan türetilmeli")
+	}
+}
+
+func TestNormalizeWinEventBad(t *testing.T) {
+	if _, err := NormalizeWinEvent([]byte(`{"message":"no id"}`), now); err == nil {
+		t.Fatal("event_id yoksa hata döndürmeli")
+	}
+	if _, err := NormalizeWinEvent([]byte(`not json`), now); err == nil {
+		t.Fatal("bozuk JSON hata döndürmeli")
+	}
+}
