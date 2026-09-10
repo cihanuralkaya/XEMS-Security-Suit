@@ -1377,8 +1377,9 @@ func (s *Server) handleListArtifacts(w http.ResponseWriter, r *http.Request, _ s
 }
 
 // handleDownloadArtifact, tek bir artefaktın ham içeriğini indirir (attachment).
-func (s *Server) handleDownloadArtifact(w http.ResponseWriter, r *http.Request, _ string) {
-	c, ok, err := s.reader.ArtifactBytes(r.Context(), r.PathValue("id"))
+func (s *Server) handleDownloadArtifact(w http.ResponseWriter, r *http.Request, adminID string) {
+	id := r.PathValue("id")
+	c, ok, err := s.reader.ArtifactBytes(r.Context(), id)
 	if respondErr(w, err) {
 		return
 	}
@@ -1386,6 +1387,9 @@ func (s *Server) handleDownloadArtifact(w http.ResponseWriter, r *http.Request, 
 		writeErr(w, http.StatusNotFound, "artefakt bulunamadı")
 		return
 	}
+	// Kanıt gözetim zinciri (chain-of-custody): delil erişimini denetim izine yaz
+	// (hangi analist, hangi artefakt, ne zaman) — adli bütünlük.
+	s.adminSvc.RecordAudit(r.Context(), adminID, "DOWNLOAD_ARTIFACT", "artifact", id)
 	name := c.Path
 	if i := strings.LastIndexAny(name, `/\`); i >= 0 {
 		name = name[i+1:]

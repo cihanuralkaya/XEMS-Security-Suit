@@ -545,6 +545,13 @@ func (s *Service) AuthorizeExport(ctx context.Context, adminID, deviceID string)
 	return nil
 }
 
+// RecordAudit, denetim izine bir eylem yazar (delil erişimi gibi salt-okunur ama
+// izlenmesi gereken işlemler için). Kanıt gözetim zinciri (chain-of-custody):
+// hangi analistin hangi delili ne zaman indirdiği denetlenebilir kalır.
+func (s *Service) RecordAudit(ctx context.Context, adminID, action, targetType, targetID string) {
+	_ = s.store.WriteAudit(ctx, adminID, action, targetType, targetID)
+}
+
 // RevokeDevice, cihazın sertifikalarını iptal eder (OPERATOR+). İptal edilen
 // ajan bir sonraki mTLS el sıkışmasında reddedilir.
 func (s *Service) RevokeDevice(ctx context.Context, adminID, deviceID string) error {
