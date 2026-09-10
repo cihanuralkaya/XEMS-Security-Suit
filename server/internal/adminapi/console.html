@@ -1847,6 +1847,12 @@
         items.push(["Küme fan-out (alınan)","cluster_received","var(--accent)"]);
         if((c.cluster_fallback||0)>0) items.push(["Küme fallback (DB uyarı)","cluster_fallback","var(--crit)"]);
       }
+      // Yeni güvenlik sinyalleri: yalnız >0 iken göster (gürültüyü azalt).
+      if((c.chain_fired||0)>0) items.push(["Saldırı zinciri (çok-sinyal)","chain_fired","var(--crit)"]);
+      if((c.lateral_movement||0)>0) items.push(["Yanal hareket","lateral_movement","var(--crit)"]);
+      if((c.login_lockouts||0)>0) items.push(["Kaba-kuvvet kilidi","login_lockouts","var(--crit)"]);
+      if((c.saved_search_hits||0)>0) items.push(["Kayıtlı-arama eşleşme","saved_search_hits","var(--warn)"]);
+      if((c.alerts_suppressed||0)>0) items.push(["Bastırılan alarm","alerts_suppressed","var(--muted)"]);
       box.innerHTML="";
       items.forEach(function(it){
         var d=document.createElement("div");
