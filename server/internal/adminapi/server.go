@@ -512,11 +512,19 @@ func (s *Server) handleIngest(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		// Satır-başına CEF; tanınmayan satırlar atlanır.
+		// Satır-başına CEF veya LEEF; tanınmayan satırlar atlanır.
 		for _, line := range strings.Split(string(body), "\n") {
 			if strings.TrimSpace(line) == "" {
 				continue
 			}
-			if rec, e := logingest.NormalizeCEF(line, now); e == nil {
+			var rec logingest.Record
+			var e error
+			if strings.Contains(line, "LEEF:") {
+				rec, e = logingest.NormalizeLEEF(line, now)
+			} else {
+				rec, e = logingest.NormalizeCEF(line, now)
+			}
+			if e == nil {
 				records = append(records, rec)
 			}
 		}

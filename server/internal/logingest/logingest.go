@@ -169,6 +169,83 @@ func NormalizeCEF(line string, now time.Time) (Record, error) {
 	return rec, nil
 }
 
+// NormalizeLEEF, bir LEEF (QRadar) satırını olay kaydına çevirir. Biçim:
+//
+//	LEEF:Sürüm|Vendor|Product|Ver|EventID|<öznitelikler>
+//
+// Öznitelikler varsayılan SEKME (tab) ile ayrılmış key=value çiftleridir; LEEF 2.0
+// isteğe bağlı bir ayraç alanı taşıyabilir (EventID'den sonra). sev/msg/cat gibi
+// standart öznitelikler tanınır; kalanlar Details'e yazılır. SIEM alım simetrisi
+// (giden SIEM zaten LEEF üretir).
+func NormalizeLEEF(line string, now time.Time) (Record, error) {
+	idx := strings.Index(line, "LEEF:")
+	if idx < 0 {
+		return Record{}, fmt.Errorf("logingest: LEEF öneki yok")
+	}
+	parts := strings.Split(line[idx+5:], "|")
+	if len(parts) < 6 {
+		return Record{}, fmt.Errorf("logingest: LEEF alanları eksik (%d)", len(parts))
+	}
+	version, vendor, product, eventID := parts[0], parts[1], parts[2], parts[4]
+	attrs, delim := parts[5], "\t"
+	// LEEF 2.0 opsiyonel ayraç alanı: EventID'den sonraki alan kv değilse ayraçtır.
+	if strings.HasPrefix(version, "2.0") && len(parts) >= 7 && !strings.Contains(parts[5], "=") {
+		delim = decodeLEEFDelim(parts[5])
+		attrs = parts[6]
+	}
+	kv := parseLEEFAttrs(attrs, delim)
+	source := strings.TrimSpace(vendor + "/" + product)
+	name := kv["msg"]
+	if name == "" {
+		name = strings.TrimSpace(eventID)
+	}
+	sev := kv["sev"]
+	if sev == "" {
+		sev = kv["severity"]
+	}
+	rec := Record{
+		DeviceID: SourceUUID(source),
+		Event: model.Event{
+			Category:   "SECURITY",
+			Severity:   cefSeverity(sev), // LEEF sev de sayısal (CEF gibi) ya da metinsel olabilir
+			Message:    "[" + source + "] " + strings.TrimSpace(name),
+			OccurredAt: now,
+		},
+	}
+	if len(kv) > 0 {
+		b, _ := json.Marshal(kv)
+		rec.Event.Details = string(b)
+	}
+	return rec, nil
+}
+
+// parseLEEFAttrs, ayraçla ayrılmış key=value öznitelik dizesini haritaya çevirir.
+func parseLEEFAttrs(attrs, delim string) map[string]string {
+	kv := map[string]string{}
+	for _, tok := range strings.Split(attrs, delim) {
+		if k, v, ok := strings.Cut(strings.TrimSpace(tok), "="); ok {
+			k = strings.TrimSpace(k)
+			if k != "" {
+				kv[k] = strings.TrimSpace(v)
+			}
+		}
+	}
+	return kv
+}
+
+// decodeLEEFDelim, LEEF 2.0 ayraç alanını çözer: "xHH" (hex bayt) ya da literal karakter.
+func decodeLEEFDelim(f string) string {
+	if len(f) == 3 && (f[0] == 'x' || f[0] == 'X') {
+		if n, err := strconv.ParseUint(f[1:], 16, 8); err == nil {
+			return string([]byte{byte(n)})
+		}
+	}
+	if f == "" {
+		return "\t"
+	}
+	return f
+}
+
 // cefSeverity, CEF 0-10 önem ölçeğini XEMS önem düzeyine eşler.
 func cefSeverity(s string) string {
 	n, err := strconv.Atoi(strings.TrimSpace(s))

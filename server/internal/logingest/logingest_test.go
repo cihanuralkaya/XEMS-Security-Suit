@@ -1,6 +1,7 @@
 package logingest
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -100,5 +101,49 @@ func TestCEFSeverityScale(t *testing.T) {
 		if got := cefSeverity(in); got != want {
 			t.Errorf("cefSeverity(%q)=%q beklenen %q", in, got, want)
 		}
+	}
+}
+
+func TestNormalizeLEEF(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	// LEEF 1.0, tab-delimited attrs.
+	line := "LEEF:1.0|Palo Alto|PAN-OS|10.2|threat|sev=8\tsrc=1.2.3.4\tmsg=malware blocked\tcat=THREAT"
+	rec, err := NormalizeLEEF(line, now)
+	if err != nil {
+		t.Fatalf("NormalizeLEEF: %v", err)
+	}
+	if rec.Event.Severity != "HIGH" { // sev=8 → HIGH
+		t.Fatalf("severity HIGH beklenirdi, %q", rec.Event.Severity)
+	}
+	if !strings.Contains(rec.Event.Message, "malware blocked") {
+		t.Fatalf("mesaj msg alanını taşımalı, %q", rec.Event.Message)
+	}
+	if rec.DeviceID == "" {
+		t.Fatal("kaynaktan device id türetilmeli")
+	}
+	if !strings.Contains(rec.Event.Details, "src") {
+		t.Fatalf("kalan öznitelikler Details'e yazılmalı, %q", rec.Event.Details)
+	}
+}
+
+func TestNormalizeLEEF20Delimiter(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	// LEEF 2.0 açık ayraç alanı (x09 = tab).
+	line := "LEEF:2.0|V|P|1|evt|x09|sev=2\tmsg=info"
+	rec, err := NormalizeLEEF(line, now)
+	if err != nil {
+		t.Fatalf("NormalizeLEEF 2.0: %v", err)
+	}
+	if rec.Event.Severity != "LOW" { // sev=2 → LOW
+		t.Fatalf("severity LOW beklenirdi, %q", rec.Event.Severity)
+	}
+}
+
+func TestNormalizeLEEFBad(t *testing.T) {
+	if _, err := NormalizeLEEF("düz metin", time.Now()); err == nil {
+		t.Fatal("LEEF öneki yoksa hata döndürmeli")
+	}
+	if _, err := NormalizeLEEF("LEEF:1.0|V|P", time.Now()); err == nil {
+		t.Fatal("eksik alanlarda hata döndürmeli")
 	}
 }
