@@ -205,6 +205,11 @@ var (
 	tUserExecution  = mitre.Technique{ID: "T1204", Name: "User Execution", Tactic: "Execution"}
 	tProcInjection  = mitre.Technique{ID: "T1055", Name: "Process Injection", Tactic: "Defense Evasion"}
 	tNetworkDiscov  = mitre.Technique{ID: "T1046", Name: "Network Service Discovery", Tactic: "Discovery"}
+	tAutostart      = mitre.Technique{ID: "T1547", Name: "Boot or Logon Autostart Execution", Tactic: "Persistence"}
+	tAppLayerC2     = mitre.Technique{ID: "T1071", Name: "Application Layer Protocol", Tactic: "Command and Control"}
+	tExfilAltProto  = mitre.Technique{ID: "T1048", Name: "Exfiltration Over Alternative Protocol", Tactic: "Exfiltration"}
+	tIndicatorRem   = mitre.Technique{ID: "T1070", Name: "Indicator Removal", Tactic: "Defense Evasion"}
+	tIngressTool    = mitre.Technique{ID: "T1105", Name: "Ingress Tool Transfer", Tactic: "Command and Control"}
 )
 
 // DefaultRules, yerleşik tespit kural setidir. Ajanın gerçekte ürettiği olay
@@ -228,5 +233,16 @@ func DefaultRules() []Rule {
 		{ID: "XEMS-0007", Name: "Şüpheli süreç/araç yürütmesi", Category: "PROCESS",
 			MessageRegex: `mimikatz|psexec|\bnc\.exe|\bncat|powershell.*(-enc|-encodedcommand)|certutil.*-urlcache|rundll32.*javascript|regsvr32.*scrobj`,
 			Severity:     "HIGH", Technique: tScripting},
+		// v2: yeni telemetri türleri için adlandırılmış kurallar (kapsam genişletme).
+		{ID: "XEMS-0008", Name: "Kalıcılık (autostart) girdisi", Category: "POLICY_VIOLATION",
+			Contains: []string{"kalıcılık"}, Severity: "HIGH", Technique: tAutostart},
+		{ID: "XEMS-0009", Name: "Dosya bütünlüğü değişikliği (FIM)", Category: "SECURITY",
+			Contains: []string{"dosya bütünlüğü"}, Severity: "MEDIUM", Technique: tIndicatorRem},
+		{ID: "XEMS-0010", Name: "DLP — hassas veri sızıntısı", Category: "SECURITY",
+			Contains: []string{"hassas veri"}, Severity: "HIGH", Technique: tExfilAltProto},
+		{ID: "XEMS-0011", Name: "DGA-şüpheli DNS sorgusu", Category: "SECURITY",
+			Contains: []string{"dga"}, Severity: "HIGH", Technique: tAppLayerC2},
+		{ID: "XEMS-0012", Name: "İçerik-tarama (YARA) eşleşmesi", Category: "SECURITY",
+			Contains: []string{"içerik-tarama"}, Severity: "HIGH", Technique: tIngressTool},
 	}
 }

@@ -217,3 +217,28 @@ func TestLoadRulesValidatesStatus(t *testing.T) {
 		t.Fatalf("meta veri korunmalı: %+v", rs[0])
 	}
 }
+
+func TestDefaultRulesCoverNewEventTypes(t *testing.T) {
+	e := NewEngine(nil) // yerleşik kurallar
+	cases := []struct {
+		cat, msg, wantTech string
+	}{
+		{"POLICY_VIOLATION", "yeni kalıcılık girdisi: Run key", "T1547"},
+		{"SECURITY", "dosya bütünlüğü değişikliği (deleted): /etc/passwd", "T1070"},
+		{"SECURITY", "DLP: hassas veri tespit edildi (kart)", "T1048"},
+		{"SECURITY", "DGA-şüpheli DNS sorgusu: xjq3.com", "T1071"},
+		{"SECURITY", "içerik-tarama eşleşmesi (R1): /tmp/x", "T1105"},
+	}
+	for _, c := range cases {
+		dets := e.Evaluate(model.Event{Category: c.cat, Severity: "HIGH", Message: c.msg})
+		found := false
+		for _, d := range dets {
+			if d.Technique.ID == c.wantTech {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("%q/%q: %s tekniğiyle eşleşen yerleşik kural beklenirdi, gelen %+v", c.cat, c.msg, c.wantTech, dets)
+		}
+	}
+}
