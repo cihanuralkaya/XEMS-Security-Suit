@@ -788,6 +788,7 @@
             <div class="tbl-wrap"><table><thead><tr><th>Son görülme</th><th>Cihaz</th><th>Kural</th><th>Önem</th><th>Tekrar</th><th>Örnek</th></tr></thead>
               <tbody id="inc-body"></tbody></table></div>
             <div id="inc-empty" class="empty" style="padding:12px">Henüz korelasyonlu olay yok.</div>
+            <div id="inc-timeline" style="display:none;margin-top:10px;border-top:1px solid var(--line);padding-top:8px"></div>
           </div>
         </div>
 
@@ -1994,9 +1995,36 @@
           "<td><span class='sev "+esc(x.severity||"")+"'>"+esc(x.severity||"")+"</span></td>"+
           "<td class='mono'>"+(x.count||1)+(x.count>1?" ×":"")+"</td>"+
           "<td>"+esc(x.sample_message||"")+"</td>";
+        // Satıra tıklayınca incident zaman çizelgesini (olay yeniden-yapılanması) göster.
+        if(x.id){
+          tr.style.cursor="pointer";
+          tr.title="Zaman çizelgesini göster";
+          tr.onclick=function(){ loadIncidentTimeline(x.id); };
+        }
         body.appendChild(tr);
       });
     }).catch(function(){ if(empty){ empty.style.display="block"; empty.textContent="Yüklenemedi."; } });
+  }
+  // loadIncidentTimeline: bir incident'i oluşturan olayları kronolojik gösterir
+  // (IR araştırması). Sonuç kullanıcı-görünür HTML olduğundan tüm alanlar esc()'ten geçer.
+  function loadIncidentTimeline(iid){
+    var el=$("inc-timeline"); if(!el) return;
+    el.style.display="block";
+    el.innerHTML="<p class='hint' style='margin:0'>Zaman çizelgesi yükleniyor…</p>";
+    api("/api/incidents/"+encodeURIComponent(iid)+"/timeline").then(function(r){
+      var inc=(r&&r.incident)||{}, evs=(r&&r.events)||[];
+      var head="<div style='display:flex;justify-content:space-between;align-items:baseline'>"+
+        "<b>Zaman çizelgesi — "+esc(deviceName(inc.device_id||""))+" · "+esc(inc.rule_id||"")+"</b>"+
+        "<span class='click' data-inc-close='1' style='cursor:pointer;color:var(--muted)'>✕ kapat</span></div>";
+      var rows=evs.length ? evs.map(function(e){
+        return "<div class='mini' style='display:flex;gap:8px;align-items:baseline;padding:3px 0;border-bottom:1px solid var(--line)'>"+
+          "<span class='mono' style='color:var(--faint);min-width:120px'>"+esc(relTime(e.occurred_at||e.created_at||""))+"</span>"+
+          sevDot(e.severity)+"<span class='mono' style='color:var(--muted);min-width:90px'>"+esc(e.category||"")+"</span>"+
+          "<span style='flex:1'>"+esc(e.message||"")+"</span></div>";
+      }).join("") : "<div class='mini'>— pencere içinde ilişkili olay yok</div>";
+      el.innerHTML=head+"<div style='max-height:260px;overflow:auto;margin-top:6px'>"+rows+"</div>";
+      var cl=el.querySelector("[data-inc-close]"); if(cl) cl.onclick=function(){ el.style.display="none"; el.innerHTML=""; };
+    }).catch(function(){ el.innerHTML="<p class='hint' style='margin:0;color:var(--crit)'>Zaman çizelgesi yüklenemedi.</p>"; });
   }
   // runHunt: retro-hunt / arama. "rules" modu mevcut tespit motorunu geçmiş
   // olaylara uygular; "query" modu alan-filtreli arama yapar. Sonuçlar kullanıcı-
@@ -2127,7 +2155,8 @@
       api("/api/devices/"+encodeURIComponent(id)),
       soft(api("/api/events?device_id="+encodeURIComponent(id)+"&limit=15")),
       soft(api("/api/devices/"+encodeURIComponent(id)+"/artifacts")),
-      soft(api("/api/devices/"+encodeURIComponent(id)+"/attack-story?limit=200"))
+      soft(api("/api/devices/"+encodeURIComponent(id)+"/attack-story?limit=200")),
+      soft(api("/api/devices/"+encodeURIComponent(id)+"/graph?limit=200"))
     ]).then(function(res){
       if(state.sel!==id) return; // seçim değiştiyse eski yanıtı yazma
       var d=res[0].device_detail; if(!d) return;
@@ -2204,6 +2233,15 @@
         storyHtml="<div style='display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px'>"+badges+"</div>"+lastSteps+
           (story.max_severity?("<div class='mini' style='color:var(--faint);margin-top:4px'>en yüksek önem: "+esc(story.max_severity)+"</div>"):"");
       }
+      // İlişkili varlıklar (varlık grafı): süreç/alan adı/IP/dosya düğümleri (türe göre).
+      var graph=res[4]||{}, gnodes=(graph.nodes)||[], byType={};
+      gnodes.forEach(function(n){ if(!n||n.type==="device") return; (byType[n.type]=byType[n.type]||[]).push(n.label||""); });
+      var gTypes=Object.keys(byType);
+      var graphHtml = gTypes.length ? gTypes.map(function(t){
+        var vals=byType[t];
+        return "<div class='mini' style='padding:2px 0'><span class='mono' style='color:var(--faint);min-width:64px;display:inline-block'>"+esc(t)+"</span> "+
+          vals.slice(0,10).map(esc).join(", ")+(vals.length>10?(" <span style='color:var(--faint)'>… +"+(vals.length-10)+"</span>"):"")+"</div>";
+      }).join("") : "";
       // Toplanan artefaktlar (adli/IR): indirilebilir dosya listesi.
       var arts=(res[2]&&res[2].artifacts)||[];
       var artHtml="";
@@ -2220,6 +2258,7 @@
         (resHtml?("<h4>Kaynak kullanımı</h4>"+resHtml):"")+
         (compHtml?("<h4>Uyum durumu</h4>"+compHtml):"")+
         (storyHtml?("<h4>Saldırı hikâyesi (kill-chain)</h4>"+storyHtml):"")+
+        (graphHtml?("<h4>İlişkili varlıklar (graf)</h4>"+graphHtml):"")+
         (swHtml?("<h4>Yüklü yazılım ("+swCount+")</h4>"+swHtml):"")+
         (neighHtml?("<h4>Ağ keşfi — komşular ("+nk.length+")</h4>"+neighHtml):"")+
         (artHtml?("<h4>Toplanan dosyalar ("+arts.length+")</h4>"+artHtml):"")+
