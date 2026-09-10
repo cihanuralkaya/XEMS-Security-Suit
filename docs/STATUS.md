@@ -14,8 +14,8 @@ kanıtlandı** (`server/internal/e2e`). Kernel-seviye tamper koruması bilinçli
 olarak kapsam dışıdır (bkz. aşağıda).
 
 - Dil: **Go** (tek dil), iletişim **gRPC + mTLS**, TLS 1.3.
-- ~15 000 satır üretim Go + kapsamlı test.
-- **277 test fonksiyonu / 47 test paketi**, tümü geçiyor (`go test ./...`).
+- ~25 600 satır üretim Go + kapsamlı test.
+- **475 test fonksiyonu / 67 test paketi**, tümü geçiyor (`go test ./...`).
 - Cross-compile doğrulandı: Windows (native), Linux, macOS.
 - **Bellek-içi demo modu** canlı çalıştırıldı (`XEMS_DATABASE_URL` boş): gerçek
   enrollment, gerçek ağ keşfi, tüm admin/konsol akışları uçtan uca denendi.
@@ -124,6 +124,8 @@ proto üret + `go vet` + `go test ./...` + smoke test + çapraz derleme (artifac
 | Alarm korelasyonu + otomatik incident gruplama | ✅ | `server/internal/correlate`, grpc, db, console | birim + smoke |
 | Dosya bütünlüğü izleme (FIM) — ajan | ✅ | `agent/internal/fim` (SHA-256), agent main | birim |
 | Ajan öz-tasdiki (takas/yama ikili tespiti) | ✅ | proto, `grpc`, `db`, `memstore`, agent | birim (kurcalama teşhisi) |
+| Harici log alımı (JSON/CEF/LEEF/syslog/Windows olay) | ✅ opsiyonel | `server/internal/logingest`, `adminapi` (`/api/ingest`) | birim + fuzz |
+| Sunucu-taraflı korelasyon analizörleri (beacon/yanal/DNS-tünel/kaba-kuvvet) | ✅ | `beacon`, `dnstunnel`, `bruteforce`, c2 arka plan işleri | birim (saf analizör) |
 
 ## V2 yetenekleri (2026-09 eklemeleri)
 
@@ -135,15 +137,21 @@ Aşağıdakiler ilk matristen sonra eklendi; hepsi test + smoke + CI yeşil.
   davranış analitiği, `/api/ueba/admins`), uyum çerçevesi eşleme (**CIS/NIST/ISO/KVKK**,
   `/api/compliance/frameworks`).
 - **Tespit:** çok-sinyal **korelasyon** (yüksek-güven zincir), **yanal hareket** (netconn
-  fan-out, T1046), **DNS tünelleme** (T1071.004), geliştirilmiş **DGA** (ünsüz-dizisi),
-  **Sigma içe aktarma**, **YARA-tarzı içerik tarama**, Detection-as-Code yaşam-döngüsü,
-  genişletilmiş MITRE kataloğu + 14 yerleşik kural.
+  fan-out, T1046), **DNS tünelleme** (T1071.004), **kaba-kuvvet/parola-püskürtme** (Windows
+  4625/4771 seri toplama, saldırgan IP + hedef hesap özniteliği, T1110), geliştirilmiş
+  **DGA** (ünsüz-dizisi), **Sigma içe aktarma**, **YARA-tarzı içerik tarama**,
+  Detection-as-Code yaşam-döngüsü, **16 teknikli** MITRE kataloğu (Windows olay
+  telemetrisi → ATT&CK: hizmet/görev kurulumu, hesap oluşturma, ayrıcalık, günlük
+  temizleme, kod enjeksiyonu) + 14 yerleşik kural.
 - **İmzalı içerik (kurcalamaya karşı):** TÜM yüklenebilir içerik (YARA, tespit kuralı,
   IoC, anomali modeli, OTA, offline offboard, denetim dışa aktarımı) Ed25519 imzalanabilir.
 - **Alarm & teslim:** bildirim **yönlendirme + yükseltme**, **webhook HMAC imza**, sürekli
   **tehdit-avı** (kayıtlı aramalar), zamanlanmış **rapor webhook teslimi**, sunucu-taraflı
   tespitlerin SOC uyarı yoluna bağlanması.
-- **Alım (SIEM):** JSON + **CEF** + **LEEF** (QRadar) giden log alımı, hız sınırlama.
+- **Alım (SIEM):** JSON + **CEF** + **LEEF** (QRadar) + düz **syslog** (RFC5424/3164) +
+  **Windows olay günlüğü** (winlogbeat/nxlog/EVTX; EventID+kanal sınıflaması, EventData
+  zenginleştirme: hedef hesap/kaynak IP/oturum türü) giden log alımı, hız sınırlama.
+  Tüm ağ-yüzeyli ayrıştırıcılar fuzz kapsamında.
 - **Ops/dayanıklılık:** **sertifika ömür-sonu izleme** (log + `/api/features` + metrik),
   **kaba-kuvvet kilidi sinyali**, genişletilmiş Prometheus metrikleri + hazır **alarm
   kuralları** (`deploy/prometheus-alerts.example.yml`), istek korelasyon kimliği + erişim logu.
