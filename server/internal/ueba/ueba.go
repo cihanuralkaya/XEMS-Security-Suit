@@ -18,6 +18,9 @@ type Entry struct {
 	Admin  string
 	Action string
 	At     time.Time
+	// Varlık (entity) sinyalleri — opsiyonel; boş bırakılırsa ilgili anomali atlanır (§28).
+	Device   string // eylemin geldiği cihaz/kaynak
+	Location string // coğrafi/ağ konumu (ör. ülke/şube)
 }
 
 // destructiveKeywords, yıkıcı/yüksek-etkili eylemleri tanır (action string'inde
@@ -42,6 +45,10 @@ type Profile struct {
 	Destructive int       `json:"destructive"`
 	First       time.Time `json:"first"`
 	Last        time.Time `json:"last"`
+	OffHours    int       `json:"off_hours,omitempty"`     // mesai-dışı eylem sayısı (§28)
+	NewDevices  int       `json:"new_devices,omitempty"`   // bilinmeyen cihazdan eylem sayısı
+	NewLocs     int       `json:"new_locations,omitempty"` // bilinmeyen konumdan eylem sayısı
+	RiskScore   int       `json:"risk_score"`              // 0..100 türetilmiş kullanıcı riski
 }
 
 // Finding, bir davranış anomalisidir.
@@ -63,6 +70,12 @@ type Options struct {
 	BurstWindow      time.Duration // yıkıcı-eylem serisi penceresi
 	MinTotalForRatio int           // oran değerlendirmesi için asgari toplam eylem
 	RatioThreshold   float64       // yıkıcı/toplam bu oranı aşarsa → MEDIUM
+	// Varlık-davranışı seçenekleri (§28) — opsiyonel:
+	BusinessStartHour int // mesai başlangıcı (UTC saat, 0-23). Start==End ise mesai-dışı devre dışı.
+	BusinessEndHour   int // mesai bitişi (UTC saat, 0-23; hariç)
+	// KnownDevices/KnownLocations: admin → bilinen küme. Verilmezse ilgili anomali atlanır.
+	KnownDevices   map[string]map[string]bool
+	KnownLocations map[string]map[string]bool
 }
 
 // DefaultOptions, makul varsayılan eşikler.
@@ -112,6 +125,16 @@ func Analyze(entries []Entry, opts Options) Report {
 			a.prof.Destructive++
 			a.destTime = append(a.destTime, e.At)
 		}
+		// Varlık anomalileri (§28): mesai-dışı, bilinmeyen cihaz/konum.
+		if offHours(e.At, opts) {
+			a.prof.OffHours++
+		}
+		if e.Device != "" && known(opts.KnownDevices, e.Admin) && !opts.KnownDevices[e.Admin][e.Device] {
+			a.prof.NewDevices++
+		}
+		if e.Location != "" && known(opts.KnownLocations, e.Admin) && !opts.KnownLocations[e.Admin][e.Location] {
+			a.prof.NewLocs++
+		}
 	}
 
 	var rep Report
@@ -122,12 +145,12 @@ func Analyze(entries []Entry, opts Options) Report {
 	sort.Strings(admins)
 	for _, name := range admins {
 		a := byAdmin[name]
-		rep.Profiles = append(rep.Profiles, a.prof)
+		burst := maxInWindow(a.destTime, opts.BurstWindow)
 		// Yıkıcı-eylem serisi (burst): pencerede eşik veya üstü → HIGH.
-		if n := maxInWindow(a.destTime, opts.BurstWindow); n >= opts.BurstThreshold {
+		if burst >= opts.BurstThreshold {
 			rep.Findings = append(rep.Findings, Finding{
 				Admin: name, Severity: "HIGH",
-				Reason: "kısa pencerede " + itoa(n) + " yıkıcı eylem (olası ele geçmiş/kötü-niyetli hesap)",
+				Reason: "kısa pencerede " + itoa(burst) + " yıkıcı eylem (olası ele geçmiş/kötü-niyetli hesap)",
 			})
 		} else if a.prof.Total >= opts.MinTotalForRatio &&
 			float64(a.prof.Destructive)/float64(a.prof.Total) >= opts.RatioThreshold {
@@ -137,8 +160,61 @@ func Analyze(entries []Entry, opts Options) Report {
 				Reason: "yüksek yıkıcı-eylem oranı (" + itoa(a.prof.Destructive) + "/" + itoa(a.prof.Total) + ")",
 			})
 		}
+		// Varlık-davranışı anomalileri (§28).
+		if a.prof.NewDevices > 0 {
+			rep.Findings = append(rep.Findings, Finding{Admin: name, Severity: "MEDIUM",
+				Reason: "bilinmeyen cihazdan " + itoa(a.prof.NewDevices) + " eylem"})
+		}
+		if a.prof.NewLocs > 0 {
+			rep.Findings = append(rep.Findings, Finding{Admin: name, Severity: "MEDIUM",
+				Reason: "bilinmeyen konumdan " + itoa(a.prof.NewLocs) + " eylem"})
+		}
+		if a.prof.OffHours > 0 && a.prof.Destructive > 0 {
+			rep.Findings = append(rep.Findings, Finding{Admin: name, Severity: "MEDIUM",
+				Reason: "mesai-dışı " + itoa(a.prof.OffHours) + " eylem (yıkıcı etkinlikle birlikte)"})
+		}
+		a.prof.RiskScore = riskScore(a.prof, burst, opts.BurstThreshold)
+		rep.Profiles = append(rep.Profiles, a.prof)
 	}
 	return rep
+}
+
+// offHours, bir zamanın mesai saatleri DIŞINDA olup olmadığını döner. Start==End ise
+// mesai-dışı tespiti devre dışıdır (false). Pencere Start(dahil)..End(hariç), UTC.
+func offHours(t time.Time, opts Options) bool {
+	if opts.BusinessStartHour == opts.BusinessEndHour {
+		return false
+	}
+	h := t.UTC().Hour()
+	if opts.BusinessStartHour < opts.BusinessEndHour {
+		return h < opts.BusinessStartHour || h >= opts.BusinessEndHour
+	}
+	// Gece aşan pencere (ör. 22..6): mesai içi = h>=Start || h<End.
+	return !(h >= opts.BusinessStartHour || h < opts.BusinessEndHour)
+}
+
+func known(m map[string]map[string]bool, admin string) bool {
+	_, ok := m[admin]
+	return ok
+}
+
+// riskScore, profil sinyallerinden 0..100 türetilmiş kullanıcı riski hesaplar (§28).
+// Sinyaller ağırlıklandırılır ve tavanlanır.
+func riskScore(p Profile, burst, burstThreshold int) int {
+	score := 0
+	if burstThreshold > 0 && burst >= burstThreshold {
+		score += 50
+	}
+	if p.Total > 0 {
+		score += int(float64(p.Destructive) / float64(p.Total) * 25)
+	}
+	score += p.NewDevices * 10
+	score += p.NewLocs * 10
+	score += p.OffHours * 3
+	if score > 100 {
+		score = 100
+	}
+	return score
 }
 
 // maxInWindow, sıralı olmayan zaman damgalarında herhangi bir `window` uzunluğundaki

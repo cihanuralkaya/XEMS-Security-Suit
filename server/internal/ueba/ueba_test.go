@@ -102,3 +102,51 @@ func TestAnalyzeQuietAdminNoFinding(t *testing.T) {
 		t.Fatalf("sakin yönetici bulgu üretmemeli, %+v", rep.Findings)
 	}
 }
+
+func TestEntityAnomalies(t *testing.T) {
+	base := time.Date(2026, 9, 11, 3, 12, 0, 0, time.UTC) // 03:12 UTC — mesai dışı
+	opts := DefaultOptions()
+	opts.BusinessStartHour, opts.BusinessEndHour = 9, 18
+	opts.KnownDevices = map[string]map[string]bool{"bob": {"laptop-1": true}}
+	opts.KnownLocations = map[string]map[string]bool{"bob": {"HQ": true}}
+
+	entries := []Entry{
+		{Admin: "bob", Action: "WIPE", At: base, Device: "unknown-pc", Location: "Anonim"},
+	}
+	rep := Analyze(entries, opts)
+	if len(rep.Profiles) != 1 {
+		t.Fatalf("1 profil beklenir")
+	}
+	p := rep.Profiles[0]
+	if p.OffHours != 1 || p.NewDevices != 1 || p.NewLocs != 1 {
+		t.Fatalf("varlık sinyalleri: offHours=%d newDev=%d newLoc=%d", p.OffHours, p.NewDevices, p.NewLocs)
+	}
+	if p.RiskScore == 0 {
+		t.Error("risk skoru sinyallerle > 0 olmalı")
+	}
+	// bilinmeyen cihaz + konum + mesai-dışı(+yıkıcı) → en az 3 finding
+	var dev, loc, off bool
+	for _, f := range rep.Findings {
+		switch {
+		case f.Reason == "bilinmeyen cihazdan 1 eylem":
+			dev = true
+		case f.Reason == "bilinmeyen konumdan 1 eylem":
+			loc = true
+		case f.Reason == "mesai-dışı 1 eylem (yıkıcı etkinlikle birlikte)":
+			off = true
+		}
+	}
+	if !dev || !loc || !off {
+		t.Errorf("beklenen bulgular eksik: dev=%v loc=%v off=%v", dev, loc, off)
+	}
+}
+
+func TestKnownDeviceNoFalsePositive(t *testing.T) {
+	opts := DefaultOptions()
+	opts.KnownDevices = map[string]map[string]bool{"bob": {"laptop-1": true}}
+	entries := []Entry{{Admin: "bob", Action: "VIEW", At: time.Now(), Device: "laptop-1"}}
+	rep := Analyze(entries, opts)
+	if rep.Profiles[0].NewDevices != 0 {
+		t.Error("bilinen cihaz yanlış-pozitif üretmemeli")
+	}
+}
