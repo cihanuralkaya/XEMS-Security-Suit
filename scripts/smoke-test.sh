@@ -235,6 +235,9 @@ curl -sk "$B/api/report" -H "Authorization: Bearer $TOK" | grep -q "XEMS Securit
   && pass "/api/report duruş raporu üretti" || fail "/api/report başarısız"
 curl -sk "$B/api/report?format=json" -H "Authorization: Bearer $TOK" | grep -q '"devices_total"' \
   && pass "/api/report?format=json makine-okunur rapor üretti" || fail "/api/report json başarısız"
+# Gelişmiş rapor (§33): yönetici Markdown raporu.
+curl -sk "$B/api/report?format=md&kind=executive" -H "Authorization: Bearer $TOK" | grep -q '# Yönetici Güvenlik Özeti' \
+  && pass "/api/report?format=md yönetici Markdown raporu üretti (§33)" || fail "/api/report md başarısız"
 curl -sk "$B/api/coverage" -H "Authorization: Bearer $TOK" | grep -q "coverage_pct" \
   && pass "/api/coverage filo kapsamı döndü" || fail "/api/coverage başarısız"
 curl -sk "$B/api/risk" -H "Authorization: Bearer $TOK" | grep -q "fleet_score" \

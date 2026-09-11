@@ -1291,6 +1291,7 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request, _ string) 
 		default:
 			kind = report.KindTechnical
 		}
+		d.Title = kind.Title() // rapor türü başlığı belirler (yönetici/teknik/olay)
 		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 		w.Header().Set("Content-Disposition", `attachment; filename="xems-report.md"`)
 		_, _ = w.Write([]byte(report.RenderMarkdown(d, kind)))
