@@ -72,6 +72,7 @@ type Server struct {
 	ingestToken   string                        // ayarlıysa POST /api/ingest bu Bearer token ile açılır (#21)
 	ingestSink    EventIngestor                 // harici log alımı için olay yazma yolu
 	ingestLimiter *ratelimit.Limiter            // /api/ingest IP-başına hız sınırı (nil = kapalı)
+	ingestLayered *ratelimit.Layered            // /api/ingest KATMANLI hız sınırı (§8; öncelikli, nil = kapalı)
 	ingestDedup   *dedup.Seen                   // /api/ingest yineleme-tespiti (§6; nil = kapalı)
 	detector      atomic.Pointer[detect.Engine] // tespit kural kataloğu (görünürlük ucu; canlı hot-reload için atomik)
 	vulnSet       *vuln.Set                     // zafiyet veri kümesi (nil = kapalı); envanterle eşleşir
@@ -114,6 +115,11 @@ func (s *Server) SetIngest(sink EventIngestor, token string) {
 // SetIngestDedup, /api/ingest için içerik-adresli yineleme-tespiti bağlar (§6). Aynı
 // olay (EventID) pencere içinde tekrar gelirse düşürülür. nil = kapalı.
 func (s *Server) SetIngestDedup(d *dedup.Seen) { s.ingestDedup = d }
+
+// SetIngestLayered, /api/ingest için KATMANLI hız sınırlayıcı bağlar (§8): global
+// (toplam) + API (IP-başına) katmanları. Ayarlıysa tekil ingestLimiter yerine bu
+// kullanılır. nil = kapalı.
+func (s *Server) SetIngestLayered(l *ratelimit.Layered) { s.ingestLayered = l }
 
 // SetIngestRateLimit, /api/ingest için IP-başına hız sınırlayıcı bağlar (DoS/sel
 // koruması). nil ise sınırlama kapalıdır.
@@ -516,8 +522,14 @@ func (s *Server) handleIngest(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnauthorized, "geçersiz ingest token")
 		return
 	}
-	// Hız sınırı (DoS/sel koruması): istemci IP başına token-bucket. Aşılırsa 429.
-	if s.ingestLimiter != nil && !s.ingestLimiter.Allow(clientIP(r)) {
+	// Hız sınırı (DoS/sel koruması): katmanlı (global + IP) öncelikli; yoksa tekil IP.
+	// Aşılırsa 429 (hangi katmanın reddettiği mesajda).
+	if s.ingestLayered != nil {
+		if ok, layer := s.ingestLayered.Allow(map[ratelimit.Layer]string{ratelimit.API: clientIP(r)}); !ok {
+			writeErr(w, http.StatusTooManyRequests, "hız sınırı aşıldı ("+string(layer)+")")
+			return
+		}
+	} else if s.ingestLimiter != nil && !s.ingestLimiter.Allow(clientIP(r)) {
 		writeErr(w, http.StatusTooManyRequests, "hız sınırı aşıldı")
 		return
 	}

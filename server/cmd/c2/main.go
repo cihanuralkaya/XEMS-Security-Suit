@@ -609,7 +609,17 @@ func run() error {
 		if n := atoiEnv("XEMS_INGEST_RATE_PER_SEC"); n > 0 {
 			rate = float64(n)
 		}
-		if rate > 0 {
+		// Katmanlı hız sınırı (§8): XEMS_INGEST_RATE_GLOBAL ayarlıysa global (toplam)
+		// + API (IP-başına) katmanlı sınır; aksi halde yalnız tekil IP-başına sınır.
+		if gr := atoiEnv("XEMS_INGEST_RATE_GLOBAL"); gr > 0 {
+			lay := ratelimit.NewLayered()
+			lay.SetLayer(ratelimit.Global, float64(gr), float64(gr)*2)
+			if rate > 0 {
+				lay.SetLayer(ratelimit.API, rate, rate*2)
+			}
+			adminAPI.SetIngestLayered(lay)
+			log.Printf("katmanlı ingest hız sınırı: global %d/sn + IP %.0f/sn", gr, rate)
+		} else if rate > 0 {
 			adminAPI.SetIngestRateLimit(ratelimit.New(rate, rate*2, nil))
 		}
 		// Yineleme-tespiti (§6): aynı olay (içerik-adresli EventID) pencere içinde
