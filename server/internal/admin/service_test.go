@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"xems.corp/suite/server/internal/scope"
 	"xems.corp/suite/server/internal/security"
 )
 
@@ -849,5 +850,65 @@ func TestTokenIndexPrefixMatchesEnrollFlow(t *testing.T) {
 	// enroll tarafı da tokenIndex = bidx.Compute("enroll-token:"+token) hesaplar.
 	if _, ok := store.tokens[string(bidx.Compute("enroll-token:"+token))]; !ok {
 		t.Fatal("admin ve enroll aynı indeks şemasını kullanmalı")
+	}
+}
+
+// TestScopeGuardWipe, Scope/ROE guardrail'ının WIPE üzerinde davranışını doğrular:
+// enforce+kapsam-dışı → ErrOutOfScope; enforce+izinli → geçer; denetim modu → geçer
+// ama audit'e SCOPE_AUDIT yazılır.
+func TestScopeGuardWipe(t *testing.T) {
+	base := func() (*Service, *memStore) {
+		store := newMemStore()
+		store.roles["admin1"] = RoleAdmin
+		svc, _ := newService(t, store)
+		return svc, store
+	}
+	ctx := context.Background()
+
+	// 1) enforce AÇIK, boş politika → yıkıcı WIPE reddedilir (fail-closed).
+	svc, store := base()
+	svc.SetScopeEngine(scope.New(&scope.Policy{}), true, "default")
+	if err := svc.WipeDevice(ctx, "admin1", "dev-x"); !errors.Is(err, ErrOutOfScope) {
+		t.Fatalf("kapsam-dışı WIPE ErrOutOfScope dönmeli, döndü: %v", err)
+	}
+	for _, a := range store.commands {
+		if a.cmdType == "WIPE" {
+			t.Fatal("reddedilen WIPE kuyruğa GİRMEMELİ")
+		}
+	}
+
+	// 2) enforce AÇIK, cihaz izinli + destructive etkin → WIPE geçer + kuyruğa girer.
+	svc, store = base()
+	svc.SetScopeEngine(scope.New(&scope.Policy{
+		Allowed: scope.Selector{Devices: []string{"dev-x"}},
+		Actions: map[scope.Action]bool{scope.ActionWipe: true},
+	}), true, "default")
+	if err := svc.WipeDevice(ctx, "admin1", "dev-x"); err != nil {
+		t.Fatalf("izinli WIPE geçmeli: %v", err)
+	}
+	var queued bool
+	for _, a := range store.commands {
+		if a.cmdType == "WIPE" {
+			queued = true
+		}
+	}
+	if !queued {
+		t.Fatal("izinli WIPE kuyruğa girmeli")
+	}
+
+	// 3) DENETİM modu (enforce KAPALI), boş politika → WIPE ENGELLENMEZ ama SCOPE_AUDIT yazılır.
+	svc, store = base()
+	svc.SetScopeEngine(scope.New(&scope.Policy{}), false, "default")
+	if err := svc.WipeDevice(ctx, "admin1", "dev-x"); err != nil {
+		t.Fatalf("denetim modunda WIPE engellenmemeli: %v", err)
+	}
+	var audited bool
+	for _, a := range store.audits {
+		if a.action == "SCOPE_AUDIT:wipe" {
+			audited = true
+		}
+	}
+	if !audited {
+		t.Fatal("denetim modunda SCOPE_AUDIT:wipe yazılmalı")
 	}
 }

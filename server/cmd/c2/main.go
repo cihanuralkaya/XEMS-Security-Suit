@@ -54,6 +54,7 @@ import (
 	"xems.corp/suite/server/internal/response"
 	"xems.corp/suite/server/internal/retention"
 	"xems.corp/suite/server/internal/revocation"
+	"xems.corp/suite/server/internal/scope"
 	"xems.corp/suite/server/internal/security"
 	"xems.corp/suite/server/internal/vuln"
 )
@@ -558,6 +559,17 @@ func run() error {
 	adminSvc.SetWipeDualControl(wipeDual)
 	if wipeDual {
 		log.Println("çift-kontrol WIPE: iki farklı ADMIN onayı ETKİN")
+	}
+	// Merkezi Scope/ROE guardrail (§4): yüksek-etkili operasyonları (WIPE/QUARANTINE/
+	// LOCK/RESTART) hedef-yetkisinden geçirir. XEMS_SCOPE_* env ile yapılandırılır;
+	// hiçbiri ayarlı değilse motor bağlanmaz (geriye uyumlu no-op).
+	if eng, enforce, configured := buildScopeEngine(cfg.TenantID); configured {
+		adminSvc.SetScopeEngine(eng, enforce, cfg.TenantID)
+		mode := "DENETİM (would-deny)"
+		if enforce {
+			mode = "ZORLAMA (enforce)"
+		}
+		log.Printf("Scope/ROE guardrail ETKİN — mod: %s", mode)
 	}
 	readSvc := adminread.NewService(backend, cipher)
 	sessions := security.NewSessionSigner(security.DeriveKey(cfg.MasterKey, security.LabelSessionToken))
@@ -1230,4 +1242,58 @@ func run() error {
 		enrollSrv.Stop()
 	}
 	return nil
+}
+
+// buildScopeEngine, XEMS_SCOPE_* ortam değişkenlerinden merkezi Scope/ROE guardrail'ını
+// (§4) kurar. Hiçbir XEMS_SCOPE_* ayarlı değilse configured=false döner (motor bağlanmaz,
+// geriye uyumlu). Yapılandırma:
+//
+//	XEMS_SCOPE_ENFORCE=1              ZORLAMA (aksi halde yalnız DENETİM/would-deny)
+//	XEMS_SCOPE_ALLOW_DEVICES=a,b      izin verilen cihaz kimlikleri (virgül)
+//	XEMS_SCOPE_ALLOW_TENANTS=t1,t2    izin verilen kiracılar
+//	XEMS_SCOPE_ALLOW_ENVIRONMENTS=staging
+//	XEMS_SCOPE_ALLOW_NETWORKS=10.0.0.0/8   izin verilen CIDR blokları
+//	XEMS_SCOPE_ALLOW_DOMAINS=*.example.com
+//	XEMS_SCOPE_EXCLUDE_DEVICES=crit-1 / XEMS_SCOPE_EXCLUDE_HOSTS=prod.example.com
+//	XEMS_SCOPE_ALLOW_DESTRUCTIVE=1   yıkıcı aksiyonları (WIPE/exploitation) etkinleştirir
+func buildScopeEngine(tenantID string) (eng *scope.Engine, enforce bool, configured bool) {
+	csv := func(k string) []string {
+		v := strings.TrimSpace(os.Getenv(k))
+		if v == "" {
+			return nil
+		}
+		parts := strings.Split(v, ",")
+		out := make([]string, 0, len(parts))
+		for _, p := range parts {
+			if p = strings.TrimSpace(p); p != "" {
+				out = append(out, p)
+			}
+		}
+		return out
+	}
+	enforce = os.Getenv("XEMS_SCOPE_ENFORCE") == "1"
+	allow := scope.Selector{
+		Devices:      csv("XEMS_SCOPE_ALLOW_DEVICES"),
+		Tenants:      csv("XEMS_SCOPE_ALLOW_TENANTS"),
+		Environments: csv("XEMS_SCOPE_ALLOW_ENVIRONMENTS"),
+		Networks:     csv("XEMS_SCOPE_ALLOW_NETWORKS"),
+		Domains:      csv("XEMS_SCOPE_ALLOW_DOMAINS"),
+	}
+	excl := scope.Selector{
+		Devices: csv("XEMS_SCOPE_EXCLUDE_DEVICES"),
+		Hosts:   csv("XEMS_SCOPE_EXCLUDE_HOSTS"),
+	}
+	actions := map[scope.Action]bool{}
+	if os.Getenv("XEMS_SCOPE_ALLOW_DESTRUCTIVE") == "1" {
+		actions[scope.ActionWipe] = true
+		actions[scope.ActionExploitation] = true
+	}
+	// Yapılandırılmış sayılması için en az bir sinyal olmalı.
+	configured = enforce || len(allow.Devices) > 0 || len(allow.Tenants) > 0 ||
+		len(allow.Environments) > 0 || len(allow.Networks) > 0 || len(allow.Domains) > 0 ||
+		len(excl.Devices) > 0 || len(excl.Hosts) > 0 || len(actions) > 0
+	if !configured {
+		return nil, false, false
+	}
+	return scope.New(&scope.Policy{Allowed: allow, Excluded: excl, Actions: actions}), enforce, true
 }

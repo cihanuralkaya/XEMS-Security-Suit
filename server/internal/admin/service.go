@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"xems.corp/suite/server/internal/metrics"
+	"xems.corp/suite/server/internal/scope"
 	"xems.corp/suite/server/internal/security"
 )
 
@@ -158,6 +160,13 @@ type Service struct {
 	genToken        func() (string, error)
 	pub             Publisher
 	wipeDualControl bool // açıksa WIPE iki farklı ADMIN onayı gerektirir (dört-göz)
+	// scopeEng, yüksek-etkili operasyonların (WIPE/QUARANTINE/LOCK/RESTART) hedefe
+	// uygulanmadan önce geçtiği merkezi Scope/ROE guardrail'ıdır (§4). nil = kapalı
+	// (geriye uyumlu no-op). scopeEnforce false iken RED kararları yalnız denetlenir
+	// (would-deny), engellenmez; true iken op reddedilir.
+	scopeEng     *scope.Engine
+	scopeEnforce bool
+	scopeTenant  string // hedef Target.Tenant (dağıtımın kiracı kimliği)
 }
 
 // NewService oluşturur.
@@ -173,6 +182,37 @@ func NewService(store Store, bidx *security.BlindIndexer, tokenTTL time.Duration
 
 // SetPublisher, politika atamalarında anlık push için bir yayıncı bağlar.
 func (s *Service) SetPublisher(p Publisher) { s.pub = p }
+
+// ErrOutOfScope, bir operasyon Scope/ROE guardrail'ı tarafından reddedildiğinde döner (§4).
+var ErrOutOfScope = errors.New("admin: operasyon scope/ROE dışı")
+
+// SetScopeEngine, merkezi Scope/ROE guardrail'ını bağlar. enforce=false iken kararlar
+// yalnız denetlenir (would-deny sayacı + audit), operasyon engellenmez — operatör
+// politikayı üretimde açmadan önce ayarlayabilir. tenant, hedef Target.Tenant'ıdır.
+func (s *Service) SetScopeEngine(e *scope.Engine, enforce bool, tenant string) {
+	s.scopeEng, s.scopeEnforce, s.scopeTenant = e, enforce, tenant
+}
+
+// guardScope, yüksek-etkili bir operasyonu Scope/ROE motorundan geçirir. Motor bağlı
+// değilse no-op'tur (geriye uyumlu). RED + enforce → ErrOutOfScope; RED + denetim →
+// izin verir ama sayaç/audit'e yazar.
+func (s *Service) guardScope(ctx context.Context, adminID, deviceID string, act scope.Action) error {
+	if s.scopeEng == nil {
+		return nil
+	}
+	d := s.scopeEng.Authorize(scope.Target{Tenant: s.scopeTenant, DeviceID: deviceID}, act)
+	if d.Allowed {
+		return nil
+	}
+	if s.scopeEnforce {
+		metrics.IncScopeDenied()
+		_ = s.store.WriteAudit(ctx, adminID, "SCOPE_DENY:"+string(act), "device", deviceID)
+		return fmt.Errorf("%w (%s): %s", ErrOutOfScope, act, d.Reason)
+	}
+	metrics.IncScopeWouldDeny()
+	_ = s.store.WriteAudit(ctx, adminID, "SCOPE_AUDIT:"+string(act), "device", deviceID)
+	return nil
+}
 
 // require, adminID'nin en az min yetkiye sahip olduğunu doğrular.
 func (s *Service) require(ctx context.Context, adminID string, min Role) error {
@@ -363,6 +403,9 @@ func (s *Service) WipeDevice(ctx context.Context, adminID, deviceID string) erro
 	if err := s.require(ctx, adminID, RoleAdmin); err != nil {
 		return err
 	}
+	if err := s.guardScope(ctx, adminID, deviceID, scope.ActionWipe); err != nil {
+		return err
+	}
 	if err := s.store.EnqueueCommand(ctx, deviceID, "WIPE", adminID); err != nil {
 		return err
 	}
@@ -389,6 +432,10 @@ func (s *Service) RequestWipe(ctx context.Context, adminID, deviceID, reason str
 	if len(reason) > 500 {
 		return fmt.Errorf("%w: gerekçe çok uzun", ErrInvalidInput)
 	}
+	// Scope/ROE'yi ERKEN uygula: kapsam dışı bir WIPE talebi hiç kaydedilmesin.
+	if err := s.guardScope(ctx, adminID, deviceID, scope.ActionWipe); err != nil {
+		return err
+	}
 	if err := s.store.SavePendingWipe(ctx, deviceID, adminID, strings.TrimSpace(reason)); err != nil {
 		return err
 	}
@@ -412,6 +459,10 @@ func (s *Service) ApproveWipe(ctx context.Context, approverID, deviceID string) 
 	}
 	if requestedBy == approverID {
 		return ErrForbidden // kendi talebini onaylayamaz (dört-göz)
+	}
+	// Onay anında da Scope/ROE uygulanır (talep ile onay arasında politika değişebilir).
+	if err := s.guardScope(ctx, approverID, deviceID, scope.ActionWipe); err != nil {
+		return err
 	}
 	if err := s.store.EnqueueCommand(ctx, deviceID, "WIPE", approverID); err != nil {
 		return err
@@ -491,9 +542,24 @@ func (s *Service) AckEvent(ctx context.Context, adminID, eventID, status string)
 // (reflectStatus boş değilse) cihazın durum sütununu günceller. Durum güncelleme
 // hatası akışı BOZMAZ: komut zaten kuyruğa girmiştir; hata yutulur (best-effort
 // yansıma), çünkü asıl doğruluk kaynağı komut kuyruğudur.
+// commandScopeAction, komut kuyruğu türlerini Scope/ROE aksiyonlarına eşler. Burada
+// OLMAYAN komutlar (UNQUARANTINE, COLLECT_DIAGNOSTICS) guardrail'dan muaftır.
+var commandScopeAction = map[string]scope.Action{
+	"QUARANTINE": scope.ActionQuarantine,
+	"LOCK":       scope.ActionLock,
+	"RESTART":    scope.ActionRestart,
+}
+
 func (s *Service) command(ctx context.Context, adminID, deviceID, cmdType, reflectStatus string) error {
 	if err := s.require(ctx, adminID, RoleOperator); err != nil {
 		return err
+	}
+	// Yüksek-etkili komutlar Scope/ROE kapısından geçer (geri döndürülebilir/pasif
+	// olanlar — UNQUARANTINE, COLLECT_DIAGNOSTICS — muaf).
+	if act, ok := commandScopeAction[cmdType]; ok {
+		if err := s.guardScope(ctx, adminID, deviceID, act); err != nil {
+			return err
+		}
 	}
 	if err := s.store.EnqueueCommand(ctx, deviceID, cmdType, adminID); err != nil {
 		return err

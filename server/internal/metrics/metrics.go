@@ -41,6 +41,8 @@ var (
 	bruteForceWin    atomic.Int64 // BAŞARILI kaba-kuvvet (hesap ele geçirme) tespitleri
 	savedSearchHits  atomic.Int64 // zamanlanmış kayıtlı-arama eşleşmeleri
 	loginLockouts    atomic.Int64 // kaba-kuvvet kilidi tetiklemeleri (admin girişi)
+	scopeDenied      atomic.Int64 // scope/ROE tarafından ENGELLENEN yüksek-etkili op (§4)
+	scopeWouldDeny   atomic.Int64 // enforce KAPALIYKEN engellenecekti (danışma/tuning)
 )
 
 // certExpiryDays, CA+sunucu sertifikalarının EN AZ kalan günü (gauge). Sentinel 9999
@@ -84,6 +86,8 @@ func Counters() map[string]int64 {
 		"brute_force_win":   bruteForceWin.Load(),
 		"saved_search_hits": savedSearchHits.Load(),
 		"login_lockouts":    loginLockouts.Load(),
+		"scope_denied":      scopeDenied.Load(),
+		"scope_would_deny":  scopeWouldDeny.Load(),
 	}
 }
 
@@ -127,6 +131,14 @@ func AddSavedSearchHits(n int) {
 
 // IncLoginLockout, kaba-kuvvet kilidi (admin girişi) tetikleme sayacını artırır.
 func IncLoginLockout() { loginLockouts.Add(1) }
+
+// IncScopeDenied, scope/ROE tarafından ENGELLENEN yüksek-etkili operasyon sayacını
+// artırır (§4 — enforce açık ve karar RED).
+func IncScopeDenied() { scopeDenied.Add(1) }
+
+// IncScopeWouldDeny, enforce KAPALIYKEN scope/ROE'nin engelleyeceği (ama izin verilen)
+// operasyon sayacını artırır — operatörün politika ayarı (tuning) için danışma sinyali.
+func IncScopeWouldDeny() { scopeWouldDeny.Add(1) }
 
 // SetCertExpiryDays, CA+sunucu sertifikalarının EN AZ kalan gününü (gauge) ayarlar.
 func SetCertExpiryDays(d int) { certExpiryDays.Store(int64(d)) }
@@ -238,6 +250,14 @@ func Write(w io.Writer, s Snapshot) {
 	fmt.Fprintf(w, "# HELP xems_saved_search_hits_total Zamanlanmış kayıtlı-arama eşleşmeleri.\n")
 	fmt.Fprintf(w, "# TYPE xems_saved_search_hits_total counter\n")
 	fmt.Fprintf(w, "xems_saved_search_hits_total %d\n", savedSearchHits.Load())
+
+	fmt.Fprintf(w, "# HELP xems_scope_denied_total Scope/ROE tarafından engellenen yüksek-etkili operasyonlar (§4).\n")
+	fmt.Fprintf(w, "# TYPE xems_scope_denied_total counter\n")
+	fmt.Fprintf(w, "xems_scope_denied_total %d\n", scopeDenied.Load())
+
+	fmt.Fprintf(w, "# HELP xems_scope_would_deny_total Enforce kapalıyken scope/ROE'nin engelleyeceği operasyonlar (danışma).\n")
+	fmt.Fprintf(w, "# TYPE xems_scope_would_deny_total counter\n")
+	fmt.Fprintf(w, "xems_scope_would_deny_total %d\n", scopeWouldDeny.Load())
 
 	fmt.Fprintf(w, "# HELP xems_login_lockouts_total Kaba-kuvvet kilidi (admin girişi) tetiklemeleri.\n")
 	fmt.Fprintf(w, "# TYPE xems_login_lockouts_total counter\n")
