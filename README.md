@@ -122,7 +122,10 @@ Tüm ayarlar ortam değişkenleriyle yapılır. Tam liste + açıklama:
 - **Opsiyonel korumalar (sunucu):** `XEMS_ALERT_WEBHOOK_URL`/`XEMS_ALERT_FORMAT`
   (SOC uyarı, Slack/Teams), `XEMS_AUTO_RESPONSE` (SOAR oto-karantina), `XEMS_IOC_FILE`
   (tehdit istihbaratı), `XEMS_DETECT_RULES_FILE` (özel tespit kuralları),
-  `XEMS_METRICS_TOKEN` (Prometheus), `XEMS_LOG_FORMAT=json` (SIEM).
+  `XEMS_METRICS_TOKEN` (Prometheus), `XEMS_LOG_FORMAT=json` (SIEM),
+  `XEMS_WIPE_DUAL_CONTROL=1` (dört-göz WIPE), **Scope/ROE guardrail** (§4):
+  `XEMS_SCOPE_ENFORCE=1` + `XEMS_SCOPE_ALLOW_DEVICES/TENANTS/NETWORKS/DOMAINS/…`
+  ve `XEMS_SCOPE_ALLOW_DESTRUCTIVE=1` (bkz. [docs/V2-GAP-ANALYSIS.md](docs/V2-GAP-ANALYSIS.md)).
 - **Ajan:** bağlantı (`XEMS_ENROLL_ADDR`/`XEMS_AGENT_ADDR`/`XEMS_SERVER_NAME`/`XEMS_CA_PEM`),
   `XEMS_SERVER_SPKI_PIN` (pinning), `XEMS_UPDATE_PUBKEY`/`XEMS_SCRIPT_PUBKEY` (imza),
   `XEMS_ANOMALY_*`, `XEMS_SAFE_MODE`, `XEMS_LOG_FORMAT`.

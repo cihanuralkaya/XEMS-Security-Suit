@@ -131,6 +131,12 @@ proto üret + `go vet` + `go test ./...` + smoke test + çapraz derleme (artifac
 
 Aşağıdakiler ilk matristen sonra eklendi; hepsi test + smoke + CI yeşil.
 
+- **Scope / ROE guardrail (§4):** yüksek-etkili operasyonlar (WIPE/QUARANTINE/LOCK/
+  RESTART) enqueue'dan önce merkezi `server/internal/scope` motorundan geçer
+  (fail-closed, excluded-wins, ROE action-gate; wildcard domain + IPv4/IPv6 CIDR +
+  device/tenant/env/port seçiciler). `XEMS_SCOPE_*` ile yapılandırılır; enforce +
+  denetim (would-deny) modları; `xems_scope_denied_total` metriği. Bkz.
+  [V2-GAP-ANALYSIS.md](V2-GAP-ANALYSIS.md).
 - **SOC istihbaratı:** çok-faktörlü **risk skorlama** (`/api/risk`), **saldırı hikâyesi**
   (kill-chain, `/api/devices/{id}/attack-story`), **varlık grafı** (`/graph`), **incident
   zaman çizelgesi**, **MTTD/MTTR** trendleri (`/api/metrics/trends`), **UEBA** (yönetici

@@ -23,15 +23,19 @@ altyapı, kod-imzalama/sertifika, güvenlik yüzeyi).
 
 | Öncelik | ✅ VAR | 🟡 KISMİ | ⬜ YOK | Toplam |
 |---------|:-----:|:-------:|:-----:|:------:|
-| P0 (§4–14)  | 4 | 6 | 1 | 11 |
+| P0 (§4–14)  | 5 | 6 | 0 | 11 |
 | P1 (§15–26) | 10 | 1 | 1 | 12 |
 | P2 (§27–34) | 1 | 4 | 3 | 8 |
 | P3 (§35–45) | 3 | 4 | 4 | 11 |
-| **Toplam**  | **18** | **15** | **9** | **42** |
+| **Toplam**  | **19** | **15** | **8** | **42** |
 
-**Sonuç:** XEMS, roadmap'in **~%43'ünü tam (18/42)**, **~%36'sını kısmi (15/42)**
-karşılıyor; gerçek net-yeni iş **~%21 (9/42)**. En kritik tek P0 boşluğu:
-**Merkezi Scope/ROE Guardrail motoru** (§4).
+**Sonuç:** XEMS, roadmap'in **~%45'ini tam (19/42)**, **~%36'sını kısmi (15/42)**
+karşılıyor; gerçek net-yeni iş **~%19 (8/42)**.
+
+> **Güncelleme (2026-09-11):** Analizin bulduğu tek P0 boşluğu — **Merkezi Scope/ROE
+> Guardrail motoru (§4)** — bu oturumda uygulandı: `server/internal/scope` (motor + 10
+> test + fuzz) ve admin servis katmanında yüksek-etkili operasyon kapısı
+> (WIPE/QUARANTINE/LOCK/RESTART). Böylece P0'da açık boşluk kalmadı.
 
 ---
 
@@ -39,7 +43,7 @@ karşılıyor; gerçek net-yeni iş **~%21 (9/42)**. En kritik tek P0 boşluğu:
 
 | § | Başlık | Durum | Kanıt / mevcut | Boşluk & uygulanabilirlik |
 |---|--------|:-----:|----------------|---------------------------|
-| 4 | Central Scope / ROE / Guardrails | ⬜ YOK | `policy/` yalnız `doc.go`; wipe onayı var (`/api/devices/*/wipe/approve`) ama merkezi hedef-yetki motoru yok | **En yüksek öncelikli boşluk.** Saf-Go, LOW risk. Yüksek-etkili her op (WIPE/LOCK/QUARANTINE/remote-cmd/scan) tek bir bypass-edilemez `ScopeEngine.Authorize()` kapısından geçmeli. |
+| 4 | Central Scope / ROE / Guardrails | ✅ VAR | `server/internal/scope` (Engine.Authorize, fail-closed, excluded-wins, ROE action-gate, wildcard/CIDR selector) + admin servis kapısı (WIPE/QUARANTINE/LOCK/RESTART) + `XEMS_SCOPE_*` config + metrikler | **Bu oturumda uygulandı.** Yüksek-etkili her op enqueue'dan önce `guardScope`'tan geçer; enforce/denetim modları. Geriye uyumlu (motor bağlı değilse no-op). |
 | 5 | Canonical Security Event Model | 🟡 KISMİ | `model.Event` (Sequence/Category/Severity/Message/OccurredAt/Details) + `EventSchemaVersion=1.0` | Eksik birinci-sınıf alanlar: `event_id(uuid)`, `tenant_id`, `user_id`, `event_type`, `confidence`, `correlation_id`, `parent_event_id`, evidence-refs, tipli `process/network/file/auth` alt-nesneleri. Artırımlı, LOW risk. |
 | 6 | Event Pipeline | 🟡 KISMİ | `eventbus` (sınırlı kanal + yavaş-abone atlama); collector→normalize→enrich→correlate→detect→store zinciri mevcut | Eksik: dead-letter (DLQ), retry, event-ordering garantisi, duplicate-detection, **replay**, schema-versioned pipeline. Saf-Go. |
 | 7 | Concurrency & Performance | ✅ VAR | Go native goroutine/channel/context; job worker desenleri | Roadmap zaten "Go korunsun" diyor. Karşılanıyor. |
@@ -110,8 +114,8 @@ karşılıyor; gerçek net-yeni iş **~%21 (9/42)**. En kritik tek P0 boşluğu:
 Roadmap'in kendi P0→P3 sırası geçerli; ancak **mevcut kod tabanı P1'in çoğunu zaten
 karşıladığı için** en yüksek marjinal değer şu net-yeni işlerdedir:
 
-1. **§4 Scope/ROE Guardrail motoru** — tek gerçek P0 boşluğu; güvenlik-kritik, saf-Go, LOW risk. **(Sıradaki artırım.)**
-2. **§5 Canonical Event alanları** — `correlation_id`/`parent_event_id`/`event_id` → §17/§19'u güçlendirir.
+1. ~~**§4 Scope/ROE Guardrail motoru**~~ — ✅ **TAMAMLANDI** (bu oturum): `server/internal/scope` + admin servis kapısı.
+2. **§5 Canonical Event alanları** — `correlation_id`/`parent_event_id`/`event_id` → §17/§19'u güçlendirir. **(Sıradaki artırım.)**
 3. **§6/§19 Pipeline sağlamlığı + Event Replay** — DLQ/retry/replay.
 4. **§8 Katmanlı rate-limit + adaptive backpressure.**
 5. **§14 OpenTelemetry tracing** (opt-in).
