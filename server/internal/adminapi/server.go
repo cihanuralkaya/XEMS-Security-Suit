@@ -236,6 +236,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/mitre/coverage", s.authed(s.handleMitreCoverage))
 	mux.HandleFunc("GET /api/detections/rules", s.authed(s.handleDetectionRules))
 	mux.HandleFunc("POST /api/detections/test", s.authed(s.handleTestDetection))
+	mux.HandleFunc("POST /api/detections/replay", s.authed(s.handleReplayDetection))
 	mux.HandleFunc("POST /api/hunt", s.authed(s.handleHunt))
 	mux.HandleFunc("GET /api/incidents", s.authed(s.handleIncidents))
 	mux.HandleFunc("GET /api/incidents/{id}/timeline", s.authed(s.handleIncidentTimeline))
@@ -1087,6 +1088,49 @@ func (s *Server) handleTestDetection(w http.ResponseWriter, r *http.Request, _ s
 		"matches": matches,
 		"matched": len(matches),
 	})
+}
+
+// handleReplayDetection, EVENT REPLAY (§19): aday bir tespit kuralını (ya da mevcut
+// kural setini) zaman-pencereli GEÇMİŞ olaylara uygular ve "bu kural geçmişte kaç olayı
+// yakalardı?" raporunu döner. Kuralı üretime almadan önce etkisini ölçmek için. Salt-okuma.
+// rules verilmezse mevcut motor kuralları kullanılır (mevcut setin geçmiş kapsamı).
+func (s *Server) handleReplayDetection(w http.ResponseWriter, r *http.Request, _ string) {
+	var req struct {
+		Rules           []detect.Rule `json:"rules"` // aday kural(lar); boşsa mevcut set
+		DeviceID        string        `json:"device_id"`
+		Severity        string        `json:"severity"`
+		Category        string        `json:"category"`
+		MessageContains string        `json:"message_contains"`
+		Since           string        `json:"since"` // RFC3339, opsiyonel
+		Until           string        `json:"until"`
+		Limit           int           `json:"limit"`
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	f := adminread.EventFilter{
+		DeviceID: req.DeviceID, Severity: req.Severity, Category: req.Category,
+		MessageContains: req.MessageContains, Limit: req.Limit,
+	}
+	if req.Since != "" {
+		if t, err := time.Parse(time.RFC3339, req.Since); err == nil {
+			f.Since = t
+		}
+	}
+	if req.Until != "" {
+		if t, err := time.Parse(time.RFC3339, req.Until); err == nil {
+			f.Until = t
+		}
+	}
+	rules := req.Rules
+	if len(rules) == 0 {
+		rules = s.detector.Load().Rules() // aday verilmediyse mevcut seti geçmişe uygula
+	}
+	report, err := s.reader.ReplayDetections(r.Context(), f, rules)
+	if respondErr(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, report)
 }
 
 // handleHunt, RETRO-HUNT / SIEM arama: geçmiş olaylar üzerinde çalışır. mode

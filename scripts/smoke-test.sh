@@ -211,6 +211,12 @@ curl -sk "$B/api/hunt" -X POST -H "Authorization: Bearer $TOK" \
   -H 'Content-Type: application/json' -d '{"mode":"rules","limit":500}' \
   | grep -q '"scanned"' \
   && pass "/api/hunt retro-hunt çalıştı (geçmiş olaylar tarandı)" || fail "/api/hunt başarısız"
+# Event Replay (§19): aday kuralı geçmiş olaylara uygula → etki raporu (by_rule).
+curl -sk "$B/api/detections/replay" -X POST -H "Authorization: Bearer $TOK" \
+  -H 'Content-Type: application/json' \
+  -d '{"rules":[{"id":"CAND-1","name":"aday","severity":"HIGH","contains":["a"]}],"limit":500}' \
+  | grep -q '"by_rule"' \
+  && pass "/api/detections/replay aday kuralı geçmişe uyguladı" || fail "/api/detections/replay başarısız"
 # Kayıtlı aramalar (#22 SIEM): bir hunt sorgusu kaydet + listede gör.
 curl -sk "$B/api/hunt/saved" -X POST -H "Authorization: Bearer $TOK" \
   -H 'Content-Type: application/json' \
