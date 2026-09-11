@@ -31,6 +31,7 @@ import (
 	"xems.corp/suite/server/internal/auditexport"
 	"xems.corp/suite/server/internal/dedup"
 	"xems.corp/suite/server/internal/detect"
+	"xems.corp/suite/server/internal/dlq"
 	"xems.corp/suite/server/internal/eventbus"
 	"xems.corp/suite/server/internal/logingest"
 	"xems.corp/suite/server/internal/metrics"
@@ -74,6 +75,7 @@ type Server struct {
 	ingestLimiter *ratelimit.Limiter            // /api/ingest IP-başına hız sınırı (nil = kapalı)
 	ingestLayered *ratelimit.Layered            // /api/ingest KATMANLI hız sınırı (§8; öncelikli, nil = kapalı)
 	ingestDedup   *dedup.Seen                   // /api/ingest yineleme-tespiti (§6; nil = kapalı)
+	ingestDLQ     *dlq.Queue                    // /api/ingest ölü-mektup kuyruğu (§6; nil = kapalı)
 	detector      atomic.Pointer[detect.Engine] // tespit kural kataloğu (görünürlük ucu; canlı hot-reload için atomik)
 	vulnSet       *vuln.Set                     // zafiyet veri kümesi (nil = kapalı); envanterle eşleşir
 	features      map[string]any                // dağıtım koruma-duruşu (opsiyonel özellik bayrakları)
@@ -115,6 +117,11 @@ func (s *Server) SetIngest(sink EventIngestor, token string) {
 // SetIngestDedup, /api/ingest için içerik-adresli yineleme-tespiti bağlar (§6). Aynı
 // olay (EventID) pencere içinde tekrar gelirse düşürülür. nil = kapalı.
 func (s *Server) SetIngestDedup(d *dedup.Seen) { s.ingestDedup = d }
+
+// SetIngestDLQ, /api/ingest için ölü-mektup kuyruğu bağlar (§6). SaveEvents geçici
+// olarak başarısızsa (ör. DB erişilemez) olay grubu sessizce kaybolmak yerine kuyruğa
+// alınır ve arka planda yeniden denenir. nil = kapalı (eski davranış: 500 döner).
+func (s *Server) SetIngestDLQ(q *dlq.Queue) { s.ingestDLQ = q }
 
 // SetIngestLayered, /api/ingest için KATMANLI hız sınırlayıcı bağlar (§8): global
 // (toplam) + API (IP-başına) katmanları. Ayarlıysa tekil ingestLimiter yerine bu
@@ -595,9 +602,15 @@ func (s *Server) handleIngest(w http.ResponseWriter, r *http.Request) {
 		}
 		byDevice[rec.DeviceID] = append(byDevice[rec.DeviceID], ev)
 	}
-	accepted := 0
+	accepted, deferred := 0, 0
 	for dev, evs := range byDevice {
 		if _, err := s.ingestSink.SaveEvents(r.Context(), dev, evs); err != nil {
+			// DLQ açıksa: sessizce kaybetme — kuyruğa al, arka planda yeniden dene (§6).
+			if s.ingestDLQ != nil {
+				s.ingestDLQ.Enqueue(dev, evs)
+				deferred += len(evs)
+				continue
+			}
 			writeErr(w, http.StatusInternalServerError, "olaylar yazılamadı")
 			return
 		}
@@ -605,7 +618,9 @@ func (s *Server) handleIngest(w http.ResponseWriter, r *http.Request) {
 	}
 	metrics.AddEventsIngested(accepted)
 	metrics.AddEventsDuplicate(duplicates)
-	writeJSON(w, http.StatusOK, map[string]any{"accepted": accepted, "duplicate": duplicates, "sources": len(byDevice)})
+	metrics.AddEventsDeferred(deferred)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"accepted": accepted, "duplicate": duplicates, "deferred": deferred, "sources": len(byDevice)})
 }
 
 // handleMetrics, Prometheus metin-exposition'ını döner. metricsToken ayarlı

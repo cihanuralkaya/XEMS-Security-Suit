@@ -41,6 +41,7 @@ import (
 	"xems.corp/suite/server/internal/db"
 	"xems.corp/suite/server/internal/dedup"
 	"xems.corp/suite/server/internal/detect"
+	"xems.corp/suite/server/internal/dlq"
 	"xems.corp/suite/server/internal/dnstunnel"
 	"xems.corp/suite/server/internal/enroll"
 	"xems.corp/suite/server/internal/eventbus"
@@ -639,6 +640,37 @@ func run() error {
 			log.Printf("harici log alımı etkin: POST /api/ingest (JSON + CEF), hız sınırı %.0f/sn/IP, yineleme-tespiti %s", rate, dedupWin)
 		} else {
 			log.Printf("harici log alımı etkin: POST /api/ingest (JSON + CEF), hız sınırı %.0f/sn/IP", rate)
+		}
+		// Ölü-mektup kuyruğu (§6): SaveEvents geçici başarısızlığında olaylar kaybolmaz,
+		// kuyruğa alınır ve arka planda üstel geri-çekilmeyle yeniden yazılır.
+		// XEMS_INGEST_DLQ_MAX (varsayılan 10000; 0 → kapalı).
+		dlqMax := 10000
+		if n := atoiEnv("XEMS_INGEST_DLQ_MAX"); n >= 0 && os.Getenv("XEMS_INGEST_DLQ_MAX") != "" {
+			dlqMax = n
+		}
+		if dlqMax > 0 {
+			ingestDLQ := dlq.New(dlqMax, 2*time.Second, 5*time.Minute, nil)
+			adminAPI.SetIngestDLQ(ingestDLQ)
+			go func() {
+				t := time.NewTicker(10 * time.Second)
+				defer t.Stop()
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case <-t.C:
+						ingestDLQ.Retry(func(it *dlq.Item) error {
+							evs, ok := it.Payload.([]model.Event)
+							if !ok {
+								return nil // bilinmeyen yük → düşür (başarı say)
+							}
+							_, err := backend.SaveEvents(ctx, it.Key, evs)
+							return err
+						})
+					}
+				}
+			}()
+			log.Printf("ingest ölü-mektup kuyruğu etkin: azami %d girdi, 10sn yeniden-deneme", dlqMax)
 		}
 	}
 	adminAPI.SetDetector(detector) // tespit kural kataloğu (ingest ile aynı motor)

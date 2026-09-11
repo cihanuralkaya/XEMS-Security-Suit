@@ -44,6 +44,7 @@ var (
 	scopeDenied      atomic.Int64 // scope/ROE tarafından ENGELLENEN yüksek-etkili op (§4)
 	scopeWouldDeny   atomic.Int64 // enforce KAPALIYKEN engellenecekti (danışma/tuning)
 	eventsDuplicate  atomic.Int64 // yineleme-tespitiyle düşürülen olaylar (§6)
+	eventsDeferred   atomic.Int64 // yazılamayıp ölü-mektup kuyruğuna alınan olaylar (§6 DLQ)
 )
 
 // certExpiryDays, CA+sunucu sertifikalarının EN AZ kalan günü (gauge). Sentinel 9999
@@ -90,6 +91,7 @@ func Counters() map[string]int64 {
 		"scope_denied":      scopeDenied.Load(),
 		"scope_would_deny":  scopeWouldDeny.Load(),
 		"events_duplicate":  eventsDuplicate.Load(),
+		"events_deferred":   eventsDeferred.Load(),
 	}
 }
 
@@ -146,6 +148,13 @@ func IncScopeWouldDeny() { scopeWouldDeny.Add(1) }
 func AddEventsDuplicate(n int) {
 	if n > 0 {
 		eventsDuplicate.Add(int64(n))
+	}
+}
+
+// AddEventsDeferred, yazılamayıp ölü-mektup kuyruğuna (§6 DLQ) alınan olay sayacını artırır.
+func AddEventsDeferred(n int) {
+	if n > 0 {
+		eventsDeferred.Add(int64(n))
 	}
 }
 
@@ -271,6 +280,10 @@ func Write(w io.Writer, s Snapshot) {
 	fmt.Fprintf(w, "# HELP xems_events_duplicate_total Yineleme-tespitiyle düşürülen olaylar (§6).\n")
 	fmt.Fprintf(w, "# TYPE xems_events_duplicate_total counter\n")
 	fmt.Fprintf(w, "xems_events_duplicate_total %d\n", eventsDuplicate.Load())
+
+	fmt.Fprintf(w, "# HELP xems_events_deferred_total Yazılamayıp ölü-mektup kuyruğuna alınan olaylar (§6 DLQ).\n")
+	fmt.Fprintf(w, "# TYPE xems_events_deferred_total counter\n")
+	fmt.Fprintf(w, "xems_events_deferred_total %d\n", eventsDeferred.Load())
 
 	fmt.Fprintf(w, "# HELP xems_login_lockouts_total Kaba-kuvvet kilidi (admin girişi) tetiklemeleri.\n")
 	fmt.Fprintf(w, "# TYPE xems_login_lockouts_total counter\n")
