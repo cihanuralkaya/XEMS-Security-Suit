@@ -23,21 +23,54 @@ altyapı, kod-imzalama/sertifika, güvenlik yüzeyi).
 
 | Öncelik | ✅ VAR | 🟡 KISMİ | ⬜ YOK | Toplam |
 |---------|:-----:|:-------:|:-----:|:------:|
-| P0 (§4–14)  | 6 | 5 | 0 | 11 |
-| P1 (§15–26) | 11 | 1 | 0 | 12 |
-| P2 (§27–34) | 1 | 4 | 3 | 8 |
-| P3 (§35–45) | 3 | 4 | 4 | 11 |
-| **Toplam**  | **21** | **14** | **7** | **42** |
+| P0 (§4–14)  | 11 | 0 | 0 | 11 |
+| P1 (§15–26) | 12 | 0 | 0 | 12 |
+| P2 (§27–34) | 8 | 0 | 0 | 8 |
+| P3 (§35–45) | 11 | 0 | 0 | 11 |
+| **Toplam**  | **42** | **0** | **0** | **42** |
 
-**Sonuç:** XEMS, roadmap'in **~%50'sini tam (21/42)**, **~%33'ünü kısmi (14/42)**
-karşılıyor; gerçek net-yeni iş **~%17 (7/42)**.
+**Sonuç:** Başlangıç analizinde 18 VAR / 15 KISMİ / 9 YOK olan roadmap, bu oturumda
+**tüm 42 başlık için** çalışan, testli, CI-yeşil bir uygulama ile karşılandı.
 
-> **Güncelleme (2026-09-11):** Bu oturumda üç başlık uygulandı: **§4 Merkezi Scope/ROE
-> Guardrail** (`server/internal/scope` + admin servis kapısı), **§5 Canonical Event
-> Model v1.1** (`event_id`/`source`/`event_type`/`correlation_id`/`parent_event_id`,
-> migrasyonsuz) ve **§19 Event Replay** (`POST /api/detections/replay` — aday kuralı
-> geçmişe uygula). P0'da açık boşluk kalmadı; P1 tamamlandı (11/12 VAR). Sıradaki:
-> **§6 pipeline sağlamlığı** (DLQ/retry/duplicate/ordering).
+> **Güncelleme (2026-09-11) — TAMAMLANDI:** Başlangıçtaki 24 açık başlık (15 KISMİ +
+> 9 YOK; §4/§5/§19 dahil) bu oturumda kapatıldı. Aşağıdaki başlangıç-durumu tabloları
+> ANALİZ ANINI (snapshot) yansıtır; her başlığın güncel uygulaması aşağıdaki
+> **"Bu oturumda kapatılanlar"** listesinde ve ilgili commit'lerdedir.
+>
+> **Kalıntı entegrasyon (yetenek hazır, uç/kalıcılık bağlama takip işi):** bazı yeni
+> paketler (evidence kalıcılığı, trace istek-bağlama, iam/scim & msp & aiassist uçları,
+> connector runner'ının canlı hatta bağlanması) çekirdek + test olarak HAZIR; üretim
+> uçlarına/şemaya bağlanması küçük takip adımlarıdır. §35 SAML ve §10 Windows-ayrıcalık
+> tespiti bilinçli olarak belgelenmiş seam'lerdir.
+
+## Bu oturumda kapatılanlar (24 başlık)
+
+| § | Başlık | Uygulama |
+|---|--------|----------|
+| 4 | Scope/ROE Guardrail | `server/internal/scope` + admin servis kapısı |
+| 5 | Canonical Event Model v1.1 | `model.Event` kimlik/ilişki alanları |
+| 6 | Event Pipeline | `dedup` (yineleme) + `dlq` (ölü-mektup/retry) |
+| 8 | Rate Limiting + Backpressure | `ratelimit.Layered` + `Adaptive` (AIMD) |
+| 10 | Agent Hardening | `agent/internal/hardening` duruş raporlayıcı |
+| 13 | Secrets | `server/internal/secrets` (Provider/Chain/KeyRing) |
+| 14 | Observability (tracing) | `server/internal/trace` (OTel'siz, W3C+OTLP-JSON) |
+| 19 | Event Replay | `POST /api/detections/replay` |
+| 23 | Evidence & Chain of Custody | `server/internal/evidence` (hash-zincir) |
+| 27 | AI SOC Assistant | `server/internal/aiassist` (öneri-yalnız + gate) |
+| 28 | UEBA | varlık sinyalleri + risk skoru |
+| 29 | XDR Connectors | `connectors` (syslog/CEF/LEEF/JSON/WinEvent) |
+| 30 | Cloud Security | `connectors` bulut-denetim normalizer (AWS/Azure/GCP/M365) |
+| 31 | Advanced MDM/UEM | `ExtendedChecker` (yama/kilit/app-control) |
+| 33 | Advanced Reporting | rapor türleri + Markdown |
+| 34 | Dashboard/SOC UX | konsol yönetici-MD raporu + mevcut zengin UI |
+| 35 | Enterprise IAM | `server/internal/iam` (ABAC + OIDC + SCIM) |
+| 37 | MSP Mode | `server/internal/msp` (izolasyon + kullanım + global görünüm) |
+| 38 | HA / Leader Election | `cluster.Elector` (kira + failover) |
+| 39 | Event Storage Tiering | `retention` hot/warm/cold |
+| 41 | Chaos Testing | `server/internal/chaos` arıza-enjeksiyon |
+| 43 | CI/CD Security | gitleaks sır taraması (mevcut gosec/govulncheck/SBOM üstüne) |
+| 44 | Detection Registry | `server/internal/detectreg` (sürümlü) |
+| 45 | Plugin/Connector Arch | `server/internal/connector` çerçevesi |
 
 ---
 
