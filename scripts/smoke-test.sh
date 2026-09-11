@@ -258,6 +258,14 @@ curl -sk "$B/api/ingest" -X POST -H "Authorization: Bearer smoke-ingest-token" \
   -d '[{"source":"fw-test","category":"NETWORK_CONN","severity":"high","message":"smoke ingest"}]' \
   | grep -q '"accepted":1' \
   && pass "/api/ingest harici log alımı çalıştı" || fail "/api/ingest başarısız"
+# Yineleme-tespiti (§6): AYNI olayı (sabit occurred_at) iki kez gönder — ikincisi düşmeli.
+DUP='[{"source":"fw-dup","category":"NETWORK_CONN","severity":"high","message":"dup olay","occurred_at":"2026-09-01T10:00:00Z"}]'
+curl -sk "$B/api/ingest" -X POST -H "Authorization: Bearer smoke-ingest-token" \
+  -H "Content-Type: application/json" -d "$DUP" >/dev/null
+curl -sk "$B/api/ingest" -X POST -H "Authorization: Bearer smoke-ingest-token" \
+  -H "Content-Type: application/json" -d "$DUP" \
+  | grep -q '"duplicate":1' \
+  && pass "/api/ingest yineleme-tespiti kopyayı düşürdü (§6)" || fail "/api/ingest dedup başarısız"
 # Zengin telemetri: cihaz OS sürümü (ilk heartbeat'ten sonra dolar) — poll et.
 osv=""
 for _ in $(seq 1 40); do

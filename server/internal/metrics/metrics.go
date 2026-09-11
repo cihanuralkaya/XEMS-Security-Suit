@@ -43,6 +43,7 @@ var (
 	loginLockouts    atomic.Int64 // kaba-kuvvet kilidi tetiklemeleri (admin girişi)
 	scopeDenied      atomic.Int64 // scope/ROE tarafından ENGELLENEN yüksek-etkili op (§4)
 	scopeWouldDeny   atomic.Int64 // enforce KAPALIYKEN engellenecekti (danışma/tuning)
+	eventsDuplicate  atomic.Int64 // yineleme-tespitiyle düşürülen olaylar (§6)
 )
 
 // certExpiryDays, CA+sunucu sertifikalarının EN AZ kalan günü (gauge). Sentinel 9999
@@ -88,6 +89,7 @@ func Counters() map[string]int64 {
 		"login_lockouts":    loginLockouts.Load(),
 		"scope_denied":      scopeDenied.Load(),
 		"scope_would_deny":  scopeWouldDeny.Load(),
+		"events_duplicate":  eventsDuplicate.Load(),
 	}
 }
 
@@ -139,6 +141,13 @@ func IncScopeDenied() { scopeDenied.Add(1) }
 // IncScopeWouldDeny, enforce KAPALIYKEN scope/ROE'nin engelleyeceği (ama izin verilen)
 // operasyon sayacını artırır — operatörün politika ayarı (tuning) için danışma sinyali.
 func IncScopeWouldDeny() { scopeWouldDeny.Add(1) }
+
+// AddEventsDuplicate, yineleme-tespitiyle (§6) düşürülen olay sayacını artırır.
+func AddEventsDuplicate(n int) {
+	if n > 0 {
+		eventsDuplicate.Add(int64(n))
+	}
+}
 
 // SetCertExpiryDays, CA+sunucu sertifikalarının EN AZ kalan gününü (gauge) ayarlar.
 func SetCertExpiryDays(d int) { certExpiryDays.Store(int64(d)) }
@@ -258,6 +267,10 @@ func Write(w io.Writer, s Snapshot) {
 	fmt.Fprintf(w, "# HELP xems_scope_would_deny_total Enforce kapalıyken scope/ROE'nin engelleyeceği operasyonlar (danışma).\n")
 	fmt.Fprintf(w, "# TYPE xems_scope_would_deny_total counter\n")
 	fmt.Fprintf(w, "xems_scope_would_deny_total %d\n", scopeWouldDeny.Load())
+
+	fmt.Fprintf(w, "# HELP xems_events_duplicate_total Yineleme-tespitiyle düşürülen olaylar (§6).\n")
+	fmt.Fprintf(w, "# TYPE xems_events_duplicate_total counter\n")
+	fmt.Fprintf(w, "xems_events_duplicate_total %d\n", eventsDuplicate.Load())
 
 	fmt.Fprintf(w, "# HELP xems_login_lockouts_total Kaba-kuvvet kilidi (admin girişi) tetiklemeleri.\n")
 	fmt.Fprintf(w, "# TYPE xems_login_lockouts_total counter\n")

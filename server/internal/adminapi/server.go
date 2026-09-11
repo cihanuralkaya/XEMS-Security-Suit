@@ -29,6 +29,7 @@ import (
 	"xems.corp/suite/server/internal/admin"
 	"xems.corp/suite/server/internal/adminread"
 	"xems.corp/suite/server/internal/auditexport"
+	"xems.corp/suite/server/internal/dedup"
 	"xems.corp/suite/server/internal/detect"
 	"xems.corp/suite/server/internal/eventbus"
 	"xems.corp/suite/server/internal/logingest"
@@ -71,6 +72,7 @@ type Server struct {
 	ingestToken   string                        // ayarlıysa POST /api/ingest bu Bearer token ile açılır (#21)
 	ingestSink    EventIngestor                 // harici log alımı için olay yazma yolu
 	ingestLimiter *ratelimit.Limiter            // /api/ingest IP-başına hız sınırı (nil = kapalı)
+	ingestDedup   *dedup.Seen                   // /api/ingest yineleme-tespiti (§6; nil = kapalı)
 	detector      atomic.Pointer[detect.Engine] // tespit kural kataloğu (görünürlük ucu; canlı hot-reload için atomik)
 	vulnSet       *vuln.Set                     // zafiyet veri kümesi (nil = kapalı); envanterle eşleşir
 	features      map[string]any                // dağıtım koruma-duruşu (opsiyonel özellik bayrakları)
@@ -108,6 +110,10 @@ type EventIngestor interface {
 func (s *Server) SetIngest(sink EventIngestor, token string) {
 	s.ingestSink, s.ingestToken = sink, token
 }
+
+// SetIngestDedup, /api/ingest için içerik-adresli yineleme-tespiti bağlar (§6). Aynı
+// olay (EventID) pencere içinde tekrar gelirse düşürülür. nil = kapalı.
+func (s *Server) SetIngestDedup(d *dedup.Seen) { s.ingestDedup = d }
 
 // SetIngestRateLimit, /api/ingest için IP-başına hız sınırlayıcı bağlar (DoS/sel
 // koruması). nil ise sınırlama kapalıdır.
@@ -562,10 +568,20 @@ func (s *Server) handleIngest(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "normalize edilebilir kayıt yok")
 		return
 	}
-	// Kaynağa (device_id) göre grupla ve yaz.
+	// Kaynağa (device_id) göre grupla ve yaz. Yineleme-tespiti (§6) açıksa, içerik-adresli
+	// EventID pencere içinde tekrar geliyorsa olay düşürülür (retransmit/çift-gönderim).
 	byDevice := map[string][]model.Event{}
+	duplicates := 0
 	for _, rec := range records {
-		byDevice[rec.DeviceID] = append(byDevice[rec.DeviceID], rec.Event)
+		ev := rec.Event
+		if s.ingestDedup != nil {
+			ev.DeviceID = rec.DeviceID
+			if s.ingestDedup.Duplicate(ev.EnsureID()) {
+				duplicates++
+				continue
+			}
+		}
+		byDevice[rec.DeviceID] = append(byDevice[rec.DeviceID], ev)
 	}
 	accepted := 0
 	for dev, evs := range byDevice {
@@ -576,7 +592,8 @@ func (s *Server) handleIngest(w http.ResponseWriter, r *http.Request) {
 		accepted += len(evs)
 	}
 	metrics.AddEventsIngested(accepted)
-	writeJSON(w, http.StatusOK, map[string]any{"accepted": accepted, "sources": len(byDevice)})
+	metrics.AddEventsDuplicate(duplicates)
+	writeJSON(w, http.StatusOK, map[string]any{"accepted": accepted, "duplicate": duplicates, "sources": len(byDevice)})
 }
 
 // handleMetrics, Prometheus metin-exposition'ını döner. metricsToken ayarlı

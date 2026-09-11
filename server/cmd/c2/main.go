@@ -39,6 +39,7 @@ import (
 	"xems.corp/suite/server/internal/config"
 	"xems.corp/suite/server/internal/correlate"
 	"xems.corp/suite/server/internal/db"
+	"xems.corp/suite/server/internal/dedup"
 	"xems.corp/suite/server/internal/detect"
 	"xems.corp/suite/server/internal/dnstunnel"
 	"xems.corp/suite/server/internal/enroll"
@@ -611,7 +612,24 @@ func run() error {
 		if rate > 0 {
 			adminAPI.SetIngestRateLimit(ratelimit.New(rate, rate*2, nil))
 		}
-		log.Printf("harici log alımı etkin: POST /api/ingest (JSON + CEF), hız sınırı %.0f/sn/IP", rate)
+		// Yineleme-tespiti (§6): aynı olay (içerik-adresli EventID) pencere içinde
+		// tekrar gelirse düşürülür (retransmit/çift-gönderim → çift-saymayı önler).
+		// XEMS_INGEST_DEDUP_WINDOW (varsayılan 5m; 0 → kapalı), XEMS_INGEST_DEDUP_MAX
+		// (varsayılan 100000 izlenen id).
+		dedupWin := 5 * time.Minute
+		if d, derr := time.ParseDuration(os.Getenv("XEMS_INGEST_DEDUP_WINDOW")); derr == nil {
+			dedupWin = d
+		}
+		dedupMax := 100000
+		if n := atoiEnv("XEMS_INGEST_DEDUP_MAX"); n > 0 {
+			dedupMax = n
+		}
+		if dedupWin > 0 {
+			adminAPI.SetIngestDedup(dedup.New(dedupWin, dedupMax))
+			log.Printf("harici log alımı etkin: POST /api/ingest (JSON + CEF), hız sınırı %.0f/sn/IP, yineleme-tespiti %s", rate, dedupWin)
+		} else {
+			log.Printf("harici log alımı etkin: POST /api/ingest (JSON + CEF), hız sınırı %.0f/sn/IP", rate)
+		}
 	}
 	adminAPI.SetDetector(detector) // tespit kural kataloğu (ingest ile aynı motor)
 
