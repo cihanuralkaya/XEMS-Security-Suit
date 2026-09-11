@@ -21,15 +21,17 @@ altyapı, kod-imzalama/sertifika, güvenlik yüzeyi).
 
 ## Özet tablo (skor)
 
-| Öncelik | ✅ VAR | 🟡 KISMİ | ⬜ YOK |
-|---------|:-----:|:-------:|:-----:|
-| P0 (11 başlık) | 4 | 6 | 1 |
-| P1 (12 başlık) | 9 | 2 | 1 |
-| P2 (8 başlık)  | 1 | 4 | 3 |
-| P3 (9 başlık)  | 2 | 4 | 3 |
+| Öncelik | ✅ VAR | 🟡 KISMİ | ⬜ YOK | Toplam |
+|---------|:-----:|:-------:|:-----:|:------:|
+| P0 (§4–14)  | 4 | 6 | 1 | 11 |
+| P1 (§15–26) | 10 | 1 | 1 | 12 |
+| P2 (§27–34) | 1 | 4 | 3 | 8 |
+| P3 (§35–45) | 3 | 4 | 4 | 11 |
+| **Toplam**  | **18** | **15** | **9** | **42** |
 
-**Sonuç:** XEMS, roadmap'in ~%40'ını tam, ~%35'ini kısmi karşılıyor; gerçek net-yeni
-iş ~%25. En kritik tek P0 boşluğu: **Merkezi Scope/ROE Guardrail motoru** (§4).
+**Sonuç:** XEMS, roadmap'in **~%43'ünü tam (18/42)**, **~%36'sını kısmi (15/42)**
+karşılıyor; gerçek net-yeni iş **~%21 (9/42)**. En kritik tek P0 boşluğu:
+**Merkezi Scope/ROE Guardrail motoru** (§4).
 
 ---
 
