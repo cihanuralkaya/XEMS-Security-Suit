@@ -131,6 +131,9 @@ proto üret + `go vet` + `go test ./...` + smoke test + çapraz derleme (artifac
 
 Aşağıdakiler ilk matristen sonra eklendi; hepsi test + smoke + CI yeşil.
 
+- **Olay yineleme-tespiti (§6):** aynı olay (içerik-adresli EventID, §5) kısa pencere
+  içinde tekrar gelirse düşürülür (`server/internal/dedup` + `/api/ingest`;
+  `xems_events_duplicate_total`) — retransmit/çift-gönderim çift-saymaz. `XEMS_INGEST_DEDUP_*`.
 - **Event Replay (§19):** aday bir tespit kuralını zaman-pencereli geçmiş olaylara
   uygular (`POST /api/detections/replay`, `adminread.ReplayDetections`) ve `by_rule`
   etki raporu döner — kuralı üretime almadan önce "geçmişte kaç olayı yakalardı?".
