@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/xems-logo.png" alt="XEMS Security Suite" width="640">
+</p>
+
 # XEMS Security Suite — Kurumsal Uç Nokta Güvenliği ve Ajan Yönetim Sistemi
 # XEMS Security Suite — Corporate Endpoint Security & Agent Management System
 
@@ -132,7 +136,8 @@ Bkz. [docs/architecture.md](docs/architecture.md) — fazlara bölünmüş plan.
 İnceleme bulguları ve karşılığında alınan kararlar [docs/threat-model.md](docs/threat-model.md)
 içinde. Harici log alımı entegrasyonu için [docs/INGEST.md](docs/INGEST.md);
 ONNX model entegrasyonu için [docs/ONNX.md](docs/ONNX.md); çekirdek-seviye kurcalama
-koruması tasarımı için [docs/KERNEL-TAMPER.md](docs/KERNEL-TAMPER.md).
+koruması tasarımı için [docs/KERNEL-TAMPER.md](docs/KERNEL-TAMPER.md); marka ve
+uygulama ikonu üretimi için [docs/BRANDING.md](docs/BRANDING.md).
 
 ## Sürüm doğrulama / Release verification
 
@@ -274,7 +279,8 @@ See [docs/architecture.md](docs/architecture.md) — a phased plan. Review findi
 and the decisions taken in response are in [docs/threat-model.md](docs/threat-model.md).
 For external log ingest integration, see [docs/INGEST.md](docs/INGEST.md); for ONNX
 model integration, see [docs/ONNX.md](docs/ONNX.md); for kernel-level tamper-protection
-design, see [docs/KERNEL-TAMPER.md](docs/KERNEL-TAMPER.md).
+design, see [docs/KERNEL-TAMPER.md](docs/KERNEL-TAMPER.md); for branding and application
+icon generation, see [docs/BRANDING.md](docs/BRANDING.md).
 
 ## Release verification
 

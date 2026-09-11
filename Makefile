@@ -1,7 +1,7 @@
 # XEMS Security Suite — geliştirme görevleri
 # Not: Go, buf ve protoc-gen eklentileri kurulu olmalı (bkz. README).
 
-.PHONY: proto tidy build build-server build-agent build-watchdog test e2e dev-certs release smoke clean fmt fmt-check vet check check-all
+.PHONY: proto tidy build build-server build-agent build-watchdog test e2e dev-certs release smoke clean fmt fmt-check vet check check-all icons
 
 ## proto: .proto dosyalarından Go kodunu üretir (gen/ altına).
 proto:
@@ -68,6 +68,11 @@ dev-certs:
 ##          Kullanım: make release VERSION=1.0.0
 release:
 	scripts/build-release.sh $(VERSION)
+
+## icons: assets/xems-logo.png'den uygulama ikonlarını üretir (.ico + exe'ye
+##        gömülü *_windows_amd64.syso kaynakları). Logo değişince yeniden çalıştırın.
+icons:
+	go run ./tools/mkicon
 
 clean:
 	rm -rf bin gen dist dev-certs
