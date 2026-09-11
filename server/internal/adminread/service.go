@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"xems.corp/suite/server/internal/complianceframework"
+	"xems.corp/suite/server/internal/model"
 	"xems.corp/suite/server/internal/risk"
 	"xems.corp/suite/server/internal/security"
 	"xems.corp/suite/server/internal/ueba"
@@ -239,6 +240,7 @@ type EventAck struct {
 // EventDTO, konsola dönen olay görünümüdür.
 type EventDTO struct {
 	ID         string          `json:"id"`
+	EventID    string          `json:"event_id,omitempty"` // kanonik içerik-adresli kimlik (varsa)
 	DeviceID   string          `json:"device_id,omitempty"`
 	Category   string          `json:"category"`
 	Severity   string          `json:"severity"`
@@ -246,6 +248,14 @@ type EventDTO struct {
 	OccurredAt time.Time       `json:"occurred_at"`
 	CreatedAt  time.Time       `json:"created_at"`
 	Details    json.RawMessage `json:"details,omitempty"`
+	// Kanonik olay meta verisi (§5). SchemaVersion daima; diğerleri details'ten
+	// yükseltilir (varsa) — 1.0 tüketicileri geriye uyumlu (omitempty).
+	SchemaVersion string  `json:"schema_version,omitempty"`
+	Source        string  `json:"source,omitempty"`
+	EventType     string  `json:"event_type,omitempty"`
+	Confidence    float64 `json:"confidence,omitempty"`
+	CorrelationID string  `json:"correlation_id,omitempty"`
+	ParentEventID string  `json:"parent_event_id,omitempty"`
 	// Alarm yaşam-döngüsü + vaka yönetimi (işaretlenmişse dolu).
 	AckStatus   string    `json:"ack_status,omitempty"`
 	AckBy       string    `json:"ack_by,omitempty"`
@@ -429,16 +439,7 @@ func (s *Service) Events(ctx context.Context, deviceID, severity, category strin
 	}
 	out := make([]EventDTO, 0, len(rows))
 	for _, r := range rows {
-		dto := EventDTO{
-			ID:         r.ID,
-			DeviceID:   r.DeviceID,
-			Category:   r.Category,
-			Severity:   r.Severity,
-			Message:    r.Message,
-			OccurredAt: r.OccurredAt,
-			CreatedAt:  r.CreatedAt,
-			Details:    r.Details,
-		}
+		dto := newEventDTO(r)
 		if a, ok := acks[r.ID]; ok {
 			dto.AckStatus, dto.AckBy, dto.AckAt = a.Status, a.AdminEmail, a.At
 			dto.AckAssignee, dto.AckNote = a.Assignee, a.Note
@@ -446,6 +447,55 @@ func (s *Service) Events(ctx context.Context, deviceID, severity, category strin
 		out = append(out, dto)
 	}
 	return out, nil
+}
+
+// newEventDTO, bir EventRow'u kanonik EventDTO'ya çevirir: temel alanları kopyalar,
+// şema sürümünü daima damgalar ve kanonik meta veriyi (source/event_type/confidence/
+// correlation_id/parent_event_id/event_id) details JSON'undan YÜKSELTİR (varsa).
+// Böylece herhangi bir üretici (logingest, korelasyon) bu anahtarları details'e
+// yazdığında ilk-sınıf alanlar olarak dış tüketiciye (SIEM, /api/events) ulaşır.
+func newEventDTO(r EventRow) EventDTO {
+	dto := EventDTO{
+		ID:            r.ID,
+		DeviceID:      r.DeviceID,
+		Category:      r.Category,
+		Severity:      r.Severity,
+		Message:       r.Message,
+		OccurredAt:    r.OccurredAt,
+		CreatedAt:     r.CreatedAt,
+		Details:       r.Details,
+		SchemaVersion: model.EventSchemaVersion,
+	}
+	promoteCanonical(&dto)
+	return dto
+}
+
+// promoteCanonical, details JSON'undaki kanonik anahtarları DTO alanlarına yükseltir.
+// Bilinmeyen/eksik anahtarlar yok sayılır; hatalı JSON sessizce atlanır (best-effort).
+func promoteCanonical(dto *EventDTO) {
+	if len(dto.Details) == 0 {
+		return
+	}
+	var m map[string]any
+	if err := json.Unmarshal(dto.Details, &m); err != nil {
+		return
+	}
+	str := func(k string) string {
+		if v, ok := m[k].(string); ok {
+			return v
+		}
+		return ""
+	}
+	dto.Source = str("source")
+	dto.EventType = str("event_type")
+	dto.CorrelationID = str("correlation_id")
+	dto.ParentEventID = str("parent_event_id")
+	if id := str("event_id"); id != "" {
+		dto.EventID = id
+	}
+	if c, ok := m["confidence"].(float64); ok {
+		dto.Confidence = c
+	}
 }
 
 // Summary, yönetim panosu için özet/KPI sayaçlarını hesaplar. Cihazlar duruma
@@ -623,10 +673,7 @@ func (s *Service) QueryEvents(ctx context.Context, f EventFilter) ([]EventDTO, e
 	}
 	out := make([]EventDTO, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, EventDTO{
-			ID: r.ID, DeviceID: r.DeviceID, Category: r.Category, Severity: r.Severity,
-			Message: r.Message, OccurredAt: r.OccurredAt, CreatedAt: r.CreatedAt, Details: r.Details,
-		})
+		out = append(out, newEventDTO(r))
 	}
 	return out, nil
 }

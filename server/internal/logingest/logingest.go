@@ -85,6 +85,31 @@ type logJSON struct {
 
 // NormalizeJSON, bir JSON dizisini (veya tek nesneyi) normalize edilmiş kayıtlara
 // çevirir. source ve message zorunludur; geçersiz kayıtlar hata döndürür.
+// stampCanonical, kanonik olay alanlarını (§5) bir olaya ekler: source (ve varsa
+// event_type) hem ilk-sınıf model alanlarına hem de Details JSON'una yazılır. Details'e
+// yazmak, DB round-trip'inde (event_logs yalnız details JSONB taşır) alanların korunmasını
+// sağlar; böylece /api/events tüketicisi source/event_type'ı ilk-sınıf görür. Details bir
+// JSON NESNESİ değilse (ya da boşsa yeni nesne) yalnız model alanları set edilir, mevcut
+// details ezilmez (güvenli birleştirme).
+func stampCanonical(ev *model.Event, source, eventType string) {
+	ev.Source, ev.EventType = source, eventType
+	m := map[string]any{}
+	if ev.Details != "" {
+		if err := json.Unmarshal([]byte(ev.Details), &m); err != nil {
+			return // nesne değil → mevcut details'i ezme
+		}
+	}
+	if source != "" {
+		m["source"] = source
+	}
+	if eventType != "" {
+		m["event_type"] = eventType
+	}
+	if b, err := json.Marshal(m); err == nil {
+		ev.Details = string(b)
+	}
+}
+
 func NormalizeJSON(data []byte, now time.Time) ([]Record, error) {
 	trimmed := strings.TrimSpace(string(data))
 	var raws []logJSON
@@ -117,7 +142,7 @@ func NormalizeJSON(data []byte, now time.Time) ([]Record, error) {
 		if len(r.Details) > 0 && string(r.Details) != "null" {
 			details = string(r.Details)
 		}
-		out = append(out, Record{
+		rec := Record{
 			DeviceID: SourceUUID(r.Source),
 			Event: model.Event{
 				Category:   normCategory(r.Category),
@@ -126,7 +151,9 @@ func NormalizeJSON(data []byte, now time.Time) ([]Record, error) {
 				OccurredAt: occurred,
 				Details:    details,
 			},
-		})
+		}
+		stampCanonical(&rec.Event, r.Source, "")
+		out = append(out, rec)
 	}
 	return out, nil
 }
@@ -166,6 +193,7 @@ func NormalizeCEF(line string, now time.Time) (Record, error) {
 		b, _ := json.Marshal(map[string]string{"cef_extension": details})
 		rec.Event.Details = string(b)
 	}
+	stampCanonical(&rec.Event, source, "")
 	return rec, nil
 }
 
@@ -254,6 +282,7 @@ func NormalizeLEEF(line string, now time.Time) (Record, error) {
 		b, _ := json.Marshal(kv)
 		rec.Event.Details = string(b)
 	}
+	stampCanonical(&rec.Event, source, "")
 	return rec, nil
 }
 
@@ -350,7 +379,7 @@ func NormalizeSyslog(line string, now time.Time) (Record, error) {
 	if msg == "" {
 		msg = "(boş syslog mesajı)"
 	}
-	return Record{
+	rec := Record{
 		DeviceID: SourceUUID(source),
 		Event: model.Event{
 			Category:   "SECURITY",
@@ -358,7 +387,9 @@ func NormalizeSyslog(line string, now time.Time) (Record, error) {
 			Message:    "[" + source + "] " + msg,
 			OccurredAt: occurred,
 		},
-	}, nil
+	}
+	stampCanonical(&rec.Event, source, "")
+	return rec, nil
 }
 
 // syslogSeverity, syslog önem kodunu (0-7) XEMS önem düzeyine eşler.
@@ -579,7 +610,7 @@ func NormalizeWinEvent(data []byte, now time.Time) ([]Record, error) {
 			}
 		}
 		det, _ := json.Marshal(detail)
-		out = append(out, Record{
+		rec := Record{
 			DeviceID: SourceUUID(source),
 			Event: model.Event{
 				Category:   cat,
@@ -588,7 +619,10 @@ func NormalizeWinEvent(data []byte, now time.Time) ([]Record, error) {
 				OccurredAt: winTime(flat, now), // olayın GERÇEK zamanı (varsa); yoksa alım zamanı
 				Details:    string(det),
 			},
-		})
+		}
+		// Windows olayları için spesifik event_type (kanonik), ör. "winevent_4625".
+		stampCanonical(&rec.Event, source, fmt.Sprintf("winevent_%d", id))
+		out = append(out, rec)
 	}
 	return out, nil
 }

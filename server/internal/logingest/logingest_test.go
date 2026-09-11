@@ -379,3 +379,31 @@ func TestNormalizeWinEventBad(t *testing.T) {
 		t.Fatal("bozuk JSON hata döndürmeli")
 	}
 }
+
+// TestStampCanonical, kanonik source/event_type alanlarının ilk-sınıf model alanlarına
+// ve Details JSON'una (DB round-trip için) yazıldığını doğrular.
+func TestStampCanonical(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0).UTC()
+	// JSON ingest → source stamp
+	recs, err := NormalizeJSON([]byte(`{"source":"fw1","message":"m"}`), now)
+	if err != nil || len(recs) != 1 {
+		t.Fatalf("NormalizeJSON: %v (%d kayıt)", err, len(recs))
+	}
+	if recs[0].Event.Source != "fw1" {
+		t.Errorf("model.Source set edilmeli: %q", recs[0].Event.Source)
+	}
+	if !strings.Contains(recs[0].Event.Details, `"source":"fw1"`) {
+		t.Errorf("details source taşımalı: %q", recs[0].Event.Details)
+	}
+	// WinEvent → event_type = winevent_<id>
+	wr, err := NormalizeWinEvent([]byte(`{"winlog":{"event_id":4625,"channel":"Security"}}`), now)
+	if err != nil || len(wr) != 1 {
+		t.Fatalf("NormalizeWinEvent: %v (%d kayıt)", err, len(wr))
+	}
+	if wr[0].Event.EventType != "winevent_4625" {
+		t.Errorf("winevent event_type set edilmeli: %q", wr[0].Event.EventType)
+	}
+	if !strings.Contains(wr[0].Event.Details, `"event_type":"winevent_4625"`) {
+		t.Errorf("details event_type taşımalı: %q", wr[0].Event.Details)
+	}
+}
