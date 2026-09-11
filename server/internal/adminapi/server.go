@@ -1283,6 +1283,18 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request, _ string) 
 		// Makine-okunur rapor (otomasyon / zamanlanmış raporlama / SIEM).
 		writeJSON(w, http.StatusOK, d)
 		return
+	case "md", "markdown":
+		// Markdown rapor (§33) — kind=executive|technical|incident (varsayılan technical).
+		kind := report.Kind(r.URL.Query().Get("kind"))
+		switch kind {
+		case report.KindExecutive, report.KindTechnical, report.KindIncident:
+		default:
+			kind = report.KindTechnical
+		}
+		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+		w.Header().Set("Content-Disposition", `attachment; filename="xems-report.md"`)
+		_, _ = w.Write([]byte(report.RenderMarkdown(d, kind)))
+		return
 	}
 	html, err := report.RenderHTML(d)
 	if respondErr(w, err) {
