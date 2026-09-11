@@ -88,14 +88,12 @@ func statusFor(signal, on, off string) Status {
 // Evaluate, Checker sinyallerini CIS-tarzı bir taban raporuna çevirir. Kontrol
 // kataloğu burada tanımlıdır (ID + başlık + önem); sıralama kararlıdır.
 func Evaluate(chk Checker) Report {
-	catalog := []struct {
-		id, title, sev string
-		signal         string
-		on, off        string
-	}{
+	catalog := []catalogRow{
 		{"CIS-1.1", "Sistem diski şifrelemesi etkin", SevHigh, chk.DiskEncryption(), EncOn, EncOff},
 		{"CIS-9.1", "Ana bilgisayar güvenlik duvarı etkin", SevHigh, chk.Firewall(), FwOn, FwOff},
 	}
+	// Gelişmiş MDM kontrolleri (§31) — checker ExtendedChecker'ı da uyguluyorsa.
+	catalog = append(catalog, extendedCatalog(chk)...)
 
 	r := Report{}
 	for _, c := range catalog {
