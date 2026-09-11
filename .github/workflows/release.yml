@@ -1,0 +1,85 @@
+# Release yayımlama: bir `v*` etiketi push edildiğinde çapraz-derler, arşivler,
+# SHA-256 özetlerini üretir, (GPG anahtarı ayarlıysa) imzalar ve GitHub Releases'e yükler.
+#
+# Doğrulama (kullanıcı): bkz. README "Sürüm doğrulama / Release verification".
+# GPG imzalama İSTEĞE BAĞLIDIR: repo secret'ları GPG_PRIVATE_KEY (+ opsiyonel
+# GPG_PASSPHRASE) ayarlıysa SHA256SUMS.asc üretilir; ayarlı değilse adım atlanır
+# (yalnız SHA256SUMS yayımlanır). Kod-imzalama (Authenticode) AYRI bir konudur.
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write   # gh release create/upload için gerekli
+
+jobs:
+  release:
+    name: Yayımla (cross-compile + SHA-256 + GPG)
+    runs-on: ubuntu-latest
+    env:
+      GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+      GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+          cache: true
+
+      - uses: bufbuild/buf-setup-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: protoc-gen eklentileri
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+      - name: Proto üret
+        run: make proto
+
+      - name: Release ikilileri (cross-compile)
+        run: bash scripts/build-release.sh "${GITHUB_REF_NAME}"
+
+      - name: Arşivle + SHA256SUMS üret
+        run: |
+          set -euo pipefail
+          VER="${GITHUB_REF_NAME}"
+          cd dist
+          # Her platform dizinini tek bir arşive paketle (win → zip, linux → tar.gz).
+          if [ -d windows-amd64 ]; then ( cd windows-amd64 && zip -qr "../xems-${VER}-windows-amd64.zip" . ); fi
+          if [ -d linux-amd64 ]; then tar -czf "xems-${VER}-linux-amd64.tar.gz" -C linux-amd64 .; fi
+          # Yayımlanan arşivlerin SHA-256 özetleri (option 2 + 4).
+          sha256sum xems-*.zip xems-*.tar.gz > SHA256SUMS
+          echo "----- SHA256SUMS -----"; cat SHA256SUMS
+
+      - name: SHA256SUMS'u GPG ile imzala (anahtar varsa)
+        if: ${{ env.GPG_PRIVATE_KEY != '' }}
+        run: |
+          set -euo pipefail
+          cd dist
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          if [ -n "${GPG_PASSPHRASE:-}" ]; then
+            echo "$GPG_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback \
+              --passphrase-fd 0 --detach-sign --armor -o SHA256SUMS.asc SHA256SUMS
+          else
+            gpg --batch --yes --detach-sign --armor -o SHA256SUMS.asc SHA256SUMS
+          fi
+          echo "GPG imzası üretildi: SHA256SUMS.asc"
+
+      - name: GitHub Release oluştur + varlıkları yükle
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd dist
+          assets=( xems-*.zip xems-*.tar.gz SHA256SUMS )
+          [ -f SHA256SUMS.asc ] && assets+=( SHA256SUMS.asc )
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "XEMS ${GITHUB_REF_NAME}" \
+            --notes "Otomatik yayım. Varlıkları \`SHA256SUMS\` (ve varsa \`SHA256SUMS.asc\` GPG imzası) ile doğrulayın — bkz. README. Not: bunlar bütünlük doğrulamasıdır; Authenticode kod-imzalama ayrıdır." \
+            "${assets[@]}"

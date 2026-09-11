@@ -134,6 +134,27 @@ içinde. Harici log alımı entegrasyonu için [docs/INGEST.md](docs/INGEST.md);
 ONNX model entegrasyonu için [docs/ONNX.md](docs/ONNX.md); çekirdek-seviye kurcalama
 koruması tasarımı için [docs/KERNEL-TAMPER.md](docs/KERNEL-TAMPER.md).
 
+## Sürüm doğrulama / Release verification
+
+Resmî ikilileri **GitHub Releases** üzerinden yayımlıyoruz. Bir `v*` etiketi push
+edildiğinde [.github/workflows/release.yml](.github/workflows/release.yml) çapraz-derler,
+her platformu arşivler (windows → `.zip`, linux → `.tar.gz`) ve **`SHA256SUMS`** üretir.
+GPG anahtarı yapılandırılmışsa ayrıca ayrık imza **`SHA256SUMS.asc`** eklenir.
+
+İndirdiğiniz arşivlerin bütünlüğünü doğrulayın:
+
+```bash
+# 1) Aynı dizine arşivleri + SHA256SUMS'u indirin, sonra:
+sha256sum -c SHA256SUMS            # her arşiv için "OK" bekleyin
+
+# 2) (Varsa) GPG imzasını doğrulayın — önce yayımcı anahtarını içe aktarın:
+gpg --verify SHA256SUMS.asc SHA256SUMS
+```
+
+> **Not:** `SHA256SUMS`/`SHA256SUMS.asc` yalnızca **bütünlük** (tampering) doğrulamasıdır;
+> Windows **Authenticode** kod-imzalama (EV/OV sertifika + zaman damgası) ayrı bir
+> konudur ve ticari dağıtımda ele alınır — bkz. [docs/KERNEL-TAMPER.md](docs/KERNEL-TAMPER.md).
+
 ---
 
 # English
@@ -254,6 +275,28 @@ and the decisions taken in response are in [docs/threat-model.md](docs/threat-mo
 For external log ingest integration, see [docs/INGEST.md](docs/INGEST.md); for ONNX
 model integration, see [docs/ONNX.md](docs/ONNX.md); for kernel-level tamper-protection
 design, see [docs/KERNEL-TAMPER.md](docs/KERNEL-TAMPER.md).
+
+## Release verification
+
+Official binaries are published via **GitHub Releases**. When a `v*` tag is pushed,
+[.github/workflows/release.yml](.github/workflows/release.yml) cross-compiles, archives
+each platform (windows → `.zip`, linux → `.tar.gz`), and emits **`SHA256SUMS`**. If a
+GPG key is configured, a detached signature **`SHA256SUMS.asc`** is attached as well.
+
+Verify the integrity of the archives you download:
+
+```bash
+# 1) Download the archives + SHA256SUMS into the same directory, then:
+sha256sum -c SHA256SUMS            # expect "OK" for each archive
+
+# 2) (If present) verify the GPG signature — import the publisher key first:
+gpg --verify SHA256SUMS.asc SHA256SUMS
+```
+
+> **Note:** `SHA256SUMS`/`SHA256SUMS.asc` provide **integrity** (tamper) verification
+> only; Windows **Authenticode** code-signing (EV/OV certificate + timestamp) is a
+> separate concern handled for commercial distribution — see
+> [docs/KERNEL-TAMPER.md](docs/KERNEL-TAMPER.md).
 
 ## Lisans / License
 
