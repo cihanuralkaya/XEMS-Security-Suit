@@ -217,6 +217,12 @@ curl -sk "$B/api/detections/replay" -X POST -H "Authorization: Bearer $TOK" \
   -d '{"rules":[{"id":"CAND-1","name":"aday","severity":"HIGH","contains":["a"]}],"limit":500}' \
   | grep -q '"by_rule"' \
   && pass "/api/detections/replay aday kuralı geçmişe uyguladı" || fail "/api/detections/replay başarısız"
+# AI SOC asistanı (§27): öneri-yalnız analiz (hiçbir eylem yürütülmez).
+curl -sk "$B/api/ai/analyze" -X POST -H "Authorization: Bearer $TOK" \
+  -H 'Content-Type: application/json' \
+  -d '{"task":"mitre_mapping","input":"powershell encoded komut ve mimikatz"}' \
+  | grep -q '"recommendation"' \
+  && pass "/api/ai/analyze öneri üretti (yürütmesiz, §27)" || fail "/api/ai/analyze başarısız"
 # Kayıtlı aramalar (#22 SIEM): bir hunt sorgusu kaydet + listede gör.
 curl -sk "$B/api/hunt/saved" -X POST -H "Authorization: Bearer $TOK" \
   -H 'Content-Type: application/json' \

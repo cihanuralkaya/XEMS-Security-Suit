@@ -28,6 +28,7 @@ import (
 
 	"xems.corp/suite/server/internal/admin"
 	"xems.corp/suite/server/internal/adminread"
+	"xems.corp/suite/server/internal/aiassist"
 	"xems.corp/suite/server/internal/auditexport"
 	"xems.corp/suite/server/internal/dedup"
 	"xems.corp/suite/server/internal/detect"
@@ -80,7 +81,12 @@ type Server struct {
 	vulnSet       *vuln.Set                     // zafiyet veri kümesi (nil = kapalı); envanterle eşleşir
 	features      map[string]any                // dağıtım koruma-duruşu (opsiyonel özellik bayrakları)
 	tenantID      string                        // dağıtımın kiracı kimliği (rapor atıfı)
+	aiProvider    aiassist.Provider             // §27 AI asistanı sağlayıcısı (nil → LocalProvider)
 }
+
+// SetAIProvider, AI SOC asistanı için bir sağlayıcı bağlar (nil → çevrimdışı LocalProvider).
+// Sağlayıcı yalnız öneri üretir; hiçbir eylem yürütmez.
+func (s *Server) SetAIProvider(p aiassist.Provider) { s.aiProvider = p }
 
 // SetTenantID, dağıtımın kiracı kimliğini bağlar (rapor/çıktı atıfı; boş → "default").
 func (s *Server) SetTenantID(id string) { s.tenantID = id }
@@ -256,6 +262,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/detections/rules", s.authed(s.handleDetectionRules))
 	mux.HandleFunc("POST /api/detections/test", s.authed(s.handleTestDetection))
 	mux.HandleFunc("POST /api/detections/replay", s.authed(s.handleReplayDetection))
+	mux.HandleFunc("POST /api/ai/analyze", s.authed(s.handleAIAnalyze))
 	mux.HandleFunc("POST /api/hunt", s.authed(s.handleHunt))
 	mux.HandleFunc("GET /api/incidents", s.authed(s.handleIncidents))
 	mux.HandleFunc("GET /api/incidents/{id}/timeline", s.authed(s.handleIncidentTimeline))
@@ -1131,6 +1138,37 @@ func (s *Server) handleTestDetection(w http.ResponseWriter, r *http.Request, _ s
 	writeJSON(w, http.StatusOK, map[string]any{
 		"matches": matches,
 		"matched": len(matches),
+	})
+}
+
+// handleAIAnalyze, AI SOC ASİSTANI (§27): bir analiz isteğini (alarm/olay özeti,
+// MITRE eşleme, yanlış-pozitif, düzeltme önerisi) sağlayıcıya iletir ve ÖNERİ döner.
+// KRİTİK: yalnız öneridir — hiçbir eylem YÜRÜTÜLMEZ. Önerilen eylemler ancak
+// policy + insan onayı (aiassist.Gate) ile uygulanabilir; bu uç yürütme yapmaz.
+// Varsayılan sağlayıcı çevrimdışı/deterministik LocalProvider'dır (dış LLM yok).
+func (s *Server) handleAIAnalyze(w http.ResponseWriter, r *http.Request, _ string) {
+	var req struct {
+		Task    string            `json:"task"`
+		Input   string            `json:"input"`
+		Context map[string]string `json:"context"`
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	provider := s.aiProvider
+	if provider == nil {
+		provider = aiassist.NewLocalProvider()
+	}
+	rec, err := provider.Analyze(r.Context(), aiassist.Request{
+		Task: aiassist.Task(req.Task), Input: req.Input, Context: req.Context,
+	})
+	if respondErr(w, err) {
+		return
+	}
+	// Öneri PendingApproval durumunda döner: eylemler için policy + insan onayı gerekir.
+	writeJSON(w, http.StatusOK, map[string]any{
+		"recommendation": rec,
+		"note":           "öneri yalnızca; eylemler policy + insan onayı gerektirir (yürütülmedi)",
 	})
 }
 
