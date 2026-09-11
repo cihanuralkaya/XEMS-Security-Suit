@@ -42,6 +42,7 @@ import (
 	"xems.corp/suite/server/internal/ratelimit"
 	"xems.corp/suite/server/internal/report"
 	"xems.corp/suite/server/internal/security"
+	"xems.corp/suite/server/internal/trace"
 	"xems.corp/suite/server/internal/vuln"
 )
 
@@ -82,6 +83,19 @@ type Server struct {
 	features      map[string]any                // dağıtım koruma-duruşu (opsiyonel özellik bayrakları)
 	tenantID      string                        // dağıtımın kiracı kimliği (rapor atıfı)
 	aiProvider    aiassist.Provider             // §27 AI asistanı sağlayıcısı (nil → LocalProvider)
+	tracer        *trace.Tracer                 // §14 dağıtık izleme (nil → kapalı)
+}
+
+// SetTracing, dağıtık izlemeyi (§14) etkinleştirir: her istek için bir span üretilir,
+// gelen W3C traceparent başlığı çocuk-span'a bağlanır ve yanıt traceparent taşır
+// (Agent→C2 ilişkilendirme). Recorder nil (span'lar bellek biriktirmeden atılır);
+// değer, kimlik üretimi + sınır-ötesi yayılımdır. nil → kapalı (sıfır ek yük).
+func (s *Server) SetTracing(on bool) {
+	if on {
+		s.tracer = &trace.Tracer{}
+	} else {
+		s.tracer = nil
+	}
 }
 
 // SetAIProvider, AI SOC asistanı için bir sağlayıcı bağlar (nil → çevrimdışı LocalProvider).
@@ -304,7 +318,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/notice", s.handleNotice)  // KVKK aydınlatma (public)
 	mux.HandleFunc("GET /metrics", s.handleMetrics)    // Prometheus (statik token ile)
 	mux.HandleFunc("POST /api/ingest", s.handleIngest) // harici log alımı (statik token ile, #21)
-	return requestLog(securityHeaders(mux))
+	h := requestLog(securityHeaders(mux))
+	if s.tracer != nil {
+		h = s.tracing(h)
+	}
+	return h
 }
 
 // statusWriter, yanıt durum kodunu yakalar (erişim logu için). SSE'yi bozmamak
@@ -351,6 +369,31 @@ func safeRequestID(in string) string {
 // tek bir yapısal erişim-logu satırı yazar (yöntem, yol, durum, süre, rid). Dağıtık
 // izlemenin (tracing) bağımlılıksız ilk adımı: istekler loglarda korele edilebilir.
 // Sağlık uçları (yüksek-frekanslı prob) loglanmaz.
+// tracing, her HTTP isteği için bir izleme span'ı üretir (§14). Gelen W3C
+// "traceparent" başlığı varsa span onun ÇOCUĞU olur (Agent→C2 sınır-ötesi
+// ilişkilendirme); yoksa kök span üretilir. Yanıta traceparent yazılır; izleme
+// kimliği erişim logunda görünür. Recorder yok → span'lar bellek biriktirmez.
+func (s *Server) tracing(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		if tid, sid, ok := trace.ParseTraceparent(r.Header.Get("traceparent")); ok {
+			// Uzak ebeveyn span'ı (yalnız kimlikler) ctx'e koy — StartSpan çocuk üretir.
+			ctx = trace.ContextWithSpan(ctx, &trace.Span{TraceID: tid, SpanID: sid})
+		}
+		ctx, span := s.tracer.StartSpan(ctx, "http "+r.Method+" "+r.URL.Path)
+		span.SetAttr("http.method", r.Method)
+		span.SetAttr("http.path", r.URL.Path)
+		if tp := trace.InjectTraceparent(span); tp != "" {
+			w.Header().Set("traceparent", tp)
+			w.Header().Set("X-Trace-Id", span.TraceID.String())
+		}
+		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(sw, r.WithContext(ctx))
+		span.SetAttr("http.status", strconv.Itoa(sw.status))
+		span.End(time.Now())
+	})
+}
+
 func requestLog(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rid := safeRequestID(r.Header.Get("X-Request-ID"))

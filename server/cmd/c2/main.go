@@ -674,6 +674,12 @@ func run() error {
 		}
 	}
 	adminAPI.SetDetector(detector) // tespit kural kataloğu (ingest ile aynı motor)
+	// Dağıtık izleme (§14): XEMS_TRACING=1 ise her istek için W3C traceparent üretilir/
+	// yayılır (Agent→C2 ilişkilendirme; yanıt traceparent + X-Trace-Id taşır).
+	if os.Getenv("XEMS_TRACING") == "1" {
+		adminAPI.SetTracing(true)
+		log.Println("dağıtık izleme (W3C traceparent) ETKİN")
+	}
 
 	// Tespit kuralları canlı hot-reload: XEMS_DETECT_RELOAD_INTERVAL ayarlıysa (ör.
 	// 5m) ve özel kural dosyası varsa, dosya periyodik yeniden okunur ve motor
