@@ -148,6 +148,16 @@ jobs:
           go install github.com/securego/gosec/v2/cmd/gosec@latest
           "$(go env GOPATH)/bin/gosec" -quiet ./... || true
 
+      # Sır taraması (gitleaks) — kaynakta sızmış kimlik-bilgisi/anahtar arar.
+      # Bilgilendirici (kademeli benimseme); bulgular job'ı kırmaz. .env/sertifikalar
+      # zaten .gitignore'da — bu, regresyon kalkanıdır. Binary ile (gosec deseniyle
+      # tutarlı; marketplace/lisans bağımlılığı yok).
+      - name: gitleaks (sır taraması, bilgilendirici)
+        continue-on-error: true
+        run: |
+          go install github.com/gitleaks/gitleaks/v8@latest
+          "$(go env GOPATH)/bin/gitleaks" detect --no-git --source . --redact --exit-code 0 || true
+
   release:
     name: Çapraz derleme (release)
     runs-on: ubuntu-latest
