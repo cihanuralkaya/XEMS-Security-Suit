@@ -23,19 +23,20 @@ altyapı, kod-imzalama/sertifika, güvenlik yüzeyi).
 
 | Öncelik | ✅ VAR | 🟡 KISMİ | ⬜ YOK | Toplam |
 |---------|:-----:|:-------:|:-----:|:------:|
-| P0 (§4–14)  | 5 | 6 | 0 | 11 |
+| P0 (§4–14)  | 6 | 5 | 0 | 11 |
 | P1 (§15–26) | 10 | 1 | 1 | 12 |
 | P2 (§27–34) | 1 | 4 | 3 | 8 |
 | P3 (§35–45) | 3 | 4 | 4 | 11 |
-| **Toplam**  | **19** | **15** | **8** | **42** |
+| **Toplam**  | **20** | **14** | **8** | **42** |
 
-**Sonuç:** XEMS, roadmap'in **~%45'ini tam (19/42)**, **~%36'sını kısmi (15/42)**
+**Sonuç:** XEMS, roadmap'in **~%48'ini tam (20/42)**, **~%33'ünü kısmi (14/42)**
 karşılıyor; gerçek net-yeni iş **~%19 (8/42)**.
 
-> **Güncelleme (2026-09-11):** Analizin bulduğu tek P0 boşluğu — **Merkezi Scope/ROE
-> Guardrail motoru (§4)** — bu oturumda uygulandı: `server/internal/scope` (motor + 10
-> test + fuzz) ve admin servis katmanında yüksek-etkili operasyon kapısı
-> (WIPE/QUARANTINE/LOCK/RESTART). Böylece P0'da açık boşluk kalmadı.
+> **Güncelleme (2026-09-11):** Bu oturumda iki başlık uygulandı: **§4 Merkezi Scope/ROE
+> Guardrail** (`server/internal/scope` + admin servis kapısı) ve **§5 Canonical Event
+> Model v1.1** (`event_id`/`source`/`event_type`/`correlation_id`/`parent_event_id`,
+> migrasyonsuz, API'de ilk-sınıf). P0'da açık boşluk kalmadı; §5 §17/§19'un kimlik
+> temelini kurdu. Sıradaki: **§6/§19 pipeline sağlamlığı + event replay**.
 
 ---
 
@@ -44,7 +45,7 @@ karşılıyor; gerçek net-yeni iş **~%19 (8/42)**.
 | § | Başlık | Durum | Kanıt / mevcut | Boşluk & uygulanabilirlik |
 |---|--------|:-----:|----------------|---------------------------|
 | 4 | Central Scope / ROE / Guardrails | ✅ VAR | `server/internal/scope` (Engine.Authorize, fail-closed, excluded-wins, ROE action-gate, wildcard/CIDR selector) + admin servis kapısı (WIPE/QUARANTINE/LOCK/RESTART) + `XEMS_SCOPE_*` config + metrikler | **Bu oturumda uygulandı.** Yüksek-etkili her op enqueue'dan önce `guardScope`'tan geçer; enforce/denetim modları. Geriye uyumlu (motor bağlı değilse no-op). |
-| 5 | Canonical Security Event Model | 🟡 KISMİ | `model.Event` (Sequence/Category/Severity/Message/OccurredAt/Details) + `EventSchemaVersion=1.0` | Eksik birinci-sınıf alanlar: `event_id(uuid)`, `tenant_id`, `user_id`, `event_type`, `confidence`, `correlation_id`, `parent_event_id`, evidence-refs, tipli `process/network/file/auth` alt-nesneleri. Artırımlı, LOW risk. |
+| 5 | Canonical Security Event Model | ✅ VAR | `model.Event` v1.1: `event_id` (içerik-adresli, EnsureID), `source`, `event_type`, `confidence`, `correlation_id`, `parent_event_id`, `tenant_id` + JSON şeması; `EventDTO` bunları details'ten yükseltir; logingest 5 formatta damgalar | **Bu oturumda uygulandı** (§4'ten sonra). Migrasyonsuz (details JSONB round-trip). Kalan minör: tipli `process/network/file/auth` alt-nesneleri hâlâ serbest details içinde. |
 | 6 | Event Pipeline | 🟡 KISMİ | `eventbus` (sınırlı kanal + yavaş-abone atlama); collector→normalize→enrich→correlate→detect→store zinciri mevcut | Eksik: dead-letter (DLQ), retry, event-ordering garantisi, duplicate-detection, **replay**, schema-versioned pipeline. Saf-Go. |
 | 7 | Concurrency & Performance | ✅ VAR | Go native goroutine/channel/context; job worker desenleri | Roadmap zaten "Go korunsun" diyor. Karşılanıyor. |
 | 8 | Rate Limiting + Adaptive Backpressure | 🟡 KISMİ | `ratelimit.Limiter` (token-bucket, rate+burst) | Eksik: katmanlı limit (Global/Tenant/Agent/Target/API/TI) + adaptive 429/503→backoff→concurrency-azalt. Saf-Go. |
@@ -115,8 +116,8 @@ Roadmap'in kendi P0→P3 sırası geçerli; ancak **mevcut kod tabanı P1'in ço
 karşıladığı için** en yüksek marjinal değer şu net-yeni işlerdedir:
 
 1. ~~**§4 Scope/ROE Guardrail motoru**~~ — ✅ **TAMAMLANDI** (bu oturum): `server/internal/scope` + admin servis kapısı.
-2. **§5 Canonical Event alanları** — `correlation_id`/`parent_event_id`/`event_id` → §17/§19'u güçlendirir. **(Sıradaki artırım.)**
-3. **§6/§19 Pipeline sağlamlığı + Event Replay** — DLQ/retry/replay.
+2. ~~**§5 Canonical Event alanları**~~ — ✅ **TAMAMLANDI** (bu oturum): `event_id`/`correlation_id`/`parent_event_id`/`source`/`event_type` (v1.1).
+3. **§6/§19 Pipeline sağlamlığı + Event Replay** — DLQ/retry/replay. **(Sıradaki artırım.)**
 4. **§8 Katmanlı rate-limit + adaptive backpressure.**
 5. **§14 OpenTelemetry tracing** (opt-in).
 6. **§45 Plugin/connector interface** → §29/§30 XDR/Cloud'un önkoşulu.

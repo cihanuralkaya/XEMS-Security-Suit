@@ -131,6 +131,11 @@ proto üret + `go vet` + `go test ./...` + smoke test + çapraz derleme (artifac
 
 Aşağıdakiler ilk matristen sonra eklendi; hepsi test + smoke + CI yeşil.
 
+- **Canonical Event Model v1.1 (§5):** `model.Event` kanonik kimlik/ilişki alanlarıyla
+  genişletildi — `event_id` (içerik-adresli, dedup/replay temeli), `source`, `event_type`,
+  `confidence`, `correlation_id`, `parent_event_id`, `tenant_id`. Migrasyonsuz (details
+  JSONB round-trip); `/api/events` bunları ilk-sınıf yüzeye çıkarır; logingest 5 formatta
+  damgalar. §17 korelasyon + §19 replay temeli.
 - **Scope / ROE guardrail (§4):** yüksek-etkili operasyonlar (WIPE/QUARANTINE/LOCK/
   RESTART) enqueue'dan önce merkezi `server/internal/scope` motorundan geçer
   (fail-closed, excluded-wins, ROE action-gate; wildcard domain + IPv4/IPv6 CIDR +
