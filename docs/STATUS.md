@@ -449,10 +449,17 @@ go run ./tools/adminseed -email a@x -password '...' -role ADMIN
 - `tools/adminseed` - admin password (Argon2id) + INSERT SQL.
 - `tools/anomalytrain` - trains a logistic anomaly model from a labeled CSV.
 - `tools/mkclient` - SINGLE-FILE client installer generator (Win/Linux).
+- `tools/logcheck` - offline external-log ingest validation CLI.
+- `tools/onnx2json` - offline ONNX -> anomaly-model JSON converter (pure Go).
+- `tools/mkicon` - pure-Go app-icon generator (.ico + embedded `*_windows_amd64.syso`
+  PE resource) from `assets/xems-logo.png`; see `docs/BRANDING.md`.
 
 ## Deployment / packaging - done
 
 - `scripts/build-release.sh` - cross-compilation of c2/agent/watchdog/gencerts.
+- **GitHub Releases:** `.github/workflows/release.yml` - on a `v*` tag, cross-compiles,
+  packages (zip/tar.gz), emits `SHA256SUMS` (+ optional GPG `SHA256SUMS.asc`), and
+  publishes the release. Verification steps in README ("Release verification").
 - **Server install:** `deploy/server/install-linux.sh` (systemd),
   `install-windows.ps1` (scheduled task) - PKI + master key + config + service.
 - **Client install:** the single-file installer produced by `mkclient`.
