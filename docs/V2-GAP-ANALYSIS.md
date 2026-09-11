@@ -24,19 +24,20 @@ altyapı, kod-imzalama/sertifika, güvenlik yüzeyi).
 | Öncelik | ✅ VAR | 🟡 KISMİ | ⬜ YOK | Toplam |
 |---------|:-----:|:-------:|:-----:|:------:|
 | P0 (§4–14)  | 6 | 5 | 0 | 11 |
-| P1 (§15–26) | 10 | 1 | 1 | 12 |
+| P1 (§15–26) | 11 | 1 | 0 | 12 |
 | P2 (§27–34) | 1 | 4 | 3 | 8 |
 | P3 (§35–45) | 3 | 4 | 4 | 11 |
-| **Toplam**  | **20** | **14** | **8** | **42** |
+| **Toplam**  | **21** | **14** | **7** | **42** |
 
-**Sonuç:** XEMS, roadmap'in **~%48'ini tam (20/42)**, **~%33'ünü kısmi (14/42)**
-karşılıyor; gerçek net-yeni iş **~%19 (8/42)**.
+**Sonuç:** XEMS, roadmap'in **~%50'sini tam (21/42)**, **~%33'ünü kısmi (14/42)**
+karşılıyor; gerçek net-yeni iş **~%17 (7/42)**.
 
-> **Güncelleme (2026-09-11):** Bu oturumda iki başlık uygulandı: **§4 Merkezi Scope/ROE
-> Guardrail** (`server/internal/scope` + admin servis kapısı) ve **§5 Canonical Event
+> **Güncelleme (2026-09-11):** Bu oturumda üç başlık uygulandı: **§4 Merkezi Scope/ROE
+> Guardrail** (`server/internal/scope` + admin servis kapısı), **§5 Canonical Event
 > Model v1.1** (`event_id`/`source`/`event_type`/`correlation_id`/`parent_event_id`,
-> migrasyonsuz, API'de ilk-sınıf). P0'da açık boşluk kalmadı; §5 §17/§19'un kimlik
-> temelini kurdu. Sıradaki: **§6/§19 pipeline sağlamlığı + event replay**.
+> migrasyonsuz) ve **§19 Event Replay** (`POST /api/detections/replay` — aday kuralı
+> geçmişe uygula). P0'da açık boşluk kalmadı; P1 tamamlandı (11/12 VAR). Sıradaki:
+> **§6 pipeline sağlamlığı** (DLQ/retry/duplicate/ordering).
 
 ---
 
@@ -66,7 +67,7 @@ karşılıyor; gerçek net-yeni iş **~%19 (8/42)**.
 | 16 | Process / Entity Graph | ✅ VAR | `/api/devices/{id}/graph` varlık grafiği | Karşılanıyor. |
 | 17 | Advanced Correlation Engine | ✅ VAR | `correlate` (Correlator + ChainDetector): temporal/entity/IOC/MITRE/risk | Karşılanıyor. |
 | 18 | Threat Hunting | ✅ VAR | `adminapi.handleHunt` + `db/read` + `memstore`; `/api/hunt` alan-filtre + zaman aralığı | Saved-queries/aggregation/cross-device 🟡 genişletilebilir. |
-| 19 | Event Replay | ⬜ YOK | — | Yeni detection kuralını geçmiş olaylara uygula. Retention penceresine bağlı; saf-Go. Orta değer, LOW risk. |
+| 19 | Event Replay | ✅ VAR | `adminread.ReplayDetections` + `POST /api/detections/replay`: aday kuralı zaman-pencereli geçmiş olaylara uygular, `by_rule` etki raporu döner (draft aday aktive edilir) | **Bu oturumda uygulandı** (§5 event_id üzerine). Salt-okuma; tarama 50k ile sınırlı. |
 | 20 | Detection-as-Code | ✅ VAR | `sigma` + `/api/detections/rules`+`/test` + `detectsign` (imzalı kural) + lifecycle | Karşılanıyor (Sigma tabanlı, imzalı). |
 | 21 | Risk Engine | ✅ VAR | `risk` (severity×exploitability×… incident/fleet risk) | Karşılanıyor; skorlama configurable 🟡. |
 | 22 | Incident Timeline | ✅ VAR | Incident olayları + attack-story; `/api/incidents` | Karşılanıyor. |
@@ -117,10 +118,11 @@ karşıladığı için** en yüksek marjinal değer şu net-yeni işlerdedir:
 
 1. ~~**§4 Scope/ROE Guardrail motoru**~~ — ✅ **TAMAMLANDI** (bu oturum): `server/internal/scope` + admin servis kapısı.
 2. ~~**§5 Canonical Event alanları**~~ — ✅ **TAMAMLANDI** (bu oturum): `event_id`/`correlation_id`/`parent_event_id`/`source`/`event_type` (v1.1).
-3. **§6/§19 Pipeline sağlamlığı + Event Replay** — DLQ/retry/replay. **(Sıradaki artırım.)**
-4. **§8 Katmanlı rate-limit + adaptive backpressure.**
-5. **§14 OpenTelemetry tracing** (opt-in).
-6. **§45 Plugin/connector interface** → §29/§30 XDR/Cloud'un önkoşulu.
+3. ~~**§19 Event Replay**~~ — ✅ **TAMAMLANDI** (bu oturum): `POST /api/detections/replay`.
+4. **§6 Pipeline sağlamlığı** — DLQ/retry/duplicate-detection/ordering. **(Sıradaki artırım.)**
+5. **§8 Katmanlı rate-limit + adaptive backpressure.**
+6. **§14 OpenTelemetry tracing** (opt-in).
+7. **§45 Plugin/connector interface** → §29/§30 XDR/Cloud'un önkoşulu.
 
 **Risk taşıyan / dış-bağımlılık gerektiren** (izole, opt-in tutulmalı): §27 AI,
 §30 Cloud, §35 OIDC/SAML, §39 ClickHouse/OpenSearch, §10 EV code-signing/WDAC.

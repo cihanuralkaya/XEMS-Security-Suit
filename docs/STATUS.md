@@ -131,6 +131,10 @@ proto üret + `go vet` + `go test ./...` + smoke test + çapraz derleme (artifac
 
 Aşağıdakiler ilk matristen sonra eklendi; hepsi test + smoke + CI yeşil.
 
+- **Event Replay (§19):** aday bir tespit kuralını zaman-pencereli geçmiş olaylara
+  uygular (`POST /api/detections/replay`, `adminread.ReplayDetections`) ve `by_rule`
+  etki raporu döner — kuralı üretime almadan önce "geçmişte kaç olayı yakalardı?".
+  Draft aday kural aktive edilir; salt-okuma; §5 event_id üzerine kurulu.
 - **Canonical Event Model v1.1 (§5):** `model.Event` kanonik kimlik/ilişki alanlarıyla
   genişletildi — `event_id` (içerik-adresli, dedup/replay temeli), `source`, `event_type`,
   `confidence`, `correlation_id`, `parent_event_id`, `tenant_id`. Migrasyonsuz (details
